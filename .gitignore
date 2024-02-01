@@ -1,0 +1,24 @@
+# Data and results
+*.csv
+*.parquet
+*.pdf
+
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyi
+*.pyz
+*.pyw
+*.pyz
+*.pyw
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+# End of Python specific
+
+# OSX specific
+.DS_Store

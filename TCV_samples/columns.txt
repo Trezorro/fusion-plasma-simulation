@@ -1,0 +1,19 @@
+cols_control = ["IP", Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
+ "gas_fringes", # Ingepompte gas
+ "NBI", # manieren om te verhitten: colliding Neutral beam injection
+ "ECRH", # magnetron.
+ "a_minor", # reel gemeten plasma shape a k d (horizontale radius
+ "KAPPA",
+ "DELTA" inkerbovenhoek nar links vanuit hetmidden
+]
+cols_data = ["FIR", density lijn Interferometer
+ "PD", photodiode lijn op de divertor
+"DML", Magnetische respons  correleert met de energie in het plasma
+"POHM", Gemeten power waarde meet de power die uit wrijving komt
+ "Z_axis" center Plasma positie in de verticale lijn. deviation van reference is betekenis. 
+]
+cols_label = ["LHD_label"]
+
+For the labels, 0 = no label, 1 = low confinement mode, 2 = dithering ('inbetween'), 3 = high confinement mode
+
+This is data for full shots (shot = pulse = experiment). We do not want to model the full shot, but rather an area just around a transition in the LHD_label, so zooming in on say ~100ms before/after a transition in the LHD_label
