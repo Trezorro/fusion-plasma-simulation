@@ -3,13 +3,29 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
 
+# installing pytorch with pipenv is a hastle
+# see https://github.com/pypa/pipenv/issues/4961 
+# and https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix 
+
+[[source]]
+url = "https://download.pytorch.org/whl/cpu/"
+verify_ssl = false
+name = "pytorch"
+
 [packages]
+torch = {version = "*", index = "pytorch"}
+wandb = "*"
 pandas = "*"
+numpy = "*"
+scikit-learn = "*"
+pytorch-model-summary = "*"
 matplotlib = "*"
 jupyter = "*"
 pyarrow = "*"
 
 [dev-packages]
+yapf = "*"
+pylint = "*"
 
 [requires]
-python_version = "3.12"
+python_version = "3.11.7"
