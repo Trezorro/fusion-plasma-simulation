@@ -2,7 +2,6 @@
 url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
-
 # installing pytorch with pipenv is a hastle
 # see https://github.com/pypa/pipenv/issues/4961 
 # and https://github.com/pytorch/pytorch/blob/main/RELEASE.md#release-compatibility-matrix 
