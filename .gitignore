@@ -3,6 +3,8 @@
 *.parquet
 *.pdf
 
+wandb/
+
 # Python specific
 __pycache__/
 *.pyc

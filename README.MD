@@ -1,8 +1,11 @@
 # Fusion Plasma Simulation
 
 ## Todo
-- [ ] Combin all parquets into one data set so  can normalize the values
+- [x] Combine all parquets into one data set so  can normalize the values
   - [ ] Or perhaps just use batch norm?
+- [ ] Implement data loader that normalizes the values
+- [ ] Implement model and trainer
+- [ ] Implement train evaluate loop
 
 
 # Data
