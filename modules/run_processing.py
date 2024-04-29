@@ -3,6 +3,7 @@ import pandas as pd
 import glob
 import numpy as np
 import re
+from ydata_profiling import ProfileReport
 
 # %%
 # data_dir = 'shots/'
@@ -198,3 +199,49 @@ if __name__ == "__main__":
     print("Saved to ", file_name)
     
 
+
+# %%
+generate_report("data/2024_04_23-all_preprocessed.parquet")
+# %%
+data_df = pd.read_parquet("data/2024_04_23-all_preprocessed.parquet")
+#%%
+
+def analyze_nans(df):
+    """Per shotNo, analyze which columns have NaNs and how many.
+
+    Also checks and counts whether there are consecutive non-NaNs in the columns with Nan values, so they can still be used.
+    """
+    nan_cols = df.columns[df.isnull().any()]
+    nan_counts = df[nan_cols].isnull().sum()
+    consecutive_non_nans = {}
+    for col in nan_cols:
+        consecutive_non_nans[col] = df[col].notnull().astype(int).groupby(df[col].isnull().cumsum()).sum().max()
+    summary = pd.DataFrame({
+        "ShotNum": df["ShotNum"].iloc[0],
+        "NaNs": nan_counts, 
+                            "NaN ratio": nan_counts / len(df),
+                            "Consecutive non-NaNs": consecutive_non_nans})
+    summary['Consecutive ratio'] = summary['Consecutive non-NaNs'] / len(df)
+    summary["Small C-ratio"] = summary["Consecutive ratio"] < 0.4
+    summary['Total'] = len(df)
+    return summary
+
+results = []
+shots_n = data_df["ShotNum"].nunique()
+for group, df in data_df.groupby("ShotNum"):
+    summmary = analyze_nans(df)
+    if summmary.empty:
+        continue
+    results.append(summmary)
+    print(f"Shot {group}:")
+    print(summmary)
+res_df= pd.concat(results)
+# %% What columns are most often unusable?
+print("These are the columns that are most often unusable (they have no usable window without NaNs):")
+res_df["Small C-ratio"].groupby(level=0).sum().sort_values(ascending=False)
+# %% How many shots have unusable columns? And how many columns are unusable?
+unusable_counts = res_df.groupby("ShotNum")["Small C-ratio"].sum().value_counts()
+print(f"Out of {shots_n} shots, {unusable_counts.drop(0).sum()} have unusable columns.")
+print(unusable_counts)
+
+# %%

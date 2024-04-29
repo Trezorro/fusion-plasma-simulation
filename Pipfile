@@ -21,6 +21,10 @@ pytorch-model-summary = "*"
 matplotlib = "*"
 jupyter = "*"
 pyarrow = "*"
+plotly = "*"
+datapane = "*"
+ydata-profiling = "*"
+numba = "<=0.58.1"  # numba 0.59.0 caused an import error in ydata-profiling
 
 [dev-packages]
 yapf = "*"
