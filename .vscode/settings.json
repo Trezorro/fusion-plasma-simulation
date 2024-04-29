@@ -1,0 +1,11 @@
+{
+    "yapf.args": [
+        "--line-length=120",
+    ],
+    "editor.rulers": [
+        {
+            "column": 120,
+            "color": "#8e111182"
+        }
+    ]
+}
