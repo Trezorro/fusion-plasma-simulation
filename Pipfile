@@ -25,10 +25,12 @@ plotly = "*"
 datapane = "*"
 ydata-profiling = "*"
 numba = "<=0.58.1"  # numba 0.59.0 caused an import error in ydata-profiling
+rich = "*"
 
 [dev-packages]
 yapf = "*"
 pylint = "*"
+ruff = "*"
 
 [requires]
 python_version = "3.11.7"

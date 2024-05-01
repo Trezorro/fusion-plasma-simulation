@@ -1,13 +1,21 @@
 # %%
+from math import ceil
 import pandas as pd
 import glob
 import numpy as np
 import re
+import rich.progress
+import rich.traceback
 from ydata_profiling import ProfileReport
+import rich
+rich.traceback.install()
 
 # %%
 # data_dir = 'shots/'
-data_dir = '../data/LHD_labeled_TCV/'
+DATA_INPUT_DIR = '../data/LHD_labeled_TCV/'
+DATA_SET_NAME = "2024_05_01-NaNsFiltered"
+DATE = pd.Timestamp.now().strftime("%Y_%m_%d")
+
 COLS_META = [
     "ShotNum",
     "time",
@@ -34,17 +42,17 @@ ALL_SIG_COLLS = COLS_META + COLS_CONTROL + COLS_DATA
 
 
 # %%
-def get_shot_index(data_dir: str) -> tuple[dict[int, str], dict[int, str]]:
+def index_shot_names(data_dir: str) -> tuple[dict[int, str], dict[int, str]]:
     if data_dir[-1] != '/':
         data_dir += '/'
     sig_all_names = glob.glob(data_dir + 'TCV_DATA*.parquet')
     # use regex to get sample number:
-    sig_all = {int(re.findall(r'\d+', x)[0]): x for x in sig_all_names}
+    sig_all = {int(re.findall(r'\d+', x)[0]): x for x in rich.progress.track(sig_all_names, "Indexing shots")}
     shot_no_list = list(sig_all.keys())
     label_all = glob.glob(data_dir + 'TCV_*_apau_labeled.csv')
     label_all = {
         int(x.split("TCV_")[1].split("_apau_labeled.csv")[0]): x
-        for x in label_all
+        for x in rich.progress.track(label_all, "Indexing labels")
     }
     label_no_list = list(label_all.keys())
     assert set(shot_no_list) <= set(
@@ -54,6 +62,79 @@ def get_shot_index(data_dir: str) -> tuple[dict[int, str], dict[int, str]]:
     print("Amount of shots: ", len(shot_no_list))
     print(f"Labels: {len(label_all)}")
     return sig_all, label_all
+
+
+def analyze_nans(one_shot_df: pd.DataFrame) -> tuple[pd.DataFrame, tuple[int, int]]:
+    """Per shotNo, analyze which columns have NaNs and how many.
+
+    Also checks and counts whether there are consecutive non-NaNs in the columns with Nan values,
+    so they can still be used.
+
+    Assumes time_step column is present in the dataframe.
+
+    Returns a summary dataframe and a tuple of the first and last time step of the longest consecutive non-NaNs.
+        The dataframe has the following columns:
+        - ShotNum: The shot number
+        - NaNs: The amount of NaNs per column
+        - NaN ratio: The ratio of NaNs per column
+        - Consecutive non-NaNs: The maximum amount of consecutive non-NaNs per column
+        - Consecutive ratio: The ratio of consecutive non-NaNs per column
+        - Small C-ratio: A boolean indicating whether the consecutive ratio is below 0.3
+        - Total: The total amount of rows in the dataframe
+        The index is the original shot df column names, where NaNs were present.
+        If the dataframe is empty, it means there were no NaNs in the dataframe.
+    """
+    one_shot_df = one_shot_df.copy()
+    nan_cols = one_shot_df.columns[one_shot_df.isnull().any()]
+    nan_counts = one_shot_df[nan_cols].isnull().sum()
+    nan_in_row = one_shot_df[nan_cols].isnull().any(axis=1)
+    one_shot_df['nan_splits'] = nan_in_row.cumsum()
+    consecutive_non_nans = {}
+    for col in nan_cols:
+        # Split groups by NaNs via cumsum, then get the maximum length of consecutive non-NaNs
+        around_nan_windows = one_shot_df[col].notnull().astype(int).groupby(one_shot_df[col].isnull().cumsum())
+        consecutive_non_nans[col] = around_nan_windows.sum().max()
+    # get start and end step of the longest window of non-NaNs over all columns:
+    usable_rows = one_shot_df.dropna()
+    if usable_rows.empty:
+        first_step, last_step = (0, 0)
+    else:
+        longest_window = usable_rows['nan_splits'].mode().values[0]
+        viable_time_steps = one_shot_df.loc[one_shot_df['nan_splits'] == longest_window, 'time_step']
+        first_step = viable_time_steps.iloc[0]
+        last_step = viable_time_steps.iloc[-1]
+    summary = pd.DataFrame({
+        "ShotNum": one_shot_df["ShotNum"].iloc[0],
+        "NaNs": nan_counts, 
+                            "NaN ratio": nan_counts / len(one_shot_df),
+                            "Consecutive non-NaNs": consecutive_non_nans})
+    summary['Consecutive ratio'] = summary['Consecutive non-NaNs'] / len(one_shot_df)
+    summary["Small C-ratio"] = summary["Consecutive ratio"] < 0.3
+    summary['Total'] = len(one_shot_df)
+    return summary, (first_step, last_step)
+
+def analyze_nans_over_all_shots(data_df: pd.DataFrame):
+    if "Small C-ratio" in data_df.columns:
+        # Got the summary already
+        res_df = data_df
+    else:
+        # Got the full dataframe of all shots, to still analyze:
+        results = []
+        for group, df in data_df.groupby("ShotNum"):
+            summmary, window = analyze_nans(df)
+            if summmary.empty:
+                continue
+            results.append(summmary)
+        res_df= pd.concat(results)
+    # What columns are most often unusable?
+    print("These are the columns that are most often unusable (they have no usable window without NaNs):")
+    print(res_df["Small C-ratio"].groupby(level=0).sum().sort_values(ascending=False))
+    # How many shots have some unusable columns? And how many columns are then unusable?
+    shots_n = data_df["ShotNum"].nunique()
+    unusable_counts = res_df.groupby("ShotNum")["Small C-ratio"].sum().value_counts()
+    n_unusable_columns_per_shot = unusable_counts.drop(0).sum()
+    print(f"Out of {shots_n} shots, {n_unusable_columns_per_shot} shots have 1 or more unusable columns. ({n_unusable_columns_per_shot/shots_n:.2%})")
+    print(unusable_counts)
 
 
 def check_time_consistency(signal_df, frequency_tolerance=3e-3):
@@ -80,6 +161,10 @@ def combine_all_shots(sig_all: dict[int, str],
     """Load and combine all shots into one dataframe. Check for consistency and discrepancies. 
 
     Guarantuees a frequency of 10 kHz and that the shot is at least min_steps_filter long.
+
+    Replaces NaNs in the NBI column with 0, as per Yoeri's suggestion.
+    Slices the dataframe to only include the longest window of non-NaNs for all other columns.
+    Will not include shots that have too many NaNs in the X or C columns for a long usable window.
     
     Args:
         sig_all (dict[int, str]): _description_
@@ -92,15 +177,17 @@ def combine_all_shots(sig_all: dict[int, str],
     # init counters for discrepancies and memory usage
     time_discrepancy, shot_num_discrepancy, label_shot_num_discrepancy, length_discrepancy, too_short = 0, 0, 0, 0, 0
     time_inconsistency = 0
-    nans_replaced = 0
+    nan_rejects = 0
     memory = 0
 
     all_shot_dfs = []  # list to store loaded and processed dataframes
-    for shotno in sig_all.keys():
+    nan_summaries = []
+    for shotno in rich.progress.track(sig_all.keys(), description="Loading and processing shots"):
         sig = pd.read_parquet(sig_all[shotno])
         label = pd.read_csv(label_all[shotno])
+        rich.print("Reading shot", shotno, "Length:", len(sig), "Label length:", len(label))
         if len(sig) < min_steps_filter:
-            print(
+            rich.print(
                 f"Skipping shot {shotno} because it has less than {min_steps_filter} steps ({len(sig)})"
             )
             too_short += 1
@@ -108,9 +195,9 @@ def combine_all_shots(sig_all: dict[int, str],
 
         ### Assertions for consistency and discrepancies ###
         if len(sig) != len(label):
-            print(
-                f"Length of signal and label do not match for shot {shotno}: {len(sig)} != {len(label)}. ({len(sig) - len(label):+d})"
-            )
+            # rich.print(
+            #     f"Length of signal and label do not match for shot {shotno}: {len(sig)} != {len(label)}. ({len(sig) - len(label):+d})"
+            # )
             length_discrepancy += 1
         elif not np.allclose(sig["time"], label["time"]):
             print(f"Time values do not match for shot {shotno}")
@@ -132,7 +219,7 @@ def combine_all_shots(sig_all: dict[int, str],
         is_consistent, n_inconsistent, freq, step_size_std, t_start, t_end = check_time_consistency(
             sig, frequency_tolerance=frequency_tolerance)
         if not is_consistent or n_inconsistent > 10:
-            print(f"Time is not consistent for shot {shotno}: Frequency: {freq}, Standard deviation of steps: {step_size_std}. {n_inconsistent} steps have a different time step.")
+            rich.print(f"Time is not consistent for shot {shotno}: Frequency: {freq}, Standard deviation of steps: {step_size_std}. {n_inconsistent} steps have a different time step.")
             print("Skipping shot.")
             time_inconsistency += 1
             continue
@@ -146,18 +233,28 @@ def combine_all_shots(sig_all: dict[int, str],
         label = label.set_index("time")
         label = label.reindex(shot_out.index, method='nearest', tolerance=0.01)
         # add labels
-        shot_out.join(label[COLS_LABEL], on="time")
-        # count amount of columns with any nans 
-        nan_cols = shot_out[COLS_CONTROL + COLS_DATA].isnull().any(axis=0).sum()
-        if nan_cols > 0:
-            print(f"Found {nan_cols} cols with NaN in shot {shotno}")
-            nans_replaced += 1
-            # replace nans with 0 if they occur in the X or C columns
-            shot_out[COLS_CONTROL + COLS_DATA] = shot_out[COLS_CONTROL + COLS_DATA].fillna(0)
-        all_shot_dfs.append(shot_out)
+        shot_out = shot_out.join(label[COLS_LABEL], on="time")
         # print all_data size in memory
         memory += shot_out.memory_usage().sum()
-        print(f"Memory usage: {memory / 1e6} MB")
+
+        ### Handle NaNs ###
+        # count amount of columns with any nans 
+        raw_nan_summary, longest_window = analyze_nans(shot_out)
+        nan_summaries.append(raw_nan_summary) # for later analysis
+        # Replace nans in NBI with 0, as per yoeri's suggestion
+        shot_out.loc[shot_out["NBI"].isnull(), "NBI"] = 0
+        nan_summary, (start_usable, end_usable) = analyze_nans(shot_out)
+        # print a representation of the usable window in 100 steps
+        last_time_step = shot_out["time_step"].iloc[-1]
+        print("Using",start_usable, "to", end_usable, ":","-" * ceil(start_usable/200) + "X" * ((end_usable - start_usable)//200) + "-" * ceil((last_time_step - end_usable)/200))
+        # Other columns with too many NaNs are problmeatic, so we drop the shot
+        if not nan_summary.empty and nan_summary["Small C-ratio"].any():
+            rich.print(f"Shot {shotno} has columns with too many NaNs ({nan_summary.index.tolist()}). Dropping the shot.")
+            nan_rejects += 1
+            continue
+        # slice the dataframe to only include the longest window of non-NaNs, using the time_step start and end
+        shot_out = shot_out.loc[shot_out["time_step"].between(start_usable, end_usable)]
+        all_shot_dfs.append(shot_out)
     print(
         f"Total shots: {len(sig_all)} of which {too_short} had less than {min_steps_filter} steps. Output total: {len(all_shot_dfs)}"
     )
@@ -166,7 +263,9 @@ def combine_all_shots(sig_all: dict[int, str],
     print(f"Time inconsistency: {time_inconsistency}")
     print(f"Shot number discrepancy: {shot_num_discrepancy}")
     print(f"Label shot number discrepancy: {label_shot_num_discrepancy}")
-    print(f"NaNs replaced: {nans_replaced}")
+    print(f"Rejected shots due to too many NaNs: {nan_rejects}")
+    rich.print(f"Memory usage: {memory / 1e6} MB")
+    
     return pd.concat(all_shot_dfs)
 
 
@@ -182,66 +281,38 @@ def load_shot(shotno: int, sig_all: dict[int, str], label_all: dict[int, str]):
     label_df = pd.read_csv(label_all[shotno])
     return sig_df, label_df
 
-def generate_report(data_path: str):
-    data_df = pd.read_parquet(data_path)
-    profile = ProfileReport(data_df, title="Profiling Report")
-    profile.to_file("data_report.html")
+def generate_report(data: str | pd.DataFrame):
+    """Profile a dataframe from a saved parquet file or a freshly made dataframe directly.
+
+    When using a dataframe, the name of the dataset is assumed to be DATA_SET_NAME.
+    """
+    if isinstance(data, str):
+        name = data.split("/")[-1]
+        data_df = pd.read_parquet(data)
+    else:
+        name = DATA_SET_NAME
+        data_df = data
+    profile = ProfileReport(data_df, title="Profiling Report " + name, explorative=True)
+    profile.to_file(name+".html")
+    print("Saved report to ", name+".html")
 
 
 #%% Run!
 
 if __name__ == "__main__":
-    sig_all, label_all = get_shot_index(data_dir)
+    sig_all, label_all = index_shot_names(DATA_INPUT_DIR)
     data_df = combine_all_shots(sig_all, label_all)
-    date = pd.Timestamp.now().strftime("%Y_%m_%d")
-    file_name = f"./data/{date}-all_preprocessed.parquet"
-    data_df.to_parquet(file_name)
-    print("Saved to ", file_name)
-    
+    out_path = f"./data/{DATA_SET_NAME}.parquet"
+    data_df.to_parquet(out_path)
+    generate_report(data=data_df)
+    print("Saved to ", out_path)
 
-
-# %%
-generate_report("data/2024_04_23-all_preprocessed.parquet")
-# %%
-data_df = pd.read_parquet("data/2024_04_23-all_preprocessed.parquet")
 #%%
+    exit(0)
 
-def analyze_nans(df):
-    """Per shotNo, analyze which columns have NaNs and how many.
 
-    Also checks and counts whether there are consecutive non-NaNs in the columns with Nan values, so they can still be used.
-    """
-    nan_cols = df.columns[df.isnull().any()]
-    nan_counts = df[nan_cols].isnull().sum()
-    consecutive_non_nans = {}
-    for col in nan_cols:
-        consecutive_non_nans[col] = df[col].notnull().astype(int).groupby(df[col].isnull().cumsum()).sum().max()
-    summary = pd.DataFrame({
-        "ShotNum": df["ShotNum"].iloc[0],
-        "NaNs": nan_counts, 
-                            "NaN ratio": nan_counts / len(df),
-                            "Consecutive non-NaNs": consecutive_non_nans})
-    summary['Consecutive ratio'] = summary['Consecutive non-NaNs'] / len(df)
-    summary["Small C-ratio"] = summary["Consecutive ratio"] < 0.4
-    summary['Total'] = len(df)
-    return summary
 
-results = []
-shots_n = data_df["ShotNum"].nunique()
-for group, df in data_df.groupby("ShotNum"):
-    summmary = analyze_nans(df)
-    if summmary.empty:
-        continue
-    results.append(summmary)
-    print(f"Shot {group}:")
-    print(summmary)
-res_df= pd.concat(results)
-# %% What columns are most often unusable?
-print("These are the columns that are most often unusable (they have no usable window without NaNs):")
-res_df["Small C-ratio"].groupby(level=0).sum().sort_values(ascending=False)
-# %% How many shots have unusable columns? And how many columns are unusable?
-unusable_counts = res_df.groupby("ShotNum")["Small C-ratio"].sum().value_counts()
-print(f"Out of {shots_n} shots, {unusable_counts.drop(0).sum()} have unusable columns.")
-print(unusable_counts)
-
+# %% Notebook style testing and profiling
+# generate_report("data/2024_04_23-all_preprocessed.parquet")
 # %%
+# data_df = pd.read_parquet("data/2024_04_23-all_preprocessed.parquet")
