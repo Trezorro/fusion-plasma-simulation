@@ -33,41 +33,40 @@ run = wandb.init(project="plasma",
                  tags=[
                      "throwaway",
                        ],
-                 notes="First seq2seq",
+                 notes="seq2seq cleaner data",
                  config=dict(
                      data_dir = './data/',
-                     data_file = '2024_04_23-all_preprocessed.parquet',
+                     data_file = '2024_05_01-NaNsFiltered.parquet',
                      data_columns = ALL_SIG_COLLS,
                      data_x_columns = COLS_DATA,
                      data_c_columns = COLS_CONTROL,
                      epochs = 10,
-                     batch_size = 8,
+                     batch_size = 4,
                  )
 )
-C: dict = wandb.config
+C = wandb.config
 
-
-
-model = BasicRNN(input_size=len(C['data_c_columns'])+len(C['data_x_columns']), 
+model = BasicRNN(input_size=len(C['data_c_columns'])+len(C['data_x_columns']), # 12
                  hidden_size=20, 
-                 output_size=len(C['data_x_columns']))
+                 output_size=len(C['data_x_columns']),
+                 batch_size=C['batch_size'])
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 criterion = torch.nn.MSELoss()
 data_set = MyDataset(file_path=C['data_dir'] + C['data_file'],
                      columns_C=C['data_c_columns'],
                      columns_X=C['data_x_columns'])
-data_loader = torch.utils.data.DataLoader(data_set, batch_size=8, shuffle=True)
+data_loader = torch.utils.data.DataLoader(data_set, batch_size=C.batch_size, shuffle=True)
 
 
-for epoch in range(0, C['epochs']):
+for epoch in range(1, C['epochs']+1):
     
     # log metrics to wandb
     for batch_idx, (controls, observables) in enumerate(data_loader):
         # Zero the gradients
         optimizer.zero_grad()
         # Concatenate controls and observables for model input
-        inputs = torch.cat((controls, observables), dim=2)
+        inputs = torch.cat((controls, observables), dim=2) # (batch_size, seq_length, input_size)
         # Forward pass
         outputs = model(inputs)
 
@@ -81,6 +80,6 @@ for epoch in range(0, C['epochs']):
         optimizer.step()
 
         # Log metrics to wandb
-        wandb.log({"loss": loss.item()}, step=batch_idx)
+        wandb.log({"epoch": epoch, "loss": loss.item()})
     
 
