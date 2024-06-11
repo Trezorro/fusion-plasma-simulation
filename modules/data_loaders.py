@@ -13,6 +13,9 @@ class MyDataset(Dataset):
         self.shot_numbers = self.data['ShotNum'].unique()
         self.columns_C = columns_C
         self.columns_X = columns_X
+        self.min = self.data[columns_C + columns_X].min()
+        self.max = self.data[columns_C + columns_X].max()
+        self.data[columns_C + columns_X] = (self.data[columns_C + columns_X] - self.min) / (self.max - self.min)
 
     def __len__(self):
         return len(self.shot_numbers)
@@ -21,7 +24,7 @@ class MyDataset(Dataset):
         shot_data = self.data[self.data['ShotNum'] == self.shot_numbers[idx]] # indexed by time
         C = shot_data[self.columns_C].iloc[1000:3000].values
         X = shot_data[self.columns_X].iloc[1000:3000].values
-        return C, X
+        return C, X # shapes: (seq_length, variables)
 
 
 def slice_data(data, start_time, end_time):
