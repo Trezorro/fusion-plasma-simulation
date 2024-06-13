@@ -5,6 +5,11 @@ import glob
 import numpy as np
 import re
 import matplotlib.pyplot as plt
+import plotly.express as px
+from plotly.tools import mpl_to_plotly
+import datapane as dp
+
+
 
 # %%
 # data_dir = 'shots/'
@@ -57,73 +62,7 @@ def get_shot_index(data_dir: str) -> tuple[dict[int, str], dict[int, str]]:
 
 sig_all, label_all = get_shot_index(data_dir)
 
-#%% Combine all shots into one dataframe
 
-
-def combine_all_shots(sig_all: dict[int, str],
-                      label_all: dict[int, str],
-                      min_steps_filter: int = 5000):
-    # init counters for discrepancies
-    time_discrepancy, shot_num_discrepancy, label_shot_num_discrepancy, length_discrepancy, too_short = 0, 0, 0, 0, 0
-    memory = 0
-    all_shot_dfs = []  # list to store loaded and processed dataframes
-    for shotno in sig_all.keys():
-        sig = pd.read_parquet(sig_all[shotno])
-        label = pd.read_csv(label_all[shotno])
-        if len(sig) < min_steps_filter:
-            print(
-                f"Skipping shot {shotno} because it has less than {min_steps_filter} steps ({len(sig)})"
-            )
-            too_short += 1
-            continue
-
-        # assertions for consistency
-        if len(sig) != len(label):
-            print(
-                f"Length of signal and label do not match for shot {shotno}: {len(sig)} != {len(label)}. ({len(sig) - len(label):+d})"
-            )
-            length_discrepancy += 1
-        elif not np.allclose(sig["time"], label["time"]):
-            print(f"Time values do not match for shot {shotno}")
-            time_discrepancy += 1
-        # check monotonicity of time
-        if not sig["time"].is_monotonic_increasing:
-            print(
-                f"Time is not monotonically increasing for shot signal {shotno}"
-            )
-        if not label["time"].is_monotonic_increasing:
-            print(f"Time is not monotonically increasing for label {shotno}")
-
-        # not too interesting, but good to check: shot number column consistency
-        if sig["ShotNum"].iloc[0] != shotno:
-            print(f"Shot number does not match for shot {shotno}")
-            shot_num_discrepancy += 1
-        # extract columns from signal
-        shot_out = sig[ALL_SIG_COLLS].reset_index(
-            names='time_step').set_index("time")
-        # resample labels with ffill to time steps of signal
-        label = label.set_index("time")
-        label = label.reindex(shot_out.index, method='nearest', tolerance=0.01)
-        # add labels
-        shot_out.join(label["LHD_label"], on="time")
-
-        all_shot_dfs.append(shot_out)
-        # print all_data size in memory
-        memory += shot_out.memory_usage().sum()
-        print(f"Memory usage: {memory / 1e6} MB")
-    print(
-        f"Total shots: {len(sig_all)} of which {too_short} had less than {min_steps_filter} steps. Output total: {len(all_shot_dfs)}"
-    )
-    print(f"Length discrepancy: {length_discrepancy}")
-    print(f"Time discrepancy: {time_discrepancy}")
-    print(f"Shot number discrepancy: {shot_num_discrepancy}")
-    print(f"Label shot number discrepancy: {label_shot_num_discrepancy}")
-    return pd.concat(all_shot_dfs)
-
-
-data_df = combine_all_shots(sig_all, label_all)
-date = pd.Timestamp.now().strftime("%Y_%m_%d")
-data_df.to_parquet(f"./data/{date}-all_preprocessed.parquet")
 
 #%%
 
@@ -132,7 +71,7 @@ assert all([x in sig.columns for x in ALL_SIG_COLLS
 
 # %%
 # example
-shotno = shot_no_list[21]
+shotno = 60275  # shot_no_list[21]
 
 sig = pd.read_parquet(sig_all[shotno])
 label = pd.read_csv(label_all[shotno])
@@ -163,12 +102,19 @@ print(
 # dilate the mask by one step
 inconsistent_steps = inconsistent_steps | np.roll(inconsistent_steps, 1)
 print(time_diff[inconsistent_steps])
-time_diff.describe()
+print(time_diff.describe())
+plt.plot(time_diff)
+plt.title("Time differences")
+plt.show()
 
 
 # %%
 def check_time_consistency(signal_df):
     time_diff = signal_df['time'].diff()
+    # plot time diffs
+    plt.plot(time_diff)
+    plt.title("Time differences")
+    plt.show()
     time_start = signal_df['time'].iloc[0]
     time_end = signal_df['time'].iloc[-1]
     length = len(signal_df)
@@ -277,13 +223,28 @@ ax2.set_yticks([1, 2, 3])
 # Change y-axis tick labels
 ax2.set_yticklabels(['L', 'D', 'H'])
 legend = ax.legend(cols_data, loc='upper left')
-plt.show()
+p_fig = mpl_to_plotly(fig)
+# plt.show()
+# p_fig.write_html('plots/first_figure.html', auto_open=True)
+report = dp.Blocks(
+        # title="Plots",
+        blocks=[
+
+dp.DataTable(sig[ALL_SIG_COLLS], label="Data"),
+# dp.DataTable(sig.describe(), label="Summary"),
+dp.Plot(p_fig, label="Observables"),
+dp.Plot(fig, label="Observables (mpl)")
+        ],)
+
+dp.save_report(report, path=f'plots/report_{shotno}.html', open=True)
+
 
 # %%
 fig, ax = plt.subplots(figsize=(10, 4), dpi=200)
 plt.title(f"Shot #{shotno} - control")
 
 ax.set_ylabel("Controls (normalized)")
+ax.set_xlabel("Time (s)")
 
 ax.plot(sig["time"], sig[cols_control])
 ax.set_ylim([-2, 1.5])
