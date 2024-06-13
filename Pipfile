@@ -33,4 +33,4 @@ pylint = "*"
 ruff = "*"
 
 [requires]
-python_version = "3.11.7"
+python_version = "3.11.9"
