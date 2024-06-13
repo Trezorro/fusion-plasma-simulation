@@ -3,6 +3,9 @@ import wandb
 from modules.models import BasicRNN
 from modules.data_loaders import MyDataset
 
+from torchinfo import summary
+
+
 COLS_META = [
     "ShotNum",
     "time",
@@ -40,9 +43,7 @@ run = wandb.init(project="plasma",
                      data_columns = ALL_SIG_COLLS,
                      data_x_columns = COLS_DATA,
                      data_c_columns = COLS_CONTROL,
-                     epochs = 10,
-                     batch_size = 4,
-                 )
+                     data_seq_length = 2000,
 )
 C = wandb.config
 
@@ -56,8 +57,19 @@ criterion = torch.nn.MSELoss()
 data_set = MyDataset(file_path=C['data_dir'] + C['data_file'],
                      columns_C=C['data_c_columns'],
                      columns_X=C['data_x_columns'])
-data_loader = torch.utils.data.DataLoader(data_set, batch_size=C.batch_size, shuffle=True)
 
+model_summary = summary(model, 
+                        input_size=(C.data_seq_length, len(C.data_c_columns)+len(C.data_x_columns)), batch_dim=0, 
+                        col_names=[# "input_size", 
+                                   "output_size", "num_params",
+                                   #"params_percent",
+                                   # "kernel_size",
+                                   "mult_adds",
+                                   # "trainable" 
+                                   ]) # (batch_size, seq_length, input_size)
+wandb.log({"model_summary": str(model_summary)})
+# log weights for analysis in W&B
+wandb.watch(model, criterion=criterion, log="all")
 
 for epoch in range(1, C['epochs']+1):
     

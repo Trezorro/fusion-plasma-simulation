@@ -16,21 +16,24 @@ torch = {version = "*", index = "pytorch"}
 wandb = "*"
 pandas = "*"
 numpy = "*"
-scikit-learn = "*"
-pytorch-model-summary = "*"
 matplotlib = "*"
-jupyter = "*"
 pyarrow = "*"
 plotly = "*"
-datapane = "*"
-ydata-profiling = "*"
 numba = "<=0.58.1"  # numba 0.59.0 caused an import error in ydata-profiling
-rich = "*"
+torchinfo = "*"
 
 [dev-packages]
+jupyter = "*"
+scikit-learn = "*"
+rich = "*"
+ydata-profiling = "*"
+datapane = "*" # for creating quick html reports/dashboards
 yapf = "*"
 pylint = "*"
 ruff = "*"
 
 [requires]
 python_version = "3.11.9"
+## Conda Environment Definition for Cluster
+### conda install python=3.11.9 pytorch torchvision torchaudio pytorch-cuda=12 -c pytorch -c nvidia   
+### conda install wandb pandas numpy numba matplotlib pyarrow plotly -c conda-forge torchinfo
