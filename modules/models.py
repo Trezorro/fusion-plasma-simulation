@@ -25,12 +25,12 @@ class BasicRNN(nn.Module):
         if hidden_0 is None:
             hidden_0 = self.init_hidden(batch_size)
 
-        output, hidded_t = self.rnn(input, hidden_0) # output is last layer hidden state, for each time step
-        output = self.fc(output)
+        out_z, hidded_t = self.rnn(input, hidden_0) # output is last layer hidden state, for each time step
+        output = self.fc(out_z)  # (batch_size, seq_length, hidden_size) -> (batch_size, seq_length, X_variables)
 
         return output
 
-    def train(self, input, target, optimizer, criterion, num_epochs):
+    def train_loop(self, input, target, optimizer, criterion, num_epochs):
         for epoch in range(num_epochs):
             optimizer.zero_grad()
             output = self.forward(input)
