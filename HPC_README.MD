@@ -12,6 +12,8 @@ The Data Mining group has its own compute cluster that is available to group mem
 ```
 ssh TUE_<username>@datamininghpc.win.tue.nl  
 ```
+To configure ssh login without needing the password every time, follow this guide https://builtin.com/articles/ssh-without-password  
+
 To request access, please contact one of the administrators. We will require the following information: 
 - Your name 
 - Your TU/e account username 
