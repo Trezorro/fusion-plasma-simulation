@@ -1,8 +1,7 @@
-import numpy as np
-import pandas as pd
 import torch
 from torch.utils import data
 import wandb
+from modules.evaluation import log_predictions
 from modules.models import BasicRNN
 from modules.data_loaders import MyDataset
 
@@ -101,25 +100,6 @@ def validate(model, data_loader, criterion):
         mean_loss = loss / n_samples
         mean_future_loss = future_loss / n_samples
         wandb.log({"val/loss": mean_loss, "val/future_loss": mean_future_loss})
-
-def log_predictions(model, data_set, n=5):
-    model.eval()
-    with torch.no_grad():
-        shot_numbers, controls, observables = next(iter(data.DataLoader(data_set, batch_size=n, shuffle=False)))
-        inputs = torch.cat((controls, observables), dim=2) # (batch_size, seq_length, variables)
-        outputs = model(inputs) #  (batch_size, seq_length, target_variables)
-        output_cols = [f"^{i}" for i in C['data_x_columns']]
-        seq_length = outputs.shape[1]
-        df = pd.DataFrame(index=np.repeat(shot_numbers.numpy().astype(int), seq_length),
-                          columns=['t'] + output_cols +C['data_x_columns']+ C['data_c_columns'])
-        for shot, output, control_seq, observable_seq in zip(shot_numbers, outputs, observables, controls):
-            df.loc[int(shot)] = np.concatenate([np.arange(seq_length)[:,np.newaxis], 
-                                                output.numpy(),
-                                                observable_seq.numpy(),
-                                                control_seq.numpy()],
-                                               axis=1)
-        table = wandb.Table(dataframe=df.reset_index(names='ShotNum'))
-        wandb.log({"val/predictions": table})
 
 for epoch in range(1, C['epochs']+1):
     validate(model, val_loader, eval_citerion)
