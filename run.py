@@ -38,7 +38,7 @@ run = wandb.init(project="plasma",
                  tags=[
                     #  "throwaway",
                        ],
-                 notes="seq2seq cleaner data",
+                 notes="seq2seq partial observables",
                  config=dict(
                      data_dir = './data/',
                      data_file = '2024_05_01-NaNsFiltered.parquet',
@@ -46,7 +46,8 @@ run = wandb.init(project="plasma",
                      data_x_columns = COLS_DATA,
                      data_c_columns = COLS_CONTROL,
                      data_seq_length = 2000,
-                     epochs = 3,
+                     forecast_horizon = 200,
+                     epochs = 4,
                      batch_size = 16,
                  ),
                  
@@ -86,15 +87,20 @@ wandb.watch(model, criterion=criterion, log="all")
 def validate(model, data_loader, criterion):
     n_samples = len(data_loader.dataset)
     loss = 0
+    future_loss = 0
     model.eval()
     with torch.no_grad():
         for batch_idx, (shot_number, controls, observables) in enumerate(data_loader):
-            inputs = torch.cat((controls, observables), dim=2) # (batch_size, seq_length, variables)
+            partial_observables = torch.zeros_like(observables)
+            partial_observables[:,:-C['forecast_horizon']] = observables[:,:-C['forecast_horizon']]
+            inputs = torch.cat((controls, partial_observables), dim=2) # (batch_size, seq_length, variables)
             outputs = model(inputs)
             loss += criterion(outputs, observables).item()
+            future_loss += criterion(outputs[:,-C['forecast_horizon']:], observables[:,-C['forecast_horizon']:]).item()
 
         mean_loss = loss / n_samples
-        wandb.log({"val_loss": mean_loss})
+        mean_future_loss = future_loss / n_samples
+        wandb.log({"val/loss": mean_loss, "val/future_loss": mean_future_loss})
 
 def log_predictions(model, data_set, n=5):
     model.eval()
@@ -113,7 +119,7 @@ def log_predictions(model, data_set, n=5):
                                                 control_seq.numpy()],
                                                axis=1)
         table = wandb.Table(dataframe=df.reset_index(names='ShotNum'))
-        wandb.log({"val_predictions": table})
+        wandb.log({"val/predictions": table})
 
 for epoch in range(1, C['epochs']+1):
     validate(model, val_loader, eval_citerion)
@@ -123,8 +129,10 @@ for epoch in range(1, C['epochs']+1):
     for batch_idx, (shot_number, controls, observables) in enumerate(train_loader):
         # Zero the gradients
         optimizer.zero_grad()
+        partial_observables = torch.zeros_like(observables)
+        partial_observables[:,:-C['forecast_horizon']] = observables[:,:-C['forecast_horizon']]
         # Concatenate controls and observables for model input
-        inputs = torch.cat((controls, observables), dim=2) # (batch_size, seq_length, input_size)
+        inputs = torch.cat((controls, partial_observables), dim=2) # (batch_size, seq_length, input_size)
         # Forward pass
         outputs = model(inputs)
 
@@ -136,9 +144,12 @@ for epoch in range(1, C['epochs']+1):
 
         # Update weights
         optimizer.step()
+        with torch.no_grad():
+            future_loss = criterion(outputs[:,-C['forecast_horizon']:], observables[:,-C['forecast_horizon']:])
 
         # Log metrics to wandb
-        wandb.log({"epoch": epoch, "loss": loss.item(), "weights":model.state_dict()})
+        wandb.log({"epoch": epoch, "train/loss": loss.item(), "train/future_loss": future_loss.item(),
+                   "train/weights":model.state_dict()})
 
     
 
