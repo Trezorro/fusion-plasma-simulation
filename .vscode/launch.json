@@ -9,6 +9,9 @@
             "type": "debugpy",
             "request": "launch",
             "module": "run",
+            "env": {
+                "WANDB_MODE":"disabled"
+            }
             
         }
     ]
