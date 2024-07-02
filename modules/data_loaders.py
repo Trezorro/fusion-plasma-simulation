@@ -3,8 +3,6 @@ import wandb
 import torch
 from torch.utils import data
 
-C = wandb.config
-
 
 class MyDataset(data.Dataset):
 

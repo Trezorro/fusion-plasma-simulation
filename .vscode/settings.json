@@ -7,5 +7,6 @@
             "column": 120,
             "color": "#8e111182"
         }
-    ]
+    ],
+"python.analysis.autoImportCompletions": true,
 }

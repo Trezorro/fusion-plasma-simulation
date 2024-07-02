@@ -25,12 +25,15 @@ def build_output_df(shot_numbers, controls, observables, outputs):
 
     """
     C = wandb.config
-    output_cols = [f"^{i}" for i in C['data_x_columns']]
+    output_cols = [f"^{i}" for i in C.data.cols.x]
     seq_length = outputs.shape[1]
         # DF will have columns: ShotNum, t, ^FIR, ^PD, ^DML, ^POHM, ^Z_axis, IP, gas_fringes, NBI, ECRH, a_minor, KAPPA, DELTA
     df = pd.DataFrame(
-            index=np.repeat(shot_numbers.numpy().astype(int), seq_length), # ShotNum, each repeated seq_length times
-            columns=['t'] + output_cols +C['data_x_columns']+ C['data_c_columns'])
+        index=np.repeat(
+            shot_numbers.numpy().astype(int), seq_length
+        ),  # ShotNum, each repeated seq_length times
+        columns=["t"] + output_cols + C.data.cols.x + C.data.cols.c,
+    )
     for shot, output, control_seq, observable_seq in zip(shot_numbers, outputs, observables, controls):
         df.loc[int(shot)] = np.concatenate([np.arange(seq_length)[:,np.newaxis],  # t
                                                 output.numpy(),
