@@ -9,6 +9,8 @@ import torch
 import wandb
 from torch.utils import data
 
+from config import get_current_config
+
 
 
 
@@ -24,7 +26,7 @@ def build_output_df(shot_numbers, controls, observables, outputs):
         outputs (torch.Tensor): The model outputs. (batch_size, seq_length, n_observables)
 
     """
-    C = wandb.config
+    C = get_current_config()
     output_cols = [f"^{i}" for i in C.data.cols.x]
     seq_length = outputs.shape[1]
         # DF will have columns: ShotNum, t, ^FIR, ^PD, ^DML, ^POHM, ^Z_axis, IP, gas_fringes, NBI, ECRH, a_minor, KAPPA, DELTA
@@ -50,9 +52,10 @@ def log_predictions(model, data_set, n=5):
         inputs = torch.cat((controls, observables), dim=2) # (batch_size, seq_length, variables)
         outputs = model(inputs) #  (batch_size, seq_length, target_variables)
         df = build_output_df(shot_numbers, controls, observables, outputs)
-        plot_sample(df.loc[df.index[0]], title="Predictions", show=False)
+        fig = plot_sample(df.loc[df.index[0]], title="Predictions", show=False)
         table = wandb.Table(dataframe=df.reset_index(names='ShotNum'))
-        wandb.log({"val/predictions": table})
+        wandb.log({"val/predictions": table, "val/predictions_plot": fig})
+        return fig
     
 
 def plot_sample(df: pd.DataFrame, title="", show=False):
@@ -60,7 +63,6 @@ def plot_sample(df: pd.DataFrame, title="", show=False):
     df_stacked = df.set_index('t').stack(future_stack=True).reset_index(name='value').rename(columns={'level_1': 'variable'})
     df_stacked['is_prediction'] = df_stacked['variable'].str.startswith('^')
     df_stacked['variable'] = df_stacked['variable'].str.replace('^', '')
-    fig = px.line(df_stacked, x='t', y='value', color='variable', symbol='is_prediction', line_dash='is_prediction', markers='is_prediction', title=title)
+    fig = px.line(df_stacked, x='t', y='value', color='variable', symbol='is_prediction', line_dash='is_prediction', markers=False, title=title)
     # fig.update_xaxes(rangeslider_visible=True)
-
-    fig.show()
+    return fig

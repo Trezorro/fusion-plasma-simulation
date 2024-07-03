@@ -1,76 +1,35 @@
 import torch
 from torch.utils import data
 import wandb
+from rich.progress import track
+
+from config import get_current_config, load_config_dict
 from modules.evaluation import log_predictions
-from modules.models import BasicRNN
+import modules.models
 from modules.data_loaders import MyDataset
 
 from torchinfo import summary
-
-config_data = dict(
-    dir="./data/",
-    file="2024_05_01-NaNsFiltered.parquet",
-    cols=dict(
-        meta=[
-            "ShotNum",
-            "time",
-        ],
-        x=[
-            # "FIR",  # density lijn Interferometer
-            "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
-            "PD",  # photodiode lijn op de divertor
-            "DML",  # Magnetische respons  correleert met de energie in het plasma
-            "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
-            "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
-        ],
-        c=[
-            "IP",  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
-            "gas_fringes",  # Ingepompte gas
-            "NBI",  # manieren om te verhitten: colliding Neutral beam injection
-            "ECRH",  # magnetron.
-            "a_minor",  # reel gemeten plasma shape a k d (horizontale radius
-            "KAPPA",
-            "DELTA",  # linkerbovenhoek nar links vanuit hetmidden
-        ],
-        label=["LHD_label"],
-    ),
-)
-config_dict = dict(
-    data=config_data,
-    seq_length=2000,
-    forecast_horizon=200,
-    epochs=4,
-    batch_size=16,
-)
-
-
-# setup wandb
 wandb.login()
 run = wandb.init(
     project="plasma",
+    notes="LSTM add 1 activation",
     tags=[
-        #  "throwaway",
+         "SiLu",
     ],
-    notes="seq2seq partial observables",
-    config=config_dict,
+    config=load_config_dict(),
 )
-C = wandb.config
+C = get_current_config()
 
-
-model = BasicRNN(
-    input_size=len(C.data.cols.c) + len(C.data.cols.x),  # 12
-    hidden_size=20,
-    output_size=len(C.data.cols.x),
-    batch_size=C["batch_size"],
-)
+ModelClass = getattr(modules.models, C.model.Class)
+model = ModelClass(**C.model.params)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 criterion = torch.nn.MSELoss()  # note, this is influenced by seq length
 eval_citerion = torch.nn.MSELoss(reduction="sum")  # manually average over batches
 data_set = MyDataset(
     file_path=C.data.dir + C.data.file,
-    columns_C=C.data.cols.c,
-    columns_X=C.data.cols.x,
+    columns_C=list(C.data.cols.c),
+    columns_X=list(C.data.cols.x),
 )
 train_set, val_set = data.random_split(
     data_set, [0.9, 0.1], generator=torch.Generator().manual_seed(42)
@@ -81,7 +40,7 @@ val_loader = data.DataLoader(val_set, batch_size=C.batch_size, shuffle=False)
 
 model_summary = summary(
     model,
-    input_size=(C.data_seq_length, len(C.data_c_columns) + len(C.data_x_columns)),
+    input_size=(C.seq_length, len(C.data.cols.c) + len(C.data.cols.x)),
     batch_dim=0,
     col_names=[  # "input_size",
         "output_size",
@@ -122,9 +81,11 @@ def validate(model, data_loader, criterion):
         wandb.log({"val/loss": mean_loss, "val/future_loss": mean_future_loss})
 
 
-for epoch in range(1, C["epochs"] + 1):
+for epoch in track(range(1, C["epochs"] + 1), description="Epoch"):
     validate(model, val_loader, eval_citerion)
-    log_predictions(model, val_set, n=5)
+    fig = log_predictions(model, val_set, n=5)
+    if epoch % 5 == 0:
+        fig.show()
     model.train()
     # log metrics to wandb
     for batch_idx, (shot_number, controls, observables) in enumerate(train_loader):

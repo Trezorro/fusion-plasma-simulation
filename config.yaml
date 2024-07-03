@@ -1,0 +1,31 @@
+seq_length: 2000
+forecast_horizon: 400
+epochs: 100
+batch_size: 8
+data:
+  dir: ./data/
+  file: 2024_05_01-NaNsFiltered.parquet
+  cols:
+    meta:
+    - ShotNum
+    - time
+    x: [
+            # "FIR",  # density lijn Interferometer
+            "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
+            "PD",  # photodiode lijn op de divertor
+            "DML",  # Magnetische respons  correleert met de energie in het plasma
+            "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
+            "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
+        ]
+    c:
+    - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
+    - gas_fringes  # Ingepompte gas
+    - NBI  # manieren om te verhitten: colliding Neutral beam injection
+    - ECRH  # magnetron.
+    - a_minor  # reel gemeten plasma shape a k d (horizontale radius
+    - KAPPA
+    - DELTA  # linkerbovenhoek naar links vanuit hetmidden
+    label:
+    - LHD_label
+# model: model.yaml # To be replaced by respective yaml file content
+model: model.yaml

@@ -21,6 +21,7 @@ pyarrow = "*"
 plotly = "*"
 numba = "<=0.58.1"  # numba 0.59.0 caused an import error in ydata-profiling
 torchinfo = "*"
+omegaconf = "*"
 
 [dev-packages]
 jupyter = "*"
@@ -38,5 +39,3 @@ python_version = "3.11.9"
 ### conda create -n py11 python=3.11.9 pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia   
 ### conda install wandb pandas numpy numba matplotlib pyarrow plotly -c conda-forge torchinfo
 ### conda install pytorch torchvision torchaudio pytorch-cuda=11.8 wandb pandas numpy numba matplotlib pyarrow plotly torchinfo-c pytorch -c nvidia -c conda-forge
-
-
