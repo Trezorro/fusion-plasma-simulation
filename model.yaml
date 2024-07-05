@@ -1,8 +1,18 @@
+# model:
+#   Class: BasicLSTM
+#   params:
+#     input_size: 12
+#     hidden_size: 64
+#     output_size: 5
+#     num_layers: 3
+#     dropout: 0.3
+
 model:
-  Class: BasicLSTM
+  Class: EncoderDecoder
   params:
     input_size: 12
-    hidden_size: 64
     output_size: 5
+    hidden_state_size: 64
     num_layers: 3
     dropout: 0.3
+    forecast_horizon: ${ forecast_horizon }

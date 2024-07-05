@@ -11,7 +11,8 @@
             "module": "run",
             "env": {
                 "WANDB_MODE":"disabled"
-            }
+            },
+            "justMyCode": false
             
         }
     ]
