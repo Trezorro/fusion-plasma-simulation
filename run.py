@@ -1,3 +1,4 @@
+import random
 import torch
 from torch.utils import data
 import wandb
@@ -9,15 +10,14 @@ import modules.models
 from modules.data_loaders import MyDataset
 
 from torchinfo import summary
+
 wandb.login()
 run = wandb.init(
-    name="EncoderDecoder test 3 BatchNorm",
+    name="EncoderDecoder test 7 Bigger H LOSSFIX",
     project="plasma",
-    notes="Added 4 batchnorm layers because the outputs were always lower than the input",
-    tags=[
-        "SiLu",
-        "BatchNorm",
-    ],
+    notes=
+    "Loss was always 0 before because of the wrong loss function. Fixed now. Also added a random crop to the data loader.",
+    tags=["SiLu", "BatchNorm", "random crop"],
     config=load_config_dict(),
 )
 C = get_current_config()
@@ -86,7 +86,7 @@ def validate(model, data_loader, criterion):
 for epoch in track(range(1, C["epochs"] + 1), description="Epoch"):
     validate(model, val_loader, eval_citerion)
     fig = log_predictions(model, val_set, n=5)  # Todo pass epoch for titles
-    if epoch % 5 == 0:
+    if (epoch - 1) % 5 == 0:
         fig.show()
     model.train()
     # log metrics to wandb
@@ -102,7 +102,7 @@ for epoch in track(range(1, C["epochs"] + 1), description="Epoch"):
         outputs = model(x=observables, c=controls)
 
         # Compute loss
-        f_x = outputs[:, -C["forecast_horizon"]:]
+        f_x = observables[:, -C["forecast_horizon"]:]
         loss = criterion(outputs, f_x)
 
         # Backward passs

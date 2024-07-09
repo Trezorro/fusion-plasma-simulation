@@ -4,6 +4,9 @@ crop_margin: 1000
 random_start: true
 epochs: 100
 batch_size: 16
+# model: model.yaml # To be replaced by respective yaml file content
+model: model.yaml
+
 data:
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
@@ -29,5 +32,3 @@ data:
     - DELTA  # linkerbovenhoek naar links vanuit hetmidden
     label:
     - LHD_label
-# model: model.yaml # To be replaced by respective yaml file content
-model: model.yaml

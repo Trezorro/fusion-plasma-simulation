@@ -222,7 +222,7 @@ class Decoder(nn.Module):
             batch_first=True,
         )
         self.fc = nn.Sequential(
-            nn.Linear(64, output_size * 3),
+            nn.Linear(hidden_size, output_size * 3),
             nn.SiLU(),
             nn.Linear(output_size * 3, output_size),
         )
@@ -267,7 +267,8 @@ class EncoderDecoder(nn.Module):
     def forward(self, c, x):
         # input shape: (batch_size, seq_length, input_size)
         # this juggling should be in the train method
-        warmup = torch.cat((c[:, :-self.forecast_horizon], x[:, :-self.forecast_horizon]), dim=2)
-        c_f = c[:, -self.forecast_horizon:]
+        with torch.no_grad():
+            warmup = torch.cat((c[:, :-self.forecast_horizon], x[:, :-self.forecast_horizon]), dim=2)
+            c_f = c[:, -self.forecast_horizon:]
         state = self.encoder(warmup)
         return self.decoder(input=c_f, hidden_0=state)
