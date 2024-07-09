@@ -49,11 +49,15 @@ data_set = MyDataset(
     file_path=C.data.dir + C.data.file,
     columns_C=list(C.data.cols.c),
     columns_X=list(C.data.cols.x),
+    seq_length=C.seq_length,
+    crop_margin=C.crop_margin,
+    random_start=C.random_start,
 )
 train_set, val_set = data.random_split(data_set, [0.9, 0.1], generator=torch.Generator().manual_seed(42))
 
 train_loader = data.DataLoader(train_set, batch_size=C.batch_size, shuffle=True)
-val_loader = data.DataLoader(val_set, batch_size=C.batch_size, shuffle=False)
+val_loader = data.DataLoader(val_set, batch_size=C.batch_size * 2, shuffle=False)
+val_loader.dataset.random_start = False
 
 
 def validate(model, data_loader, criterion):

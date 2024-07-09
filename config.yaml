@@ -1,5 +1,7 @@
 seq_length: 2000
 forecast_horizon: 400
+crop_margin: 1000
+random_start: true
 epochs: 100
 batch_size: 16
 data:
