@@ -38,7 +38,11 @@ model_summary = summary(
         # "trainable"
     ],
 )  # (batch_size, seq_length, input_size)
-wandb.log({"model_summary": str(model_summary)})
+wandb.log({
+    "model_summary": str(model_summary),
+    "trainable_params": sum(p.numel() for p in model.parameters() if p.requires_grad)
+})
+
 # log weights for analysis in W&B
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 criterion = torch.nn.MSELoss()  # note, this is influenced by seq length
@@ -83,7 +87,7 @@ def validate(model, data_loader, criterion):
         wandb.log({"val/loss": mean_loss, "val/future_loss": mean_future_loss})
 
 
-for epoch in track(range(1, C["epochs"] + 1), description="Epoch"):
+for epoch in track(range(1, C["epochs"] + 1), description="Epoch", total=C["epochs"]):
     validate(model, val_loader, eval_citerion)
     fig = log_predictions(model, val_set, n=5)  # Todo pass epoch for titles
     if (epoch - 1) % 5 == 0:
