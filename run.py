@@ -13,7 +13,7 @@ from torchinfo import summary
 
 wandb.login()
 run = wandb.init(
-    name="EncoderDecoder test 7 Bigger H LOSSFIX",
+    name="EncoderDecoder test 8 128hiddenstate",
     project="plasma",
     notes=
     "Loss was always 0 before because of the wrong loss function. Fixed now. Also added a random crop to the data loader.",

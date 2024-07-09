@@ -9,10 +9,14 @@
 
 model:
   Class: EncoderDecoder
+  description: Encoder-Decoder model with CNN, LSTM, RNN layers
+  future_work: Switch to LSTM decoder
   params:
     input_size: 12
     output_size: 5
-    hidden_state_size: 64
+    hidden_cnn_channels: 64
+    rnn_input_channels: 64
+    hidden_state_size: 128
     num_layers: 3
-    dropout: 0.3
+    dropout: 0.2
     forecast_horizon: ${ forecast_horizon }

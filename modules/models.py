@@ -138,7 +138,7 @@ class ConvEncoder(nn.Module):
         self,
         input_channels=12,
         hidden_channels=64,
-        output_channels=32,
+        rnn_input_channels=32,
         hidden_size=64,
         rnn_layers=4,
         dropout=0.2,
@@ -168,15 +168,15 @@ class ConvEncoder(nn.Module):
             nn.BatchNorm1d(hidden_channels),
             nn.Conv1d(
                 in_channels=hidden_channels,
-                out_channels=output_channels,
+                out_channels=rnn_input_channels,
                 kernel_size=7,
                 stride=3,
             ),
             nn.SiLU(),
-            nn.BatchNorm1d(output_channels),
+            nn.BatchNorm1d(rnn_input_channels),
         )
         self.lstm = nn.LSTM(
-            input_size=output_channels,
+            input_size=rnn_input_channels,
             hidden_size=hidden_size,
             num_layers=rnn_layers,
             dropout=dropout,
@@ -238,20 +238,23 @@ class EncoderDecoder(nn.Module):
 
     def __init__(
         self,
-        input_size,
+        input_size=12,
         output_size=5,
+        hidden_cnn_channels=64,
+        rnn_input_channels=32,
         hidden_state_size=64,
         num_layers=4,
         dropout=0.3,
         forecast_horizon=400,
+        input_length=None,
     ):
         self.hyperparams = locals()
         super().__init__()
         self.encoder = ConvEncoder(
-            input_length=None,
-            input_channels=12,
-            hidden_channels=64,
-            output_channels=32,
+            input_length=input_length,  # Not used yet, but could be useful for debugging
+            input_channels=input_size,
+            hidden_channels=hidden_cnn_channels,
+            rnn_input_channels=rnn_input_channels,
             hidden_size=hidden_state_size,
             dropout=dropout,
             rnn_layers=num_layers,
