@@ -1,0 +1,12 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run Experiment",
+            "type": "shell",
+            "command": "git diff-index --quiet HEAD -- && pipenv run python run.py || echo 'Error: Git status is not clean.'"
+        }  // TODO: add input of experiment name. Autocommit? and create tag with that name.
+    ]
+}

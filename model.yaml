@@ -16,7 +16,7 @@ model:
     output_size: 5
     hidden_cnn_channels: 64
     rnn_input_channels: 64
-    hidden_state_size: 128
+    hidden_state_size: 64
     num_layers: 3
     dropout: 0.2
     forecast_horizon: ${ forecast_horizon }
