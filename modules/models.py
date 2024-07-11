@@ -196,7 +196,7 @@ class ConvEncoder(nn.Module):
                 padding=0,
                 dilation=1,
             )
-        self.compressed_length = input_length
+        return input_length
 
     def forward(self, input, hidden_0=None):
         """Encode the warmup sequence into a single hidden state."""

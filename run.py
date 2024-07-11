@@ -39,9 +39,12 @@ model_summary = summary(
         # "trainable"
     ],
 )  # (batch_size, seq_length, input_size)
+compressed_length = model.encoder.calculate_compressed_length(C.seq_length - C.forecast_horizon)
+print(f"Compressed length: {compressed_length} for warmup window {C.seq_length - C.forecast_horizon}")
 wandb.log({
     "model_summary": str(model_summary),
-    "trainable_params": sum(p.numel() for p in model.parameters() if p.requires_grad)
+    "trainable_params": sum(p.numel() for p in model.parameters() if p.requires_grad),
+    "compressed_length": compressed_length,
 })
 
 # log weights for analysis in W&B
