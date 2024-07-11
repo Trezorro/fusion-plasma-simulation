@@ -12,13 +12,14 @@ from modules.data_loaders import MyDataset
 from torchinfo import summary
 
 wandb.login()
+conf = load_config_dict()
 run = wandb.init(
-    name="EncoderDecoder test 8 128hiddenstate",
+    name=conf.get("run_name", None),
     project="plasma",
     notes=
     "Loss was always 0 before because of the wrong loss function. Fixed now. Also added a random crop to the data loader.",
     tags=["SiLu", "BatchNorm", "random crop"],
-    config=load_config_dict(),
+    config=conf,
 )
 C = get_current_config()
 
@@ -69,7 +70,7 @@ def validate(model, data_loader, criterion):
     loss = 0
     future_loss = 0
     model.eval()
-    with torch.no_grad():
+    with torch.inference_mode():
         for batch_idx, (shot_number, controls, observables) in enumerate(data_loader):
             partial_observables = torch.zeros_like(observables)
             partial_observables[:, :-C["forecast_horizon"]] = observables[:, :-C["forecast_horizon"]]
@@ -89,8 +90,8 @@ def validate(model, data_loader, criterion):
 
 for epoch in track(range(1, C["epochs"] + 1), description="Epoch", total=C["epochs"]):
     validate(model, val_loader, eval_citerion)
-    fig = log_predictions(model, val_set, n=5)  # Todo pass epoch for titles
-    if (epoch - 1) % 5 == 0:
+    fig = log_predictions(model, val_set, title=f"{wandb.run.name} - Epoch {epoch}", n=5)
+    if (epoch - 1) % 33 == 0:
         fig.show()
     model.train()
     # log metrics to wandb

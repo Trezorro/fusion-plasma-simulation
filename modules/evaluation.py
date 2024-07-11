@@ -12,8 +12,6 @@ from torch.utils import data
 from config import get_current_config
 
 
-
-
 def build_output_df(shot_numbers, controls, observables, outputs):
     """Given the model outputs, build a dataframe with the predictions.
 
@@ -37,7 +35,7 @@ def build_output_df(shot_numbers, controls, observables, outputs):
     df = pd.DataFrame(
         index=np.repeat(shot_numbers.numpy().astype(int),
                         seq_length),  # ShotNum, each repeated seq_length times
-        columns=["t"] + output_cols + C.data.cols.x + C.data.cols.c,
+        columns=["t"] + output_cols + C.data.cols.x  # + C.data.cols.c
     )
     for shot, output, control_seq, observable_seq in zip(
             shot_numbers,
@@ -50,13 +48,13 @@ def build_output_df(shot_numbers, controls, observables, outputs):
                 np.arange(seq_length)[:, np.newaxis],  # t
                 output.numpy(),
                 observable_seq.numpy(),
-                control_seq.numpy()
+                # control_seq.numpy()
             ],
             axis=1)
     return df
 
 
-def log_predictions(model, data_set, n=5):  # TODO use n_samples instead of n
+def log_predictions(model, data_set, n=5, title=""):  # TODO use n_samples instead of n
     C = get_current_config()
     model.eval()
     with torch.no_grad():
@@ -67,13 +65,15 @@ def log_predictions(model, data_set, n=5):  # TODO use n_samples instead of n
         pred_out = observables.clone()
         pred_out[:, -C.forecast_horizon:] = outputs[:]
         df = build_output_df(shot_numbers, controls, observables, pred_out)
-        fig = plot_sample(df.loc[df.index[0]], title="Predictions", show=False)
+        shot = df.index[0]
+        title += f" #{shot}"
+        fig = plot_sample(df.loc[shot], title=title, show=False)
         table = wandb.Table(dataframe=df.reset_index(names='ShotNum'))
         wandb.log({"val/predictions": table, "val/predictions_plot": fig})
         return fig
 
 
-def plot_sample(df: pd.DataFrame, title="", show=False):
+def plot_sample(df: pd.DataFrame, title="Predictions", show=False):
     """Plot a shot of the data. Df shot be a single shot."""
     df_stacked = df.set_index('t').stack(future_stack=True).reset_index(name='value').rename(
         columns={'level_1': 'variable'})
@@ -84,7 +84,7 @@ def plot_sample(df: pd.DataFrame, title="", show=False):
         x='t',
         y='value',
         color='variable',
-        symbol='is_prediction',
+        # symbol='is_prediction',
         line_dash='is_prediction',
         line_shape='linear',
         #   markers=False,

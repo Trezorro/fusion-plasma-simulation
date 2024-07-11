@@ -1,3 +1,4 @@
+# run_name: TestRunName
 seq_length: 2000
 forecast_horizon: 400
 crop_margin: 1000
