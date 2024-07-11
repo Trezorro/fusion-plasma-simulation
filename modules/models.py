@@ -183,6 +183,16 @@ class ConvEncoder(nn.Module):
             batch_first=True,
         )
 
+    def forward(self, input, hidden_0=None):
+        """Encode the warmup sequence into a single hidden state."""
+        # input shape: (batch_size, seq_length, input_channels)
+        input = input.permute(0, 2, 1)  # (batch_size, input_channels, seq_length)
+        compressed = self.ConvNet(input)  # out (batch_size, conv_channels, compressed_length)
+        compressed = compressed.permute(0, 2, 1)  # (batch_size, compressed_length, conv_channels)
+        # RNN input should be (N, L, Hin) where Hin is input_size
+        out_z, (ht, ct) = self.lstm(compressed)  # out_z is last layer hidden state, for each time step
+        return ht, ct  # (num_layers 4, N, Hout=64)
+
     @staticmethod
     def conv_output_size(L_in, padding=0, dilation=1, kernel_size=3, stride=1):
         return (math.floor((L_in + 2 * padding - dilation * (kernel_size - 1) - 1) / stride) + 1)
@@ -198,23 +208,13 @@ class ConvEncoder(nn.Module):
             )
         return input_length
 
-    def forward(self, input, hidden_0=None):
-        """Encode the warmup sequence into a single hidden state."""
-        # input shape: (batch_size, seq_length, input_channels)
-        input = input.permute(0, 2, 1)  # (batch_size, input_channels, seq_length)
-        compressed = self.ConvNet(input)  # out (batch_size, conv_channels, compressed_length)
-        compressed = compressed.permute(0, 2, 1)  # (batch_size, compressed_length, conv_channels)
-        # RNN input should be (N, L, Hin) where Hin is input_size
-        out_z, (ht, ct) = self.lstm(compressed)  # out_z is last layer hidden state, for each time step
-        return ht  # (num_layers 4, N, Hout=64)
-
 
 class Decoder(nn.Module):
     """Starts with initial hidden state and unrolls the LSTM."""
 
-    def __init__(self, input_size, hidden_size=64, output_size=5, rnn_layers=4, dropout=0.3):
+    def __init__(self, input_size, hidden_size=64, output_size=5, rnn_layers=4, dropout=0.3, rnn_type="LSTM"):
         super().__init__()
-        self.rnn = nn.RNN(
+        self.rnn = getattr(nn, rnn_type)(
             input_size=input_size,
             hidden_size=hidden_size,
             num_layers=rnn_layers,
@@ -243,6 +243,7 @@ class EncoderDecoder(nn.Module):
         hidden_cnn_channels=64,
         rnn_input_channels=32,
         hidden_state_size=64,
+        decoder_rnn_type="LSTM",
         num_layers=4,
         dropout=0.3,
         forecast_horizon=400,
@@ -259,12 +260,11 @@ class EncoderDecoder(nn.Module):
             dropout=dropout,
             rnn_layers=num_layers,
         )
-        self.decoder = Decoder(
-            input_size=7,
-            hidden_size=hidden_state_size,
-            output_size=output_size,
-            rnn_layers=num_layers,
-        )
+        self.decoder = Decoder(input_size=7,
+                               hidden_size=hidden_state_size,
+                               output_size=output_size,
+                               rnn_layers=num_layers,
+                               rnn_type=decoder_rnn_type)
         self.forecast_horizon = forecast_horizon
 
     def forward(self, c, x):
@@ -273,5 +273,9 @@ class EncoderDecoder(nn.Module):
         with torch.no_grad():
             warmup = torch.cat((c[:, :-self.forecast_horizon], x[:, :-self.forecast_horizon]), dim=2)
             c_f = c[:, -self.forecast_horizon:]
-        state = self.encoder(warmup)
+        state_hc = self.encoder(warmup)
+        if self.hyperparams["decoder_rnn_type"] == "LSTM":
+            state = state_hc
+        else:
+            state = state_hc[0]
         return self.decoder(input=c_f, hidden_0=state)

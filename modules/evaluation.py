@@ -78,6 +78,7 @@ def plot_sample(df: pd.DataFrame, title="Predictions", show=False):
     df_stacked = df.set_index('t').stack(future_stack=True).reset_index(name='value').rename(
         columns={'level_1': 'variable'})
     df_stacked['is_prediction'] = df_stacked['variable'].str.startswith('^')
+    df_stacked['is_true'] = ~df_stacked['is_prediction']
     df_stacked['variable'] = df_stacked['variable'].str.replace('^', '')
     fig = px.line(
         df_stacked,
@@ -85,9 +86,9 @@ def plot_sample(df: pd.DataFrame, title="Predictions", show=False):
         y='value',
         color='variable',
         # symbol='is_prediction',
-        line_dash='is_prediction',
+        line_dash='is_true',
         line_shape='linear',
         #   markers=False,
         title=title)
-    # fig.update_xaxes(rangeslider_visible=True)
+    fig.update_xaxes(rangeslider_visible=True)
     return fig
