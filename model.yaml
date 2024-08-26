@@ -12,7 +12,8 @@ model:
   description: Encoder-Decoder model with CNN, LSTM, LSTM layers
   future_work: Autoregressively feed output in decoder
   params:
-    input_size: 12
+    warmup_input_size: 12
+    conditional_input_size: 7
     output_size: 5
     hidden_cnn_channels: 64
     rnn_input_channels: 64

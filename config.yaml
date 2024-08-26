@@ -1,9 +1,9 @@
 # run_name: TestRunName
-seq_length: 500
-forecast_horizon: 100
+seq_length: 400
+forecast_horizon: 50
 crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
 random_start: true
-epochs: 200
+epochs: 300
 batch_size: 32
 # model: model.yaml # To be replaced by respective yaml file content
 model: model.yaml

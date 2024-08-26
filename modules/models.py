@@ -228,8 +228,11 @@ class Decoder(nn.Module):
         )
 
     def forward(self, input, hidden_0):
-        """Decode the forecast horizon, given the hidden state from the encoder."""
-        # input shape: (batch_size, seq_length, input_size)
+        """Decode the forecast horizon, given the hidden state from the encoder.
+
+        Input shape: (batch_size, f_seq_length, input_size)
+        Output shape: (batch_size, f_seq_length, output_size)
+        """
         out_z, hidded_t = self.rnn(input, hidden_0)
         return self.fc(out_z)
 
@@ -238,7 +241,8 @@ class EncoderDecoder(nn.Module):
 
     def __init__(
         self,
-        input_size=12,
+        warmup_input_size=12,
+        conditional_input_size=7,
         output_size=5,
         hidden_cnn_channels=64,
         rnn_input_channels=32,
@@ -253,18 +257,19 @@ class EncoderDecoder(nn.Module):
         super().__init__()
         self.encoder = ConvEncoder(
             input_length=input_length,  # Not used yet, but could be useful for debugging
-            input_channels=input_size,
+            input_channels=warmup_input_size,
             hidden_channels=hidden_cnn_channels,
             rnn_input_channels=rnn_input_channels,
             hidden_size=hidden_state_size,
             dropout=dropout,
             rnn_layers=num_layers,
         )
-        self.decoder = Decoder(input_size=7,
-                               hidden_size=hidden_state_size,
-                               output_size=output_size,
-                               rnn_layers=num_layers,
-                               rnn_type=decoder_rnn_type)
+        self.decoder = Decoder(
+            input_size=conditional_input_size,  # c_f
+            hidden_size=hidden_state_size,
+            output_size=output_size,
+            rnn_layers=num_layers,
+            rnn_type=decoder_rnn_type)
         self.forecast_horizon = forecast_horizon
 
     def forward(self, c, x):
