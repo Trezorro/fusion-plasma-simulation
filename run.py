@@ -107,8 +107,8 @@ for epoch in utils.progress.track(
     for batch_idx, (shot_number, controls, observables) in enumerate(train_loader):
         # Zero the gradients
         optimizer.zero_grad()
-        partial_observables = torch.zeros_like(observables)
-        partial_observables[:, :-C["forecast_horizon"]] = observables[:, :-C["forecast_horizon"]]
+        # partial_observables = torch.zeros_like(observables)
+        # partial_observables[:, :-C["forecast_horizon"]] = observables[:, :-C["forecast_horizon"]]
         # Concatenate controls and observables for model input
         # input:(batch_size, seq_length, input_size)
         # inputs = torch.cat((controls, partial_observables), dim=2)
