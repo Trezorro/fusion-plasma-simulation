@@ -1,12 +1,12 @@
 # run_name: TestRunName
 seq_length: 400
-forecast_horizon: 50
+forecast_horizon: 400
 crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
 random_start: true
 epochs: 800
 batch_size: 32
 # model: model.yaml # To be replaced by respective yaml file content
-model: model.yaml
+model: configs/AutoRegressiveModel.yaml
 
 data:
   dir: ./data/
@@ -17,11 +17,11 @@ data:
     - time
     x: [
             # "FIR",  # density lijn Interferometer
-            "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
+            # "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
             "PD",  # photodiode lijn op de divertor
-            "DML",  # Magnetische respons  correleert met de energie in het plasma
-            "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
-            "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
+            # "DML",  # Magnetische respons  correleert met de energie in het plasma
+            # "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
+            # "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
         ]
     c:
     - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)

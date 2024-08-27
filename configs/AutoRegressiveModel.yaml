@@ -1,0 +1,12 @@
+model:
+  Class: AutoRegressiveModel
+  description: Causal Convnet that outputs one step ahead a single value
+  future_work: No teacher forcing
+  params:
+    in_channels: 8
+    hidden_channels: 64
+    out_channels: 1
+    kernel_size: 3
+    num_layers: 4
+    dropout: 0.1
+    forecast_horizon: ${ forecast_horizon }

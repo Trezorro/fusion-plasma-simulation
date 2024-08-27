@@ -63,7 +63,7 @@ def log_predictions(model, data_set, n=5, title=""):  # TODO use n_samples inste
         inputs = torch.cat((controls, observables), dim=2)  # (batch_size, seq_length, variables)
         outputs = model(controls, observables)  #  (batch_size, seq_length, target_variables)
         pred_out = observables.clone()
-        pred_out[:, -C.forecast_horizon:] = outputs[:]
+        pred_out[:, -C.forecast_horizon:] = outputs[:, -C["forecast_horizon"]:]
         df = build_output_df(shot_numbers, controls, observables, pred_out)
         shot = df.index[0]
         title += f" #{shot}"
