@@ -85,6 +85,7 @@ class AutoRegressiveModel(nn.Module):
                  out_channels=1,
                  kernel_size=5,
                  num_layers=3,
+                 use_tanh_output=True,
                  **kwargs):
         self.hyperparams = locals()
         super().__init__()
@@ -97,7 +98,9 @@ class AutoRegressiveModel(nn.Module):
         )
         # Regression layers:
         self.mlp = nn.Sequential(nn.Linear(hidden_channels, hidden_channels // 2), nn.SiLU(),
-                                 nn.Linear(hidden_channels // 2, out_channels), nn.Tanh())
+                                 nn.Linear(hidden_channels // 2, out_channels))
+        if use_tanh_output:
+            self.mlp.add_module("tanh", nn.Tanh())
 
     def forward(self, c, x):
         x = torch.cat((c, x), dim=2)

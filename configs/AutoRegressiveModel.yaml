@@ -10,3 +10,4 @@ model:
     num_layers: 4
     dropout: 0.1
     forecast_horizon: ${ forecast_horizon }
+    use_tanh_output: true
