@@ -49,10 +49,10 @@ wandb.log({
 
 # log weights for analysis in W&B
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-criterion = torch.nn.MSELoss()  # note, this is influenced by seq length
-eval_citerion = torch.nn.MSELoss(reduction="sum")  # manually average over batches
+CriterionClass = getattr(torch.nn, C.loss)
+criterion = CriterionClass()  # note, this is influenced by seq length
+eval_citerion = CriterionClass(reduction="sum")  # manually average over batches
 wandb.watch(model, criterion=criterion, log="all")
-
 data_set = MyDataset(
     file_path=C.data.dir + C.data.file,
     columns_C=list(C.data.cols.c),
@@ -103,9 +103,7 @@ for epoch in utils.progress.track(
     if (epoch - 1) % 33 == 0:
         fig.show()
     model.train()
-    # log metrics to wandb
     for batch_idx, (shot_number, controls, observables) in enumerate(train_loader):
-        # Zero the gradients
         optimizer.zero_grad()
         # partial_observables = torch.zeros_like(observables)
         # partial_observables[:, :-C["forecast_horizon"]] = observables[:, :-C["forecast_horizon"]]
@@ -119,7 +117,7 @@ for epoch in utils.progress.track(
         f_x = observables[:, -C["forecast_horizon"]:]
         loss = criterion(outputs, f_x)
 
-        # Backward passs
+        # Backward pass
         loss.backward()
 
         # Update weights
