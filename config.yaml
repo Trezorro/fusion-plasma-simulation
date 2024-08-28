@@ -8,7 +8,7 @@ batch_size: 32
 # model: model.yaml # To be replaced by respective yaml file content
 model: configs/AutoRegressiveModel.yaml
 
-loss: L1Loss #  TODO try absolute error
+loss: MSELoss # L1Loss #  TODO try absolute error
 
 data:
   dir: ./data/

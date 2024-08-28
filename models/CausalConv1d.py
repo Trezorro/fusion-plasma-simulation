@@ -47,9 +47,6 @@ class CausalConv1d(nn.Module):
             return conv1d_out
 
 
-kernel_size = 3
-
-
 def make_causal_conv_net(in_channels, hidden_channels, out_channels=1, kernel_size=7, num_layers=4):
     # First A layer:
     layers = [
