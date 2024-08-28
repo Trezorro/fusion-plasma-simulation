@@ -100,7 +100,8 @@ for epoch in utils.progress.track(
 ):
     mean_loss, mean_future_loss = validate(model, val_loader, eval_citerion)
     fig = log_predictions(model, val_set, title=f"{wandb.run.name} - Epoch {epoch}", n=5)
-    if (epoch - 1) % 33 == 0:
+    # if (epoch - 1) % 33 == 0:
+    if epoch == 1:
         fig.show()
     model.train()
     for batch_idx, (shot_number, controls, observables) in enumerate(train_loader):
@@ -133,7 +134,7 @@ for epoch in utils.progress.track(
             "epoch": epoch,
             "train/loss": loss.item(),
             "train/future_loss": future_loss.item(),
-            "train/weights": model.state_dict(),
+            # "train/weights": model.state_dict(),
         })
     utils.progress.console.print(f"Epoch {epoch:03d}: Loss {loss:.5f} | Val Loss {mean_loss:.5f}")
 
