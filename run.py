@@ -78,7 +78,7 @@ def validate(model, data_loader, criterion):
             partial_observables = torch.zeros_like(observables)
             partial_observables[:, :-C["forecast_horizon"]] = observables[:, :-C["forecast_horizon"]]
             # Input: (batch_size, seq_length, variables)
-            inputs = torch.cat((controls, partial_observables), dim=2)
+            # inputs = torch.cat((controls, partial_observables), dim=2)
             outputs = model(controls, observables)[:, -C["forecast_horizon"]:]
             loss += criterion(outputs, observables[:, -C["forecast_horizon"]:]).item()
             future_loss += criterion(

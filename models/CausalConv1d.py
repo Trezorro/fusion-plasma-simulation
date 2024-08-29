@@ -15,7 +15,7 @@ class CausalConv1d(nn.Module):
     can enlarge the size of the memory.
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size, dilation, A=False, **kwargs):
+    def __init__(self, in_channels, out_channels, kernel_size, dilation, A=False, use_padding=True, **kwargs):
         """"""
         super(CausalConv1d, self).__init__()
 
@@ -25,7 +25,7 @@ class CausalConv1d(nn.Module):
         self.A = A
 
         # to make sure the tree branches have room to extend to the left of the start of the sequence
-        self.padding = (kernel_size - 1) * dilation + A * 1
+        self.padding = ((kernel_size - 1) * dilation + A * 1) * use_padding
 
         # module:
         self.conv1d = torch.nn.Conv1d(
@@ -39,7 +39,8 @@ class CausalConv1d(nn.Module):
         )
 
     def forward(self, x):
-        x = torch.nn.functional.pad(x, (self.padding, 0))
+        if self.padding != 0:
+            x = torch.nn.functional.pad(x, (self.padding, 0))
         conv1d_out = self.conv1d(x)
         if self.A:
             return conv1d_out[:, :, :-1]
@@ -47,7 +48,12 @@ class CausalConv1d(nn.Module):
             return conv1d_out
 
 
-def make_causal_conv_net(in_channels, hidden_channels, out_channels=1, kernel_size=7, num_layers=4):
+def make_causal_conv_net(in_channels,
+                         hidden_channels,
+                         out_channels=1,
+                         kernel_size=7,
+                         num_layers=4,
+                         use_padding=True):
     # First A layer:
     layers = [
         CausalConv1d(in_channels=in_channels,
@@ -55,6 +61,7 @@ def make_causal_conv_net(in_channels, hidden_channels, out_channels=1, kernel_si
                      dilation=1,
                      kernel_size=kernel_size,
                      A=True,
+                     use_padding=use_padding,
                      bias=True),
         nn.LeakyReLU(),
     ]
@@ -66,6 +73,7 @@ def make_causal_conv_net(in_channels, hidden_channels, out_channels=1, kernel_si
                 out_channels=hidden_channels,
                 kernel_size=kernel_size,
                 dilation=i * kernel_size,
+                use_padding=use_padding,
             ),
             nn.SiLU(),
             # nn.BatchNorm1d(hidden_channels),
@@ -83,16 +91,16 @@ class AutoRegressiveModel(nn.Module):
                  kernel_size=5,
                  num_layers=3,
                  use_tanh_output=True,
+                 use_padding=True,
                  **kwargs):
         self.hyperparams = locals()
         super().__init__()
-        self.convnet = make_causal_conv_net(
-            in_channels=in_channels,
-            hidden_channels=hidden_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            num_layers=num_layers,
-        )
+        self.convnet = make_causal_conv_net(in_channels=in_channels,
+                                            hidden_channels=hidden_channels,
+                                            out_channels=out_channels,
+                                            kernel_size=kernel_size,
+                                            num_layers=num_layers,
+                                            use_padding=use_padding)
         # Regression layers:
         self.mlp = nn.Sequential(nn.Linear(hidden_channels, hidden_channels // 2), nn.SiLU(),
                                  nn.Linear(hidden_channels // 2, out_channels))
