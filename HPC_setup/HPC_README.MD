@@ -35,6 +35,10 @@ By default, jobs do not have access to the cluster GPUs. If you want to make one
 ```
 sbatch -p <partition> --gres=gpu:1 script.py 
 ```
+```
+sbatch -p zirconium --gres=gpu:1 testcuda.sh
+```
+
 Just to repeat: the `gres` flags allows you to select the number of GPUs to reserve, not to select specific GPUs by ID. In the vast majority of cases, your job will need at most one GPU, so please limit your reservations so others can also make use of the GPUs. 
 
 Please isolate your GPU-based code as much as possible. For example, if you need to pre-process data on CPU and then train a model on GPU, please split this into two separate jobs, one without a GPU and one with a GPU. This helps keeping GPUs available for everyone. 
@@ -43,6 +47,20 @@ Please isolate your GPU-based code as much as possible. For example, if you need
 - `sinfo`: Shows the list of partitions and their status (if one has status drain, it is not available for jobs). 
 - `squeue -u <username>`: Shows the list of pending and running tasks you submitted (PD for pending, R for running). For a complete list of job status codes, see this page: https://slurm.schedmd.com/squeue.html#lbAG 
 - `scancel <job id>`: Cancels a pending or running job. SLURM gives you the job ID when you submit a job, and you can also see the IDs of running jobs with squeue. You can cancel multiple jobs by providing them in a comma-separated fashion. 
+- Command to View Scheduled Jobs in a Specific Partition
+        ```bash
+        squeue -p partition_name
+        ```
+        Replace partition_name with the name of the partition you’re interested in.
+
+        Explanation of the Command:
+        squeue: The command to display the status of jobs in the queue.
+        -p: The option to filter the jobs by a specific partition.
+        Additional Useful Options:
+        -u username: Filter by a specific user.
+        -t: Filter by job state, e.g., -t PENDING, -t RUNNING.
+        -o: Customize the output format. For example, -o "%.18i %.9P %.8j %.8u %.2t %.10M %.6D %R" will give you detailed information.
+
 
 ## Administration and Monitoring 
 A basic monitoring page can be found here: http://datamininghpc.win.tue.nl/status.html
@@ -86,7 +104,8 @@ At this point, follow the instructions, make sure that you answer yes when asked
 To submit a job to the job scheduler that uses this environment, you will have to create a separate job file. It can have any name, and does not need a file extension, so for example a file named myscript_job. The contents of this file should look something like this (replace <username> with your username): 
 ```
 #!/bin/bash 
-source /home/TUE/<username>/miniconda3/etc/profile.d/conda.sh 
+# source /home/TUE/<username>/miniconda3/etc/profile.d/conda.sh 
+source /home/TUE/s162507/miniconda3/etc/profile.d/conda.sh
 source activate env_name 
 python myscript.py 
 source deactivate  
