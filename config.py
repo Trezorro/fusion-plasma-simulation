@@ -27,17 +27,18 @@ def convert_lists(value, level=0):
                 value[k] = list(v)
             convert_lists(v, level=level+1)
 
-def load_config_dict() -> dict:
+
+def load_config_from_file() -> dict:
     """Load configuration from (hierarchical) yaml files and CLI."""
     main_conf = OmegaConf.load('config.yaml')
-    if type(main_conf.model)==str:
+    if type(main_conf.model) == str:
         model_conf = OmegaConf.load(main_conf.model)
         main_conf = OmegaConf.merge(main_conf, model_conf)
     cli_conf = OmegaConf.from_cli()
     conf = OmegaConf.merge(main_conf, cli_conf)
     conf = OmegaConf.to_object(conf)
     if not type(conf) == dict:
-        raise ValidationError("Configuration was not in dict style. Got: "+repr(conf))
+        raise ValidationError("Configuration was not in dict style. Got: " + repr(conf))
     return dict(conf)
 
 
