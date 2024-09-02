@@ -48,59 +48,105 @@ class CausalConv1d(nn.Module):
             return conv1d_out
 
 
-def make_causal_conv_net(in_channels,
-                         hidden_channels,
-                         out_channels=1,
-                         kernel_size=7,
-                         num_layers=4,
-                         use_padding=True):
-    # First A layer:
-    layers = [
-        CausalConv1d(in_channels=in_channels,
-                     out_channels=hidden_channels,
-                     dilation=1,
-                     kernel_size=kernel_size,
-                     A=True,
-                     use_padding=use_padding,
-                     bias=True),
-        nn.LeakyReLU(),
-    ]
-    #  Dilating layers:
-    for i in range(1, num_layers):
-        layers.extend([
-            CausalConv1d(
-                in_channels=hidden_channels,
-                out_channels=hidden_channels,
-                kernel_size=kernel_size,
-                dilation=i * kernel_size,
-                use_padding=use_padding,
-            ),
-            nn.SiLU(),
-            # nn.BatchNorm1d(hidden_channels),
-        ])
+def minimum_input_for_conv_output(L_out, padding=0, dilation=1, kernel_size=3):
+    """
+    Calculate the minimum input size to get a desired output size.
 
-    return nn.Sequential(*layers)
+    Note that this is a simplified version of the formula, which assumes stride=1.
+    Padding is only applied to the left side of the input, and thus not multiplied by 2.
+
+    See https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html#torch.nn.Conv1d for more details on the
+    formula.
+
+    Args:
+        L_out (int): Desired output size.
+        padding (int): Padding size.
+        dilation (int): Dilation size.
+        kernel_size (int): Kernel size.
+
+    Returns:
+        int: Minimum input size.
+    """
+    return L_out - padding + dilation * (kernel_size - 1)
+
+
+def minimum_input_for_layers(padding=[0, 0, 0], dilation=[1, 2, 4], kernel_size=[3, 3, 3]):
+    """
+    Calculate the minimum input size to get a desired output size for a stack of convolutions.
+
+    Args:
+        padding (list): List of padding sizes, from lowest to highest layer.
+        dilation (list): List of dilation sizes, idem.
+        kernel_size (list): List of kernel sizes.
+
+    Returns:
+        int: Minimum input size.
+    """
+    L_out = 1
+    for p, d, k in reversed(list(zip(padding, dilation, kernel_size))):
+        if not p:  # if there is padding, we assume it maintains the size 1 to 1, otherwise:
+            L_out = minimum_input_for_conv_output(L_out, padding=0, dilation=d, kernel_size=k)
+    return L_out
+
+
+class CausalConvNet(nn.Sequential):
+
+    def __init__(self, in_channels=8, hidden_channels=64, kernel_size=5, num_layers=3, use_padding=True):
+        self.hyperparams = locals()
+        # First A layer:
+        self.layers = [
+            CausalConv1d(in_channels=in_channels,
+                         out_channels=hidden_channels,
+                         dilation=1,
+                         kernel_size=kernel_size,
+                         A=True,
+                         use_padding=use_padding,
+                         bias=True),
+            nn.LeakyReLU(),
+        ]
+        #  Dilating layers:
+        for i in range(1, num_layers):
+            self.layers.extend([
+                CausalConv1d(
+                    in_channels=hidden_channels,
+                    out_channels=hidden_channels,
+                    kernel_size=kernel_size,
+                    dilation=i * kernel_size,
+                    use_padding=use_padding,
+                ),
+                nn.SiLU(),
+                # nn.BatchNorm1d(hidden_channels),
+            ])
+        super().__init__(*self.layers)
+        self.minimum_input_length = minimum_input_for_layers(
+            padding=[use_padding] * num_layers,
+            dilation=[1] + [i * kernel_size for i in range(1, num_layers)],
+            kernel_size=[kernel_size] * num_layers,
+        )
 
 
 class AutoRegressiveModel(nn.Module):
+    """Model that uses a CausalConvNet to predict the next value in a sequence."""
 
     def __init__(self,
                  in_channels=1,
                  hidden_channels=64,
                  out_channels=1,
+                 forecast_horizon=1,
                  kernel_size=5,
                  num_layers=3,
                  use_tanh_output=True,
                  use_padding=True,
                  **kwargs):
         self.hyperparams = locals()
+        self.out_channels = out_channels
+        self.forecast_horizon = forecast_horizon
         super().__init__()
-        self.convnet = make_causal_conv_net(in_channels=in_channels,
-                                            hidden_channels=hidden_channels,
-                                            out_channels=out_channels,
-                                            kernel_size=kernel_size,
-                                            num_layers=num_layers,
-                                            use_padding=use_padding)
+        self.convnet = CausalConvNet(in_channels=in_channels,
+                                     hidden_channels=hidden_channels,
+                                     kernel_size=kernel_size,
+                                     num_layers=num_layers,
+                                     use_padding=use_padding)
         # Regression layers:
         self.mlp = nn.Sequential(nn.Linear(hidden_channels, hidden_channels // 2), nn.SiLU(),
                                  nn.Linear(hidden_channels // 2, out_channels))
@@ -108,9 +154,18 @@ class AutoRegressiveModel(nn.Module):
             self.mlp.add_module("tanh", nn.Tanh())
 
     def forward(self, c, x):
-        x = torch.cat((c, x), dim=2)
-        x = x.permute(0, 2, 1)
-        x = self.convnet(x)
-        x = x.permute(0, 2, 1)
-        x = self.mlp(x)
-        return x
+        """Returns the input sequence x with the last forecast_horizon elements filled with the model's own predictions.
+
+        Returns:
+            torch.Tensor: The input sequence with the last forecast_horizon elements filled with the model's own predictions. (batch_size, seq_length, variables)
+        """
+        seq = torch.cat((c, x), dim=2).detach().clone()  # (batch_size, seq_length, variables c + x)
+        input_seq_length = self.convnet.minimum_input_length
+        for t in range(seq.size(1) - self.forecast_horizon, seq.size(1)):
+            input_part = seq[:, t - input_seq_length:t + 1].detach().clone()
+            a = input_part.permute(0, 2, 1)  # (batch_size, variable, seq_length)
+            a = self.convnet(a)
+            a = a.permute(0, 2, 1)  # (batch_size, forecast_seq_length, hidden_channels)
+            x_t = self.mlp(a)  # (batch_size, seq_element, out_channels (1))
+            seq[:, t, -self.out_channels:] = x_t.squeeze(dim=1)
+        return seq[:, :, -self.out_channels:]
