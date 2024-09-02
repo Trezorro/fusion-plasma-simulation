@@ -1,6 +1,6 @@
 # run_name: TestRunName
 seq_length: 190
-forecast_horizon: 2
+forecast_horizon: 3
 crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
 random_start: true
 epochs: 800

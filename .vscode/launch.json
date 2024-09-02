@@ -12,6 +12,9 @@
             "env": {
                 "WANDB_MODE":"disabled"
             },
+            "args": [
+                "epochs=2"
+            ],
             "justMyCode": false
             
         }

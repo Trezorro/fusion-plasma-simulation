@@ -162,7 +162,7 @@ class AutoRegressiveModel(nn.Module):
         seq = torch.cat((c, x), dim=2).detach().clone()  # (batch_size, seq_length, variables c + x)
         input_seq_length = self.convnet.minimum_input_length
         for t in range(seq.size(1) - self.forecast_horizon, seq.size(1)):
-            input_part = seq[:, t - input_seq_length:t + 1].detach().clone()
+            input_part = seq[:, t - input_seq_length:t + 1].clone()
             a = input_part.permute(0, 2, 1)  # (batch_size, variable, seq_length)
             a = self.convnet(a)
             a = a.permute(0, 2, 1)  # (batch_size, forecast_seq_length, hidden_channels)
