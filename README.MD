@@ -22,3 +22,5 @@ This is data for full shots (shot = pulse = experiment). We do not want to model
 3. Upload the data directory with rsync
     ```rsync -avz data/ TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/ ```
     *NOTE: You need the full canonicalized path to the data directory on the server, starting from the home directory.*
+4. Sync output files back to local machine
+    ```rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output output/hpc/```

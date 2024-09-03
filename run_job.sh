@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=test_cuda # Optional: Name the job for easier tracking
-#SBATCH --output=output/slurm-%j.out # Optional: Name the output file based on job ID
-# Run with sbatch -p zirconium --gres=gpu:1 testcuda.sh
+#SBATCH --output=output/slurm-%j.out
+#SBATCH --gres=gpu:1
+# Run with sbatch -p zirconium testcuda.sh
 
 # Debugging: Print the shell script being executed
 echo "Starting job script: $0"
@@ -40,16 +41,13 @@ python --version
 # Print current working directory
 echo "Current working directory:"
 pwd
-echo "-------------------------------"
 
 # Run the Python script
 echo "Running testcuda.py..."
+python HPC_setup/testcuda.py
+echo "---------------- JOB START ----------------"
 python run.py
-echo "-------------------------------"
-
 # Deactivate the conda environment
 # echo "Deactivating conda environment..."
 # conda deactivate
-
-# Debugging: Verify the environment is deactivated
-echo "Job script finished."
+echo "--------/-------- JOB END --------/--------"

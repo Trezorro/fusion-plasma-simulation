@@ -4,16 +4,12 @@ import torch
 # Check Python version
 import sys
 
+print("----- Test CUDA script -----")
+
 print("Python version:", sys.version)
-print("-------------------------------")
-
-# Check PyTorch version
 print("PyTorch version:", torch.__version__)
-print("-------------------------------")
-
-# Check current working directory
 print("Current working directory:", os.getcwd())
-print("-------------------------------")
+print("----------------------------")
 
 # Check CUDA availability
 print("Checking CUDA availability...")
@@ -31,3 +27,4 @@ if cuda_available:
         print(f"  Total Memory: {device_properties.total_memory / (1024 ** 3):.2f} GB")
 else:
     print("No CUDA devices available.")
+print("--/-- Test CUDA script --/--")

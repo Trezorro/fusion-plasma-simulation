@@ -34,6 +34,8 @@ fi
 # SSH into the main node, pull latest code, submit SLURM job, and inspect queue
 ssh $REMOTE_USER@$REMOTE_HOST << EOF
     cd $REPO_PATH
+    git fetch origin
+    git reset --hard origin/$GIT_BRANCH  # Reset local branch to match remote
     git pull origin $GIT_BRANCH
     sbatch --job-name=$JOB_NAME -p $SLURM_PARTITION $JOB_SCRIPT
     echo "Submitted job '$JOB_NAME'. Checking queue status for partition '$SLURM_PARTITION':"

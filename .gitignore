@@ -4,6 +4,7 @@
 *.pdf
 
 wandb/
+output/*
 
 # Python specific
 __pycache__/
