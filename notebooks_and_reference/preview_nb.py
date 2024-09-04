@@ -236,7 +236,7 @@ dp.Plot(p_fig, label="Observables"),
 dp.Plot(fig, label="Observables (mpl)")
         ],)
 
-dp.save_report(report, path=f'plots/report_{shotno}.html', open=True)
+dp.save_report(report, path=f'output/plots/report_{shotno}.html', open=True)
 
 
 # %%

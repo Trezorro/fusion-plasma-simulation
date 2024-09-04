@@ -4,6 +4,9 @@ from omegaconf import OmegaConf, ValidationError
 import omegaconf
 import wandb
 
+# TODO: define generalized includes, instead of just looking for model with string. Include data too.
+# TODO: Need to decide how to specify data and model in the config structure.
+
 
 def print_types(value, level=0):
     """Helper function to debug config dicts."""
@@ -11,10 +14,11 @@ def print_types(value, level=0):
     if value_type == dict:
         print(value_type, end='')
         for k, v in value.items():
-            print("\n"+"-"*level + repr(k), type(k), end=': ')
-            print_types(v, level=level+1)
+            print("\n" + "-" * level + repr(k), type(k), end=': ')
+            print_types(v, level=level + 1)
     else:
         print(repr(value), value_type, end='')
+
 
 def convert_lists(value, level=0):
     """Helper function to debug config dicts."""
@@ -25,7 +29,7 @@ def convert_lists(value, level=0):
             # print("\n"+"-"*level + repr(k), type(k), end=': ')
             if type(v) == omegaconf.ListConfig:
                 value[k] = list(v)
-            convert_lists(v, level=level+1)
+            convert_lists(v, level=level + 1)
 
 
 def load_config_from_file() -> dict:

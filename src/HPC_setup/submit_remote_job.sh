@@ -31,6 +31,10 @@ if [[ -n $LOCAL_COMMITS ]]; then
     exit 1
 fi
 
+# Tag the last commit with the job name
+git tag -a "$JOB_NAME" -m "Job $JOB_NAME submitted"
+git push origin "$JOB_NAME"
+
 # SSH into the main node, pull latest code, submit SLURM job, and inspect queue
 ssh $REMOTE_USER@$REMOTE_HOST << EOF
     cd $REPO_PATH
@@ -42,5 +46,4 @@ ssh $REMOTE_USER@$REMOTE_HOST << EOF
     squeue -p $SLURM_PARTITION
 EOF
 
-echo "Code updated and SLURM job '$JOB_NAME' submitted."
-
+echo "Code updated, SLURM job '$JOB_NAME' submitted, and Git tag '$JOB_NAME' created."

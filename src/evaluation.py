@@ -9,7 +9,7 @@ import torch
 import wandb
 from torch.utils import data
 
-from config import get_current_config
+from src.config import get_current_config
 
 
 def build_output_df(shot_numbers, controls, observables, outputs):

@@ -44,7 +44,7 @@ pwd
 
 # Run the Python script
 echo "Running testcuda.py..."
-python HPC_setup/testcuda.py
+python src/HPC_setup/testcuda.py
 echo "---------------- JOB START ----------------"
 python run.py
 # Deactivate the conda environment

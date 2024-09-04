@@ -3,11 +3,11 @@ from torch.utils import data
 import wandb
 from rich.progress import track
 
-from config import get_current_config, load_config_from_file
-from modules.evaluation import log_predictions
-import modules.models
-import modules.utils as utils
-from modules.data_loaders import MyDataset
+from src.config import get_current_config, load_config_from_file
+from src.evaluation import log_predictions
+import src.models
+import src.utils as utils
+from src.data_loaders import MyDataset
 
 from torchinfo import summary
 
@@ -20,10 +20,10 @@ run = wandb.init(
     "Loss was always 0 before because of the wrong loss function. Fixed now. Also added a random crop to the data loader.",
     tags=["SiLu", "BatchNorm", "random crop"],
     config=conf,
-)
+    dir="./output/wandb")
 C = get_current_config()
 
-ModelClass = getattr(modules.models, C.model.Class)
+ModelClass = getattr(src.models, C.model.Class)
 model = ModelClass(**C.model.params)
 model_summary = summary(
     model,
