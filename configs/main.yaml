@@ -6,7 +6,7 @@ random_start: true
 epochs: 200
 batch_size: 96
 # model: model.yaml # To be replaced by respective yaml file content
-model: configs/AutoRegressiveModel.yaml
+model: configs/models/AutoRegressiveModel.yaml
 
 loss: MSELoss # L1Loss #  TODO try absolute error
 

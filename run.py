@@ -1,5 +1,6 @@
 import torch
 from torch.utils import data
+import lightning as L
 import wandb
 from rich.progress import track
 
@@ -51,11 +52,7 @@ wandb.log(
     step=0)
 
 # log weights for analysis in W&B
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-CriterionClass = getattr(torch.nn, C.loss)
-criterion = CriterionClass()  # note, this is influenced by seq length
-eval_citerion = CriterionClass(reduction="sum")  # manually average over batches
-wandb.watch(model, criterion=criterion, log="all")
+# wandb.watch(model, criterion=model.loss, log="all")
 
 data_set = MyDataset(
     file_path=C.data.dir + C.data.file,
@@ -71,53 +68,56 @@ train_loader = data.DataLoader(train_set, batch_size=C.batch_size, shuffle=True)
 val_loader = data.DataLoader(val_set, batch_size=C.batch_size * 2, shuffle=False)
 val_loader.dataset.random_start = False
 
-mean_loss = validate(model, val_loader, eval_citerion)
-wandb.log({"loss/val": mean_loss}, step=0)
+# mean_loss = validate(model, val_loader)
+# wandb.log({"loss/val": mean_loss}, step=0)
 
-with utils.progress as progress:
-    for epoch in progress.track(
-            range(1, C["epochs"] + 1),
-            description="Epoch",
-            total=C["epochs"],
-    ):
+trainer = L.Trainer(default_root_dir="output/", max_epochs=C["epochs"])
+trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
-        model.train()
-        for batch_idx, (shot_number, controls, observables) in enumerate(train_loader):
-            optimizer.zero_grad()
-            # partial_observables = torch.zeros_like(observables)
-            # partial_observables[:, :-C["forecast_horizon"]] = observables[:, :-C["forecast_horizon"]]
-            # Concatenate controls and observables for model input
-            # input:(batch_size, seq_length, input_size)
-            # inputs = torch.cat((controls, partial_observables), dim=2)
-            # Forward pass
-            outputs = model(x=observables, c=controls)[:, -C["forecast_horizon"]:]
+# with utils.progress as progress:
+#     for epoch in progress.track(
+#             range(1, C["epochs"] + 1),
+#             description="Epoch",
+#             total=C["epochs"],
+#     ):
 
-            # Compute loss
-            f_x = observables[:, -C["forecast_horizon"]:]
-            loss = criterion(outputs, f_x)
+#         model.train()
+#         for batch_idx, (shot_number, controls, observables) in enumerate(train_loader):
+#             optimizer.zero_grad()
+#             # partial_observables = torch.zeros_like(observables)
+#             # partial_observables[:, :-C["forecast_horizon"]] = observables[:, :-C["forecast_horizon"]]
+#             # Concatenate controls and observables for model input
+#             # input:(batch_size, seq_length, input_size)
+#             # inputs = torch.cat((controls, partial_observables), dim=2)
+#             # Forward pass
+#             outputs = model(x=observables, c=controls)[:, -C["forecast_horizon"]:]
 
-            # Backward pass
-            loss.backward()
+#             # Compute loss
+#             f_x = observables[:, -C["forecast_horizon"]:]
+#             loss = criterion(outputs, f_x)
 
-            # Update weights
-            optimizer.step()
-            with torch.no_grad():
-                future_loss = criterion(
-                    outputs[:, -C["forecast_horizon"]:],
-                    observables[:, -C["forecast_horizon"]:],
-                )
+#             # Backward pass
+#             loss.backward()
 
-            # Log metrics to wandb
-        mean_loss = validate(model, val_loader, eval_citerion)
-        fig = log_predictions(model, val_set, title=f"{wandb.run.name} - Epoch {epoch}", n=5)
-        progress.console.print(f"Epoch {epoch:03d}: Loss {loss:.5f} | Val Loss {mean_loss:.5f}")
-        # if (epoch - 1) % 33 == 0:
-        if epoch == 1:
-            fig.show()
-        wandb.log({
-            "epoch": epoch,
-            "loss/train": loss.item(),
-            "loss/val": mean_loss
-            # "train/future_loss": future_loss.item(),
-            # "train/weights": model.state_dict(),
-        })
+#             # Update weights
+#             optimizer.step()
+#             with torch.no_grad():
+#                 future_loss = criterion(
+#                     outputs[:, -C["forecast_horizon"]:],
+#                     observables[:, -C["forecast_horizon"]:],
+#                 )
+
+#             # Log metrics to wandb
+#         mean_loss = validate(model, val_loader, eval_citerion)
+#         fig = log_predictions(model, val_set, title=f"{wandb.run.name} - Epoch {epoch}", n=5)
+#         progress.console.print(f"Epoch {epoch:03d}: Loss {loss:.5f} | Val Loss {mean_loss:.5f}")
+#         # if (epoch - 1) % 33 == 0:
+#         if epoch == 1:
+#             fig.show()
+#         wandb.log({
+#             "epoch": epoch,
+#             "loss/train": loss.item(),
+#             "loss/val": mean_loss
+#             # "train/future_loss": future_loss.item(),
+#             # "train/weights": model.state_dict(),
+#         })

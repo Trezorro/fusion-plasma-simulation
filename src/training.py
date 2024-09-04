@@ -1,10 +1,9 @@
 import torch
 from src.config import get_current_config
 
-C = get_current_config()
 
-
-def validate(model, data_loader, criterion):
+def validate(model, data_loader):
+    C = get_current_config()
     n_samples = len(data_loader.dataset)
     loss = 0
     model.eval()

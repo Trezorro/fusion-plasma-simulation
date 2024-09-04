@@ -12,6 +12,7 @@ model:
     use_tanh_output: false
     use_padding: false
     forecast_horizon: ${ forecast_horizon }
+    loss: ${ loss }
 
 
 data:

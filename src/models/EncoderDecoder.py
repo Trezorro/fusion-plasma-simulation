@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+import lightning as L
 
 
 class ConvEncoder(nn.Module):
@@ -115,7 +116,7 @@ class Decoder(nn.Module):
         return self.fc(out_z)
 
 
-class EncoderDecoder(nn.Module):
+class EncoderDecoder(L.LightningModule):
 
     def __init__(
         self,
@@ -129,10 +130,12 @@ class EncoderDecoder(nn.Module):
         num_layers=4,
         dropout=0.3,
         forecast_horizon=400,
+        loss="MSELoss",
         input_length=None,
     ):
-        self.hyperparams = locals()
         super().__init__()
+        self.save_hyperparameters()
+        self.loss = getattr(torch.nn, loss)()
         self.encoder = ConvEncoder(
             input_length=input_length,  # Not used yet, but could be useful for debugging
             input_channels=warmup_input_size,
@@ -162,3 +165,23 @@ class EncoderDecoder(nn.Module):
         else:
             state = state_hc[0]
         return self.decoder(input=c_f, hidden_0=state)
+
+    def training_step(self, batch, batch_idx):
+        shot_number, controls, observables = batch
+        outputs = self(c=controls, x=observables)[:, -self.forecast_horizon:]
+        f_x = observables[:, -self.forecast_horizon:]
+        loss = self.loss(outputs, f_x)
+        self.log("loss/train", loss)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        shot_number, controls, observables = batch
+        outputs = self(c=controls, x=observables)[:, -self.forecast_horizon:]
+        f_x = observables[:, -self.forecast_horizon:]
+        loss = self.loss(outputs, f_x)
+        self.log("loss/test", loss)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        return optimizer

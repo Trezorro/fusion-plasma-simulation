@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import lightning as L
 
 
 class CausalConv1d(nn.Module):
@@ -125,7 +126,7 @@ class CausalConvNet(nn.Sequential):
         )
 
 
-class AutoRegressiveModel(nn.Module):
+class AutoRegressiveModel(L.LightningModule):
     """Model that uses a CausalConvNet to predict the next value in a sequence."""
 
     def __init__(self,
@@ -137,11 +138,13 @@ class AutoRegressiveModel(nn.Module):
                  num_layers=3,
                  use_tanh_output=True,
                  use_padding=True,
+                 loss="MSELoss",
                  **kwargs):
-        self.hyperparams = locals()
+        super().__init__()
+        self.save_hyperparameters()
         self.out_channels = out_channels
         self.forecast_horizon = forecast_horizon
-        super().__init__()
+        self.loss = getattr(torch.nn, loss)()
         self.convnet = CausalConvNet(in_channels=in_channels,
                                      hidden_channels=hidden_channels,
                                      kernel_size=kernel_size,
@@ -169,3 +172,23 @@ class AutoRegressiveModel(nn.Module):
             x_t = self.mlp(a)  # (batch_size, seq_element, out_channels (1))
             seq[:, t, -self.out_channels:] = x_t.squeeze(dim=1)
         return seq[:, :, -self.out_channels:]
+
+    def training_step(self, batch, batch_idx):
+        shot_number, controls, observables = batch
+        outputs = self(c=controls, x=observables)[:, -self.forecast_horizon:]
+        f_x = observables[:, -self.forecast_horizon:]
+        loss = self.loss(outputs, f_x)
+        self.log("loss/train", loss)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        shot_number, controls, observables = batch
+        outputs = self(c=controls, x=observables)[:, -self.forecast_horizon:]
+        f_x = observables[:, -self.forecast_horizon:]
+        loss = self.loss(outputs, f_x)
+        self.log("loss/test", loss)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        return optimizer
