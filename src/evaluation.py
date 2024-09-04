@@ -69,7 +69,7 @@ def log_predictions(model, data_set, n=5, title=""):  # TODO use n_samples inste
         title += f" #{shot}"
         fig = plot_sample(df.loc[shot], title=title, show=False)
         table = wandb.Table(dataframe=df.reset_index(names='ShotNum'))
-        wandb.log({"val/predictions": table, "val/predictions_plot": fig})
+        wandb.log({"predictions/val": table, "predictions_plot/val": fig}, commit=False)
         return fig
 
 
