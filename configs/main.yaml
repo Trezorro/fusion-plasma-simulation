@@ -1,10 +1,10 @@
 # run_name: TestRunName
 seq_length: 190
-forecast_horizon: 3
+forecast_horizon: 4
 crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
 random_start: true
-epochs: 200
-batch_size: 96
+epochs: 1000
+batch_size: 16
 # model: model.yaml # To be replaced by respective yaml file content
 model: configs/models/AutoRegressiveModel.yaml
 
