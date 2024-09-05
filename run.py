@@ -1,17 +1,15 @@
+import wandb
 import torch
 from torch.utils import data
 import lightning as L
-import wandb
-from rich.progress import track
+from lightning.pytorch.loggers import WandbLogger
+import lightning.pytorch.callbacks as pl_callbacks
 
 from src.config import get_current_config, load_config_from_file
-from src.evaluation import log_predictions
+from src.evaluation import PlotPredictionsCallback
 import src.models
-from src.training import validate
 import src.utils as utils
 from src.data_loaders import MyDataset
-
-from torchinfo import summary
 
 wandb.login()
 conf = load_config_from_file()
@@ -24,35 +22,17 @@ run = wandb.init(
     config=conf,
     dir="./output/wandb")
 C = get_current_config()
+wandb_logger = WandbLogger(
+    log_model=False,
+    experiment=run,
+    save_dir="output/",
+)  # TODO: check if I need to respecify name and such
 
 ModelClass = getattr(src.models, C.model.Class)
 model = ModelClass(**C.model.params)
-model_summary = summary(
-    model,
-    input_size=[(C.seq_length, len(C.data.cols.c)), (C.seq_length, len(C.data.cols.x))],
-    batch_dim=0,
-    col_names=[
-        "input_size",
-        "output_size",
-        "num_params",
-        # "params_percent",
-        # "kernel_size",
-        "mult_adds",
-        # "trainable"
-    ],
-)  # (batch_size, seq_length, input_size)
-# compressed_length = model.encoder.calculate_compressed_length(C.seq_length - C.forecast_horizon)
-# print(f"Compressed length: {compressed_length} for warmup window {C.seq_length - C.forecast_horizon}")
-wandb.log(
-    {
-        "model_summary": str(model_summary),
-        "trainable_params": sum(p.numel() for p in model.parameters() if p.requires_grad),
-        # "compressed_length": compressed_length,
-    },
-    step=0)
-
+model.log_summary(C)
 # log weights for analysis in W&B
-# wandb.watch(model, criterion=model.loss, log="all")
+wandb_logger.watch(model, log="all", log_freq=50)
 
 data_set = MyDataset(
     file_path=C.data.dir + C.data.file,
@@ -71,9 +51,20 @@ val_loader.dataset.random_start = False
 # mean_loss = validate(model, val_loader)
 # wandb.log({"loss/val": mean_loss}, step=0)
 
-trainer = L.Trainer(default_root_dir="output/", max_epochs=C["epochs"])
-trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+trainer = L.Trainer(
+    default_root_dir="output/",
+    max_epochs=C["epochs"],
+    logger=wandb_logger,
+    log_every_n_steps=1,
+    check_val_every_n_epoch=1,  # May validate less often
+    callbacks=[
+        pl_callbacks.EarlyStopping(monitor="loss/val", patience=20, mode="min"),
+        PlotPredictionsCallback(num_samples=5, every_n_epochs=5)
+    ])
 
+trainer.validate(model=model, dataloaders=val_loader)
+trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+trainer.test(model=model, dataloaders=val_loader)
 # with utils.progress as progress:
 #     for epoch in progress.track(
 #             range(1, C["epochs"] + 1),

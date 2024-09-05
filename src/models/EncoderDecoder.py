@@ -2,6 +2,9 @@ import math
 import torch
 import torch.nn as nn
 import lightning as L
+import torchinfo
+from omegaconf import DictConfig
+import wandb
 
 
 class ConvEncoder(nn.Module):
@@ -174,7 +177,7 @@ class EncoderDecoder(L.LightningModule):
         self.log("loss/train", loss)
         return loss
 
-    def test_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx):
         shot_number, controls, observables = batch
         outputs = self(c=controls, x=observables)[:, -self.forecast_horizon:]
         f_x = observables[:, -self.forecast_horizon:]
@@ -182,6 +185,38 @@ class EncoderDecoder(L.LightningModule):
         self.log("loss/test", loss)
         return loss
 
+    test_step = validation_step
+
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         return optimizer
+
+    def log_summary(self, config: DictConfig):
+
+        summary = torchinfo.summary(
+            self,
+            input_size=[(config.seq_length, len(config.data.cols.c)),
+                        (config.seq_length, len(config.data.cols.x))],
+            batch_dim=0,
+            col_names=[
+                "input_size",
+                "output_size",
+                "num_params",
+                # "params_percent",
+                # "kernel_size",
+                "mult_adds",
+                # "trainable"
+            ],
+        )  # (batch_size, seq_length, input_size)
+        compressed_length = self.encoder.calculate_compressed_length(config.seq_length -
+                                                                     config.forecast_horizon)
+        print(
+            f"Compressed length: {compressed_length} for warmup window {config.seq_length - config.forecast_horizon}"
+        )
+        wandb.log(
+            {
+                "model/summary": str(summary),
+                "model/trainable_params": sum(p.numel() for p in self.parameters() if p.requires_grad),
+                "model/compressed_length": compressed_length
+            },
+            step=0)

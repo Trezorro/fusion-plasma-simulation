@@ -1,18 +1,18 @@
 """Functions for evaluating and visualizing model performance."""
 import numpy as np
 import pandas as pd
-import plotly
-import plotly.graph_objs as go
 import plotly.express as px
-
+import plotly.graph_objs as go
 import torch
-import wandb
 from torch.utils import data
+import lightning as L
+import lightning.pytorch as pl
 
+import wandb
 from src.config import get_current_config
 
 
-def build_output_df(shot_numbers, controls, observables, outputs):
+def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Tensor, outputs: torch.Tensor):
     """Given the model outputs, build a dataframe with the predictions.
 
     Handles multiple shots (small batch) in one go.
@@ -54,41 +54,73 @@ def build_output_df(shot_numbers, controls, observables, outputs):
     return df
 
 
-def log_predictions(model, data_set, n=5, title=""):  # TODO use n_samples instead of n
+def log_predictions(model, data_set, n=4, title_postfix=""):  # TODO use n_samples instead of n
     C = get_current_config()
     model.eval()
-    with torch.no_grad():
+    with torch.inference_mode():
         shot_numbers, controls, observables = next(
             iter(data.DataLoader(data_set, batch_size=n, shuffle=False)))
-        inputs = torch.cat((controls, observables), dim=2)  # (batch_size, seq_length, variables)
-        outputs = model(controls, observables)  #  (batch_size, seq_length, target_variables)
+        inputs = torch.cat((controls, observables),
+                           dim=2).to(model.device)  # (batch_size, seq_length, variables)
+        outputs = model(controls.to(model.device),
+                        observables.to(model.device))  #  (batch_size, seq_length, target_variables)
         pred_out = observables.clone()
+        # pred_out = torch.full_like(observables, fill_value=np.nan) # use if you want to start the forecast horizon cleanly.
         pred_out[:, -C.forecast_horizon:] = outputs[:, -C["forecast_horizon"]:]
         df = build_output_df(shot_numbers, controls, observables, pred_out)
-        shot = df.index[0]
-        title += f" #{shot}"
-        fig = plot_sample(df.loc[shot], title=title, show=False)
-        table = wandb.Table(dataframe=df.reset_index(names='ShotNum'))
-        wandb.log({"predictions/val": table, "predictions_plot/val": fig}, commit=False)
-        return fig
+        fig = plot_sample(df, title=title_postfix)
+        # table = wandb.Table(dataframe=df.reset_index(names='ShotNum'))
+    model.train()
+    return fig
 
 
-def plot_sample(df: pd.DataFrame, title="Predictions", show=False):
+def plot_sample(df: pd.DataFrame, title=""):
     """Plot a shot of the data. Df shot be a single shot."""
-    df_stacked = df.set_index('t').stack(future_stack=True).reset_index(name='value').rename(
-        columns={'level_1': 'variable'})
-    df_stacked['is_prediction'] = df_stacked['variable'].str.startswith('^')
-    df_stacked['is_true'] = ~df_stacked['is_prediction']
+    df_stacked = df.set_index('t',
+                              append=True).stack(future_stack=True).reset_index(name='value').rename(columns={
+                                  'level_0': 'shot',
+                                  'level_2': 'variable'
+                              })
+    df_stacked['is_prediction'] = df_stacked['variable'].str.startswith('^').map({
+        True: 'Prediction',
+        False: 'Actual'
+    })
     df_stacked['variable'] = df_stacked['variable'].str.replace('^', '')
     fig = px.line(
         df_stacked,
         x='t',
         y='value',
-        color='variable',
-        # symbol='is_prediction',
-        line_dash='is_true',
+        color='shot',
+        symbol='variable',
+        line_dash='is_prediction',
         line_shape='linear',
         #   markers=False,
-        title=title)
-    fig.update_xaxes(rangeslider_visible=True)
+        category_orders={'is_prediction': ["Actual", "Prediction"]},
+        title="Predictions " + title)
+    # fig.update_xaxes(rangeslider_visible=True)
     return fig
+
+
+class PlotPredictionsCallback(L.Callback):
+
+    def __init__(self, num_samples=8, every_n_epochs=5):
+        super().__init__()
+        self.num_samples = num_samples  # Number of samples to log
+        # Only save those images every N epochs (otherwise tensorboard gets quite large)
+        self.every_n_epochs = every_n_epochs
+
+    def on_validation_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
+        # Skip for all other epochs
+        if trainer.current_epoch % self.every_n_epochs == 0:
+            # Generate images
+            fig = log_predictions(
+                model=pl_module,
+                data_set=trainer.val_dataloaders.dataset,  # type: ignore
+                n=self.num_samples,
+                title_postfix=f"Epoch {trainer.current_epoch}")
+            wandb.log(
+                {  #"predictions/val": table, 
+                    "val/prediction_plot": fig
+                },
+                commit=False)
+        # trainer.logger.experiment.add_image("generation_%i" % i, grid, global_step=trainer.current_epoch)

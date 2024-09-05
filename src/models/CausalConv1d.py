@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
 import lightning as L
+import torchinfo
+from omegaconf import DictConfig
+import wandb
 
 
 class CausalConv1d(nn.Module):
@@ -178,17 +181,42 @@ class AutoRegressiveModel(L.LightningModule):
         outputs = self(c=controls, x=observables)[:, -self.forecast_horizon:]
         f_x = observables[:, -self.forecast_horizon:]
         loss = self.loss(outputs, f_x)
-        self.log("loss/train", loss)
+        self.log("loss/train", loss, prog_bar=True)
         return loss
 
-    def test_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx):
         shot_number, controls, observables = batch
         outputs = self(c=controls, x=observables)[:, -self.forecast_horizon:]
         f_x = observables[:, -self.forecast_horizon:]
         loss = self.loss(outputs, f_x)
-        self.log("loss/test", loss)
+        self.log("loss/val", loss, prog_bar=True)
         return loss
+
+    test_step = validation_step
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
         return optimizer
+
+    def log_summary(self, config: DictConfig):
+        summary = torchinfo.summary(
+            self,
+            input_size=[(config.seq_length, len(config.data.cols.c)),
+                        (config.seq_length, len(config.data.cols.x))],
+            batch_dim=0,
+            col_names=[
+                "input_size",
+                "output_size",
+                "kernel_size",
+                "num_params",
+                # "params_percent",
+                "mult_adds",
+                # "trainable"
+            ],
+        )  # (batch_size, seq_length, input_size)
+        wandb.log(
+            {
+                "model/summary": str(summary),
+                "model/trainable_params": sum(p.numel() for p in self.parameters() if p.requires_grad),
+            },
+            step=0)
