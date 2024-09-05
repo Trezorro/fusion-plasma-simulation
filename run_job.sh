@@ -1,11 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=test_cuda # Optional: Name the job for easier tracking
-#SBATCH --output=output/slurm-%j.out
+#SBATCH --output=output/slurms/slurm-%j.out
 #SBATCH --gres=gpu:1
 # Run with sbatch -p zirconium testcuda.sh
+# rRetrieve output with
+# sync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms/ output/hpc/
 
 # Debugging: Print the shell script being executed
 echo "Starting job script: $0"
+echo $(date)
 echo "-------------------------------"
 
 # Debugging: Print the current environment before sourcing anything
@@ -42,11 +44,14 @@ python --version
 echo "Current working directory:"
 pwd
 
+# Export wandb env variable
+export WANDB_DIR="/home/TUE/s162507/fusion-plasma-simulation/output"
+
 # Run the Python script
 echo "Running testcuda.py..."
 python src/HPC_setup/testcuda.py
 echo "---------------- JOB START ----------------"
-python run.py
+python run.py run_name=$0
 # Deactivate the conda environment
 # echo "Deactivating conda environment..."
 # conda deactivate

@@ -48,6 +48,7 @@ val_loader.dataset.random_start = False
 
 trainer = L.Trainer(
     default_root_dir="output/",
+    enable_progress_bar=False,
     max_epochs=C["epochs"],
     logger=wandb_logger,
     log_every_n_steps=1,
