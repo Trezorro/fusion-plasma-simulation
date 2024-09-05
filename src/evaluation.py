@@ -2,7 +2,6 @@
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objs as go
 import torch
 from torch.utils import data
 import lightning as L
@@ -86,18 +85,15 @@ def plot_sample(df: pd.DataFrame, title=""):
         False: 'Actual'
     })
     df_stacked['variable'] = df_stacked['variable'].str.replace('^', '')
-    fig = px.line(
-        df_stacked,
-        x='t',
-        y='value',
-        color='shot',
-        symbol='variable',
-        line_dash='is_prediction',
-        line_shape='linear',
-        #   markers=False,
-        category_orders={'is_prediction': ["Actual", "Prediction"]},
-        title="Predictions " + title)
-    # fig.update_xaxes(rangeslider_visible=True)
+    fig = px.line(df_stacked,
+                  x='t',
+                  y='value',
+                  color='shot',
+                  symbol='variable',
+                  line_dash='is_prediction',
+                  line_shape='linear',
+                  category_orders={'is_prediction': ["Actual", "Prediction"]},
+                  title="Predictions " + title)
     return fig
 
 
@@ -123,4 +119,3 @@ class PlotPredictionsCallback(L.Callback):
                     "val/prediction_plot": fig
                 },
                 commit=False)
-        # trainer.logger.experiment.add_image("generation_%i" % i, grid, global_step=trainer.current_epoch)

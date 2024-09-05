@@ -1,6 +1,5 @@
 """Hyper parameter configuration helper functions"""
-from networkx import omega
-from omegaconf import OmegaConf, ValidationError, DictConfig
+from omegaconf import OmegaConf, ValidationError
 import omegaconf
 import wandb
 
