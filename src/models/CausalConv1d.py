@@ -52,46 +52,27 @@ class CausalConv1d(nn.Module):
         else:
             return conv1d_out
 
+    @staticmethod
+    def minimum_input_for_conv_output(L_out, padding=0, dilation=1, kernel_size=3):
+        """
+        Calculate the minimum input size to get a desired output size.
 
-def minimum_input_for_conv_output(L_out, padding=0, dilation=1, kernel_size=3):
-    """
-    Calculate the minimum input size to get a desired output size.
+        Note that this is a simplified version of the formula, which assumes stride=1.
+        Padding is only applied to the left side of the input, and thus not multiplied by 2.
 
-    Note that this is a simplified version of the formula, which assumes stride=1.
-    Padding is only applied to the left side of the input, and thus not multiplied by 2.
+        See https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html#torch.nn.Conv1d for more details on the
+        formula.
 
-    See https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html#torch.nn.Conv1d for more details on the
-    formula.
+        Args:
+            L_out (int): Desired output size.
+            padding (int): Padding size.
+            dilation (int): Dilation size.
+            kernel_size (int): Kernel size.
 
-    Args:
-        L_out (int): Desired output size.
-        padding (int): Padding size.
-        dilation (int): Dilation size.
-        kernel_size (int): Kernel size.
-
-    Returns:
-        int: Minimum input size.
-    """
-    return L_out - padding + dilation * (kernel_size - 1)
-
-
-def minimum_input_for_layers(padding=[0, 0, 0], dilation=[1, 2, 4], kernel_size=[3, 3, 3]):
-    """
-    Calculate the minimum input size to get a desired output size for a stack of convolutions.
-
-    Args:
-        padding (list): List of padding sizes, from lowest to highest layer.
-        dilation (list): List of dilation sizes, idem.
-        kernel_size (list): List of kernel sizes.
-
-    Returns:
-        int: Minimum input size.
-    """
-    L_out = 1
-    for p, d, k in reversed(list(zip(padding, dilation, kernel_size))):
-        if not p:  # if there is padding, we assume it maintains the size 1 to 1, otherwise:
-            L_out = minimum_input_for_conv_output(L_out, padding=0, dilation=d, kernel_size=k)
-    return L_out
+        Returns:
+            int: Minimum input size.
+        """
+        return L_out - padding + dilation * (kernel_size - 1)
 
 
 class CausalConvNet(nn.Sequential):
@@ -123,11 +104,37 @@ class CausalConvNet(nn.Sequential):
                 # nn.BatchNorm1d(hidden_channels),
             ])
         super().__init__(*self.layers)
-        self.minimum_input_length = minimum_input_for_layers(
+        self.minimum_input_length = self.minimum_input_for_layers(
             padding=[use_padding] * num_layers,
             dilation=[1] + [i * kernel_size for i in range(1, num_layers)],
             kernel_size=[kernel_size] * num_layers,
         )
+
+    @staticmethod
+    def minimum_input_for_layers(padding=[0, 0, 0], dilation=[1, 2, 4], kernel_size=[3, 3, 3]):
+        """
+        Calculate the minimum input size to get a desired output size for a stack of convolutions.
+
+        If the input length is larger than the minimum input size, the output size may be larger than one. This
+        may be less efficient, but useful for validation purposes. AutoregressiveModel takes care of cutting 
+        the output to the exact needed size. for every forward pass.
+
+        Args:
+            padding (list): List of padding sizes, from lowest to highest layer.
+            dilation (list): List of dilation sizes, idem.
+            kernel_size (list): List of kernel sizes.
+
+        Returns:
+            int: Minimum input size.
+        """
+        L_out = 1
+        for p, d, k in reversed(list(zip(padding, dilation, kernel_size))):
+            if not p:  # if there is padding, we assume it maintains the size 1 to 1, otherwise:
+                L_out = CausalConv1d.minimum_input_for_conv_output(L_out,
+                                                                   padding=0,
+                                                                   dilation=d,
+                                                                   kernel_size=k)
+        return L_out
 
 
 class AutoRegressiveModel(L.LightningModule):
@@ -224,5 +231,6 @@ class AutoRegressiveModel(L.LightningModule):
             {
                 "model/summary": str(summary),
                 "model/trainable_params": sum(p.numel() for p in self.parameters() if p.requires_grad),
+                "model/minimum_input_length": self.convnet.minimum_input_length,
             },
             step=0)

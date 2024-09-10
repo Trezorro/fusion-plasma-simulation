@@ -187,8 +187,8 @@ class EncoderDecoder(L.LightningModule):
         outputs = self(c=controls, x=observables)[:, -self.val_rollout:]
         f_x = observables[:, -self.val_rollout:]
         loss = self.loss(outputs, f_x)
-        self.log("loss/test", loss)
-        return loss
+        self.log("loss/val", loss)
+        return dict(loss=loss, outputs=outputs)
 
     test_step = validation_step
 
@@ -221,6 +221,7 @@ class EncoderDecoder(L.LightningModule):
             {
                 "model/summary": str(summary),
                 "model/trainable_params": sum(p.numel() for p in self.parameters() if p.requires_grad),
-                "model/compressed_length": compressed_length
+                "model/compressed_length": compressed_length,
+                # TODO: maybe add model/minimum_input_length, but need to calculate it first
             },
             step=0)
