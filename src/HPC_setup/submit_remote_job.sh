@@ -10,19 +10,19 @@ fi
 JOB_NAME=$1
 REMOTE_USER="TUE_s162507"
 REMOTE_HOST="datamininghpc.win.tue.nl"
-REPO_PATH="./"
-JOB_SCRIPT="/path/to/your/testcuda.sh"
+REPO_PATH="~/fusion-plasma-simulation"
+JOB_SCRIPT="run_job.sh"
 SLURM_PARTITION="zirconium"  # Adjust as needed
 GIT_BRANCH="main"  # Branch to pull from
 
 # Check local git status and ensure it's clean and pushed
-cd $REPO_PATH
+# cd $REPO_PATH
 
-# Check if there are uncommitted changes
-if [[ -n $(git status --porcelain) ]]; then
-    echo "Error: Local repository is not clean. Please commit or stash your changes."
-    exit 1
-fi
+# # Check if there are uncommitted changes
+# if [[ -n $(git status --porcelain) ]]; then
+#     echo "Error: Local repository is not clean. Please commit or stash your changes."
+#     exit 1
+# fi
 
 # Check if there are commits that have not been pushed
 LOCAL_COMMITS=$(git rev-list HEAD --not --remotes)
@@ -32,7 +32,7 @@ if [[ -n $LOCAL_COMMITS ]]; then
 fi
 
 # Tag the last commit with the job name
-git tag -a "$JOB_NAME" -m "Job $JOB_NAME submitted"
+git tag -a "$JOB_NAME" -m "Job '$JOB_NAME' [$(date)]"
 git push origin "$JOB_NAME"
 
 # SSH into the main node, pull latest code, submit SLURM job, and inspect queue
