@@ -52,7 +52,7 @@ export WANDB_DIR="/home/TUE/s162507/fusion-plasma-simulation/output"
 echo "Running testcuda.py..."
 python src/HPC_setup/testcuda.py
 echo "---------------- JOB START ----------------"
-python run.py run_name=$0
+python run.py run_name=$1
 # Deactivate the conda environment
 # echo "Deactivating conda environment..."
 # conda deactivate
