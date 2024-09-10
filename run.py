@@ -11,14 +11,12 @@ import src.models
 from src.data_loaders import MyDataset
 
 conf = load_config_from_file()
-run = wandb.init(
-    name=conf.get("run_name", None),
-    project="plasma",
-    notes=
-    "Added long rollout evaluation, trying out whether patience works well with steps/epochs, increased train rollout to 5",
-    tags=["SiLu", "BatchNorm", "random crop"],
-    config=conf,
-    dir="./output/wandb")
+run = wandb.init(name=conf.get("run_name", None),
+                 project="plasma",
+                 notes="Bigger Model, with 5 layers and 6 filters. Hidden channels increased to 128.",
+                 tags=[],
+                 config=conf,
+                 dir="./output/wandb")
 C = get_current_config()
 wandb_logger = WandbLogger(
     log_model=False,
@@ -54,7 +52,7 @@ trainer = L.Trainer(
     log_every_n_steps=1,
     check_val_every_n_epoch=1,  # May validate less often
     callbacks=[
-        pl_callbacks.EarlyStopping(monitor="loss/val", patience=100, mode="min"),
+        pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
         PlotPredictionsCallback(num_samples=5, every_n_epochs=5)
     ])
 
