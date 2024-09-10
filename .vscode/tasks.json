@@ -4,17 +4,22 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Run Experiment",
+            "label": "Run Local Experiment",
             "type": "shell",
             "command": "git diff-index --quiet HEAD -- && pipenv run python run.py run_name='${input:run_name}' || echo 'Git status is not clean. Commit, then run.'"
             
-        }  // TODO: add input of experiment name. Autocommit? and create tag with that name.
+        },
+          {
+            "label": "Run Cluster Experiment",
+            "type": "process",
+            "command": "bash src/HPC_setup/submit_remote_job.sh ${input:run_name}"
+          }
     ],
   "inputs": [
     {
       "id": "run_name",
       "type": "promptString",
-       "description": "What is the run name?",
+       "description": "What is the experiment run name?",
       // type specific configuration attributes
     }
 ]
