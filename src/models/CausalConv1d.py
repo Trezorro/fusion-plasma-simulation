@@ -203,7 +203,7 @@ class AutoRegressiveModel(L.LightningModule):
         f_x = observables[:, -self.val_rollout:]
         loss = self.loss(outputs, f_x)
         self.log("loss/val", loss, prog_bar=True)
-        return loss
+        return dict(loss=loss, outputs=outputs)
 
     test_step = validation_step
 
