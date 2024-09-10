@@ -1,3 +1,4 @@
+from typing import Optional
 import torch
 import torch.nn as nn
 import lightning as L
@@ -136,7 +137,8 @@ class AutoRegressiveModel(L.LightningModule):
                  in_channels=1,
                  hidden_channels=64,
                  out_channels=1,
-                 forecast_horizon=1,
+                 train_rollout=1,
+                 validation_rollout=5,
                  kernel_size=5,
                  num_layers=3,
                  use_tanh_output=True,
@@ -146,7 +148,8 @@ class AutoRegressiveModel(L.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.out_channels = out_channels
-        self.forecast_horizon = forecast_horizon
+        self.train_rollout = train_rollout
+        self.val_rollout = validation_rollout
         self.loss = getattr(torch.nn, loss)()
         self.convnet = CausalConvNet(in_channels=in_channels,
                                      hidden_channels=hidden_channels,
@@ -159,15 +162,18 @@ class AutoRegressiveModel(L.LightningModule):
         if use_tanh_output:
             self.mlp.add_module("tanh", nn.Tanh())
 
-    def forward(self, c, x):
+    def forward(self, c, x, forecast_horizon: Optional[int] = None):
         """Returns the input sequence x with the last forecast_horizon elements filled with the model's own predictions.
 
         Returns:
             torch.Tensor: The input sequence with the last forecast_horizon elements filled with the model's own predictions. (batch_size, seq_length, variables)
         """
-        seq = torch.cat((c, x), dim=2).detach().clone()  # (batch_size, seq_length, variables c + x)
         input_seq_length = self.convnet.minimum_input_length
-        for t in range(seq.size(1) - self.forecast_horizon, seq.size(1)):
+        if forecast_horizon is None:
+            forecast_horizon = self.train_rollout
+
+        seq = torch.cat((c, x), dim=2).detach().clone()  # (batch_size, seq_length, variables c + x)
+        for t in range(seq.size(1) - forecast_horizon, seq.size(1)):
             input_part = seq[:, t - input_seq_length:t + 1].clone()
             a = input_part.permute(0, 2, 1)  # (batch_size, variable, seq_length)
             a = self.convnet(a)
@@ -178,16 +184,16 @@ class AutoRegressiveModel(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         shot_number, controls, observables = batch
-        outputs = self(c=controls, x=observables)[:, -self.forecast_horizon:]
-        f_x = observables[:, -self.forecast_horizon:]
+        outputs = self(c=controls, x=observables)[:, -self.train_rollout:]
+        f_x = observables[:, -self.train_rollout:]
         loss = self.loss(outputs, f_x)
         self.log("loss/train", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         shot_number, controls, observables = batch
-        outputs = self(c=controls, x=observables)[:, -self.forecast_horizon:]
-        f_x = observables[:, -self.forecast_horizon:]
+        outputs = self(c=controls, x=observables, forecast_horizon=self.val_rollout)[:, -self.val_rollout:]
+        f_x = observables[:, -self.val_rollout:]
         loss = self.loss(outputs, f_x)
         self.log("loss/val", loss, prog_bar=True)
         return loss

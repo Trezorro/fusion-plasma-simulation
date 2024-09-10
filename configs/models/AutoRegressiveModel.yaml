@@ -11,7 +11,8 @@ model:
     dropout: 0.1
     use_tanh_output: false
     use_padding: false
-    forecast_horizon: ${ forecast_horizon }
+    train_rollout: ${ train_rollout }
+    validation_rollout: ${ validation_rollout }
     loss: ${ loss }
 
 

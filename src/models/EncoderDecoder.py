@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 import torch
 import torch.nn as nn
 import lightning as L
@@ -132,7 +133,8 @@ class EncoderDecoder(L.LightningModule):
         decoder_rnn_type="LSTM",
         num_layers=4,
         dropout=0.3,
-        forecast_horizon=400,
+        train_rollout=400,
+        val_rollout=400,
         loss="MSELoss",
         input_length=None,
     ):
@@ -154,11 +156,14 @@ class EncoderDecoder(L.LightningModule):
             output_size=output_size,
             rnn_layers=num_layers,
             rnn_type=decoder_rnn_type)
-        self.forecast_horizon = forecast_horizon
+        self.train_rollout = train_rollout
+        self.val_rollout = val_rollout
 
-    def forward(self, c, x):
+    def forward(self, c, x, forecast_horizon: Optional[int] = None):
         # input shape: (batch_size, seq_length, input_size)
-        # this juggling should be in the train method
+        if forecast_horizon is None:
+            forecast_horizon = self.train_rollout
+
         with torch.no_grad():
             warmup = torch.cat((c[:, :-self.forecast_horizon], x[:, :-self.forecast_horizon]), dim=2)
             c_f = c[:, -self.forecast_horizon:]
@@ -171,16 +176,16 @@ class EncoderDecoder(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         shot_number, controls, observables = batch
-        outputs = self(c=controls, x=observables)[:, -self.forecast_horizon:]
-        f_x = observables[:, -self.forecast_horizon:]
+        outputs = self(c=controls, x=observables)[:, -self.train_rollout:]
+        f_x = observables[:, -self.train_rollout:]
         loss = self.loss(outputs, f_x)
         self.log("loss/train", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         shot_number, controls, observables = batch
-        outputs = self(c=controls, x=observables)[:, -self.forecast_horizon:]
-        f_x = observables[:, -self.forecast_horizon:]
+        outputs = self(c=controls, x=observables)[:, -self.val_rollout:]
+        f_x = observables[:, -self.val_rollout:]
         loss = self.loss(outputs, f_x)
         self.log("loss/test", loss)
         return loss
@@ -208,10 +213,9 @@ class EncoderDecoder(L.LightningModule):
                 # "trainable"
             ],
         )  # (batch_size, seq_length, input_size)
-        compressed_length = self.encoder.calculate_compressed_length(config.seq_length -
-                                                                     config.forecast_horizon)
+        compressed_length = self.encoder.calculate_compressed_length(config.seq_length - config.train_rollout)
         print(
-            f"Compressed length: {compressed_length} for warmup window {config.seq_length - config.forecast_horizon}"
+            f"Compressed length: {compressed_length} for warmup window {config.seq_length - config.train_rollout}"
         )
         wandb.log(
             {

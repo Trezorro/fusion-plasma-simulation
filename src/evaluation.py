@@ -62,10 +62,11 @@ def log_predictions(model, data_set, n=4, title_postfix=""):  # TODO use n_sampl
         inputs = torch.cat((controls, observables),
                            dim=2).to(model.device)  # (batch_size, seq_length, variables)
         outputs = model(controls.to(model.device),
-                        observables.to(model.device))  #  (batch_size, seq_length, target_variables)
+                        observables.to(model.device),
+                        forecast_horizon=C.validation_rollout)  # (batch_size, seq_length, target_variables)
         pred_out = observables.clone()
         # pred_out = torch.full_like(observables, fill_value=np.nan) # use if you want to start the forecast horizon cleanly.
-        pred_out[:, -C.forecast_horizon:] = outputs[:, -C["forecast_horizon"]:]
+        pred_out[:, -C.validation_rollout:] = outputs[:, -C["validation_rollout"]:]
         df = build_output_df(shot_numbers, controls, observables, pred_out)
         fig = plot_sample(df, title=title_postfix)
         # table = wandb.Table(dataframe=df.reset_index(names='ShotNum'))

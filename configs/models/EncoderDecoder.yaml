@@ -21,5 +21,6 @@ model:
     decoder_rnn_type: LSTM
     num_layers: 4
     dropout: 0.1
-    forecast_horizon: ${ forecast_horizon }
+    train_rollout: ${ train_rollout }
+    validation_rollout: ${ validation_rollout }
     loss: ${ loss }
