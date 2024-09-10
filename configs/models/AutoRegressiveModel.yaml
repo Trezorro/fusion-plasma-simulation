@@ -1,16 +1,19 @@
 model:
   Class: AutoRegressiveModel
-  description: Causal Convnet that outputs one step ahead a single value
-  future_work: No teacher forcing
+  description: Causal Convnet that outputs many steps ahead, one step at a time
+  future_work: 
   params:
     in_channels: 8
-    hidden_channels: 128
+    hidden_channels: 64
     out_channels: 1
-    kernel_size: 6
-    num_layers: 5
+    kernel_size: 5
+    num_layers: 7
     dropout: 0.1
-    use_tanh_output: false
+    dilation_factor: 0.3
+    use_batch_norm: true
+    conv_activation: ReLU
     use_padding: false
+    use_tanh_output: false
     train_rollout: ${ train_rollout }
     validation_rollout: ${ validation_rollout }
     loss: ${ loss }

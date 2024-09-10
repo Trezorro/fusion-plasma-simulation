@@ -18,6 +18,10 @@ run = wandb.init(name=conf.get("run_name", None),
                  config=conf,
                  dir="./output/wandb")
 C = get_current_config()
+wandb.define_metric("loss/train", summary="min")
+wandb.define_metric("loss/val", summary="min")
+wandb.define_metric("loss/val_train_rollout", summary="min")
+
 wandb_logger = WandbLogger(
     log_model=False,
     experiment=run,

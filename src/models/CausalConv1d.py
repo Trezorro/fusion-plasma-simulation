@@ -77,36 +77,36 @@ class CausalConv1d(nn.Module):
 
 class CausalConvNet(nn.Sequential):
 
-    def __init__(self, in_channels=8, hidden_channels=64, kernel_size=5, num_layers=3, use_padding=True):
+    def __init__(self,
+                 in_channels=8,
+                 hidden_channels=64,
+                 kernel_size=5,
+                 num_layers=3,
+                 use_padding=True,
+                 use_batch_norm=True,
+                 activation="SiLU",
+                 dilation_factor=.3):
         self.hyperparams = locals()
-        # First A layer:
-        self.layers = [
-            CausalConv1d(in_channels=in_channels,
-                         out_channels=hidden_channels,
-                         dilation=1,
-                         kernel_size=kernel_size,
-                         A=True,
-                         use_padding=use_padding,
-                         bias=True),
-            nn.LeakyReLU(),
-        ]
-        #  Dilating layers:
-        for i in range(1, num_layers):
-            self.layers.extend([
-                CausalConv1d(
-                    in_channels=hidden_channels,
-                    out_channels=hidden_channels,
-                    kernel_size=kernel_size,
-                    dilation=i * kernel_size,
-                    use_padding=use_padding,
-                ),
-                nn.SiLU(),
-                # nn.BatchNorm1d(hidden_channels),
+        self.Activation = getattr(torch.nn, activation)
+
+        layers = []
+        self.dilations = [int(max(kernel_size * dilation_factor, 1)**i) for i in range(0, num_layers)]
+        for i, dilation in enumerate(self.dilations):
+            if use_batch_norm:
+                layers.append(nn.BatchNorm1d(in_channels if i == 0 else hidden_channels))
+            layers.extend([
+                CausalConv1d(in_channels=in_channels if i == 0 else hidden_channels,
+                             out_channels=hidden_channels,
+                             kernel_size=kernel_size,
+                             dilation=dilation,
+                             use_padding=use_padding,
+                             A=i == 0),
+                self.Activation(),
             ])
-        super().__init__(*self.layers)
+        super().__init__(*layers)
         self.minimum_input_length = self.minimum_input_for_layers(
             padding=[use_padding] * num_layers,
-            dilation=[1] + [i * kernel_size for i in range(1, num_layers)],
+            dilation=self.dilations,
             kernel_size=[kernel_size] * num_layers,
         )
 
@@ -150,6 +150,9 @@ class AutoRegressiveModel(L.LightningModule):
                  num_layers=3,
                  use_tanh_output=True,
                  use_padding=True,
+                 use_batch_norm=True,
+                 conv_activation="SiLU",
+                 dilation_factor=.3,
                  loss="MSELoss",
                  **kwargs):
         super().__init__()
@@ -162,7 +165,10 @@ class AutoRegressiveModel(L.LightningModule):
                                      hidden_channels=hidden_channels,
                                      kernel_size=kernel_size,
                                      num_layers=num_layers,
-                                     use_padding=use_padding)
+                                     use_padding=use_padding,
+                                     use_batch_norm=use_batch_norm,
+                                     activation=conv_activation,
+                                     dilation_factor=dilation_factor)
         # Regression layers:
         self.mlp = nn.Sequential(nn.Linear(hidden_channels, hidden_channels // 2), nn.SiLU(),
                                  nn.Linear(hidden_channels // 2, out_channels))
