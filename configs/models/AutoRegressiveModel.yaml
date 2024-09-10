@@ -10,8 +10,8 @@ model:
     num_layers: 7
     dropout: 0.1
     dilation_factor: 0.3
-    use_batch_norm: true
-    conv_activation: SiLU
+    use_batch_norm: false
+    conv_activation: ReLU # SiLU # ReLU
     use_padding: false
     use_tanh_output: false
     train_rollout: ${ train_rollout }

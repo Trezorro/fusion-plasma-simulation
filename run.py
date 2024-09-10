@@ -13,7 +13,7 @@ from src.data_loaders import MyDataset
 conf = load_config_from_file()
 run = wandb.init(name=conf.get("run_name", None),
                  project="plasma",
-                 notes="Bigger Model, with 5 layers and 6 filters. Hidden channels increased to 128.",
+                 notes="Smarter CCN experiments. batchnorm and dilations",
                  tags=[],
                  config=conf,
                  dir="./output/wandb")
