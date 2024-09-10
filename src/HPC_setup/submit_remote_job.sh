@@ -1,11 +1,5 @@
 #!/bin/bash
 
-# Check if a job name argument is provided
-if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <job_name>"
-    exit 1
-fi
-
 # Variables
 JOB_NAME=$1
 REMOTE_USER="TUE_s162507"
@@ -14,6 +8,20 @@ REPO_PATH="~/fusion-plasma-simulation"
 JOB_SCRIPT="run_job.sh"
 SLURM_PARTITION="zirconium"  # Adjust as needed
 GIT_BRANCH="main"  # Branch to pull from
+
+# Check if a job name argument is provided
+if [ "$#" -ne 1 ] || [ -z "$1" ]; then
+    echo "To submit a new job, use: $0 <job_name>"
+    echo "Will check the queue and sync results from HPC."
+    # SSH into the main node, check the queue status, and run rsync
+    ssh $REMOTE_USER@$REMOTE_HOST << EOF
+        squeue
+EOF
+    rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
+    exit 0
+fi
+
+
 
 # Check local git status and ensure it's clean and pushed
 # cd $REPO_PATH
@@ -46,7 +54,7 @@ ssh $REMOTE_USER@$REMOTE_HOST << EOF
     git fetch origin
     git reset --hard origin/$GIT_BRANCH  # Reset local branch to match remote
     git pull origin $GIT_BRANCH
-    sbatch --job-name='$JOB_NAME' -p $SLURM_PARTITION --wrap="bash $JOB_SCRIPT '$JOB_NAME'"
+    sbatch --job-name=$JOB_NAME -p $SLURM_PARTITION $JOB_SCRIPT $JOB_NAME
     echo "Submitted job '$JOB_NAME'. Checking queue status for partition '$SLURM_PARTITION':"
     squeue -p $SLURM_PARTITION
 EOF

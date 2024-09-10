@@ -6,7 +6,8 @@
 # sync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms/ output/hpc/
 
 # Debugging: Print the shell script being executed
-echo "Starting job script for run: $0"
+echo "==============================="
+echo "Starting job script $0 for run: $1"
 echo $(date)
 echo "-------------------------------"
 
