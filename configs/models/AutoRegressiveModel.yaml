@@ -11,7 +11,7 @@ model:
     dropout: 0.1
     dilation_factor: 0.3
     use_batch_norm: true
-    conv_activation: ReLU
+    conv_activation: SiLU
     use_padding: false
     use_tanh_output: false
     train_rollout: ${ train_rollout }
