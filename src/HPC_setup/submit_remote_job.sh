@@ -73,6 +73,12 @@ ssh $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
 rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
+echo "Syncing results from HPC in 1 minute..."
+sleep 60
+ssh $REMOTE_USER@$REMOTE_HOST << EOF
+    squeue
+EOF
+rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
 echo "Re-sync results with:"
 echo "rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/"
 exit 0
