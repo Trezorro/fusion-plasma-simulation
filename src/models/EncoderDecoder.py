@@ -187,8 +187,11 @@ class EncoderDecoder(L.LightningModule):
         outputs = self(c=controls, x=observables)[:, -self.val_rollout:]
         f_x = observables[:, -self.val_rollout:]
         loss = self.loss(outputs, f_x)
-        self.log("loss/val", loss)
-        return dict(loss=loss, outputs=outputs)
+        train_loss = self.loss(outputs[:, :self.train_rollout], f_x[:, :self.train_rollout])
+        self.log("loss/val", loss, prog_bar=True)
+        self.log("loss/val_train_rollout", train_loss, prog_bar=True)
+        return dict(loss=loss, val_train_rollout=train_loss, outputs=outputs)
+
 
     test_step = validation_step
 

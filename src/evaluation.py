@@ -56,14 +56,15 @@ def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Ten
 def log_predictions(model, data_set, n=4, title_postfix=""):  # TODO use n_samples instead of n
     C = get_current_config()
     batch = next(iter(data.DataLoader(data_set, batch_size=n, shuffle=False)))
-    loss, outputs = model.validation_step(batch, 0).values()  # (batch_size, seq_length, target_variables)
+    loss, val_train_rollout, outputs = model.validation_step(
+        batch, 0).values()  # (batch_size, seq_length, target_variables)
     shot_numbers, controls, observables = batch
     pred_out = observables.clone()
     # pred_out = torch.full_like(observables, fill_value=np.nan) # use if you want to start the forecast horizon cleanly.
     pred_out[:, -C.validation_rollout:] = outputs[:, -C.validation_rollout:]
     df = build_output_df(shot_numbers, controls, observables, pred_out)
     fig = plot_sample(df,
-                      title=title_postfix + f" (Loss: {loss:.2f})",
+                      title=title_postfix + f" (TRO Loss: {val_train_rollout:.5f} / Full Loss: {loss:.5f})",
                       cutoff_t=C.seq_length - C.validation_rollout)
     if wandb.run.disabled:
         fig.show()
