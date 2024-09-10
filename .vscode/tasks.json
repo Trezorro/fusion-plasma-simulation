@@ -11,8 +11,8 @@
         },
           {
             "label": "Run Cluster Experiment",
-            "type": "process",
-            "command": "bash src/HPC_setup/submit_remote_job.sh ${input:run_name}"
+            "type": "shell",
+            "command": "bash src/HPC_setup/submit_remote_job.sh '${input:run_name}'"
           }
     ],
   "inputs": [

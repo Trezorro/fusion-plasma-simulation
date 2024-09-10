@@ -2,11 +2,11 @@
 #SBATCH --output=output/slurms/slurm-%j.out
 #SBATCH --gres=gpu:1
 # Run with sbatch -p zirconium testcuda.sh
-# rRetrieve output with
+# Retrieve output with
 # sync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms/ output/hpc/
 
 # Debugging: Print the shell script being executed
-echo "Starting job script: $0"
+echo "Starting job script for run: $0"
 echo $(date)
 echo "-------------------------------"
 

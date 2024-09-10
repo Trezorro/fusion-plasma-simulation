@@ -32,7 +32,12 @@ if [[ -n $LOCAL_COMMITS ]]; then
 fi
 
 # Tag the last commit with the job name
-git tag -a "$JOB_NAME" -m "Job '$JOB_NAME' [$(date)]"
+# Tag the last commit with the job name
+if ! git tag -a "$JOB_NAME" -m "Job '$JOB_NAME' [$(date)]"; then
+    echo "Error: Failed to tag the last commit."
+    exit 1
+fi
+
 git push origin "$JOB_NAME"
 
 # SSH into the main node, pull latest code, submit SLURM job, and inspect queue
@@ -41,9 +46,13 @@ ssh $REMOTE_USER@$REMOTE_HOST << EOF
     git fetch origin
     git reset --hard origin/$GIT_BRANCH  # Reset local branch to match remote
     git pull origin $GIT_BRANCH
-    sbatch --job-name=$JOB_NAME -p $SLURM_PARTITION $JOB_SCRIPT
+    sbatch --job-name='$JOB_NAME' -p $SLURM_PARTITION --wrap="bash $JOB_SCRIPT '$JOB_NAME'"
     echo "Submitted job '$JOB_NAME'. Checking queue status for partition '$SLURM_PARTITION':"
     squeue -p $SLURM_PARTITION
 EOF
 
 echo "Code updated, SLURM job '$JOB_NAME' submitted, and Git tag '$JOB_NAME' created."
+echo "Syncing results from HPC..."
+sync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
+echo "Re-sync results with:"
+echo "sync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/"
