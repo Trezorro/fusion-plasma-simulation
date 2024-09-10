@@ -15,7 +15,7 @@ run = wandb.init(
     name=conf.get("run_name", None),
     project="plasma",
     notes=
-    "Loss was always 0 before because of the wrong loss function. Fixed now. Also added a random crop to the data loader.",
+    "Added long rollout evaluation, trying out whether patience works well with steps/epochs, increased train rollout to 5",
     tags=["SiLu", "BatchNorm", "random crop"],
     config=conf,
     dir="./output/wandb")
@@ -54,7 +54,7 @@ trainer = L.Trainer(
     log_every_n_steps=1,
     check_val_every_n_epoch=1,  # May validate less often
     callbacks=[
-        pl_callbacks.EarlyStopping(monitor="loss/val", patience=20, mode="min"),
+        pl_callbacks.EarlyStopping(monitor="loss/val", patience=100, mode="min"),
         PlotPredictionsCallback(num_samples=5, every_n_epochs=5)
     ])
 
