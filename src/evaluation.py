@@ -53,6 +53,41 @@ def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Ten
     return df
 
 
+def plot_sample(df: pd.DataFrame, title="", cutoff_t=50):
+    """Plot a shot of the data. Df shot be a single shot."""
+    df_stacked = df.set_index('t',
+                              append=True).stack(future_stack=True).reset_index(name='value').rename(columns={
+                                  'level_0': 'shot',
+                                  'level_2': 'variable'
+                              })
+    df_stacked['is_prediction'] = df_stacked['variable'].str.startswith('^').map({
+        True: 'Prediction',
+        False: 'Actual'
+    })
+    df_stacked['variable'] = df_stacked['variable'].str.replace('^', '')
+    fig = px.line(df_stacked,
+                  x='t',
+                  y='value',
+                  color='shot',
+                  symbol='variable',
+                  line_dash='is_prediction',
+                  line_shape='linear',
+                  category_orders={'is_prediction': ["Actual", "Prediction"]},
+                  title=f"{wandb.run.name} | Predictions {title}")
+    C = get_current_config()
+    fig.add_vrect(
+        # type="line",
+        x0=0,
+        x1=cutoff_t - 0.5,
+        opacity=0.2,
+        line_width=0,
+        layer="below",
+        fillcolor="LightSalmon",
+    )
+    fig.update_xaxes(range=[-0.5, C.seq_length])
+    return fig
+
+
 def log_predictions(model, data_set, n=4, title_postfix=""):  # TODO use n_samples instead of n
     C = get_current_config()
     model.eval()
@@ -78,42 +113,6 @@ def log_predictions(model, data_set, n=4, title_postfix=""):  # TODO use n_sampl
         fig.show()
     # table = wandb.Table(dataframe=df.reset_index(names='ShotNum'))
     return fig
-
-
-def plot_sample(df: pd.DataFrame, title="", cutoff_t=50):
-    """Plot a shot of the data. Df shot be a single shot."""
-    df_stacked = df.set_index('t',
-                              append=True).stack(future_stack=True).reset_index(name='value').rename(columns={
-                                  'level_0': 'shot',
-                                  'level_2': 'variable'
-                              })
-    df_stacked['is_prediction'] = df_stacked['variable'].str.startswith('^').map({
-        True: 'Prediction',
-        False: 'Actual'
-    })
-    df_stacked['variable'] = df_stacked['variable'].str.replace('^', '')
-    fig = px.line(df_stacked,
-                  x='t',
-                  y='value',
-                  color='shot',
-                  symbol='variable',
-                  line_dash='is_prediction',
-                  line_shape='linear',
-                  category_orders={'is_prediction': ["Actual", "Prediction"]},
-                  title="Predictions " + title)
-    C = get_current_config()
-    fig.add_vrect(
-        # type="line",
-        x0=0,
-        x1=cutoff_t - 0.5,
-        opacity=0.2,
-        line_width=0,
-        layer="below",
-        fillcolor="LightSalmon",
-    )
-    fig.update_xaxes(range=[-0.5, C.seq_length])
-    return fig
-
 
 class PlotPredictionsCallback(L.Callback):
 
