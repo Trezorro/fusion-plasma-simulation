@@ -79,7 +79,7 @@ class CausalConvNet(nn.Sequential):
 
     def __init__(self,
                  in_channels=8,
-                 hidden_channels=64,
+                 hidden_channels=[64, 128, 256],
                  kernel_size=5,
                  num_layers=3,
                  use_padding=True,
@@ -92,11 +92,12 @@ class CausalConvNet(nn.Sequential):
         layers = []
         self.dilations = [int(max(kernel_size * dilation_factor, 1)**i) for i in range(0, num_layers)]
         for i, dilation in enumerate(self.dilations):
+            last_channels = in_channels if i == 0 else hidden_channels[i - 1]
             if use_batch_norm:
-                layers.append(nn.BatchNorm1d(in_channels if i == 0 else hidden_channels))
+                layers.append(nn.BatchNorm1d(last_channels))
             layers.extend([
-                CausalConv1d(in_channels=in_channels if i == 0 else hidden_channels,
-                             out_channels=hidden_channels,
+                CausalConv1d(in_channels=last_channels,
+                             out_channels=hidden_channels[i],
                              kernel_size=kernel_size,
                              dilation=dilation,
                              use_padding=use_padding,
@@ -142,7 +143,7 @@ class AutoRegressiveModel(L.LightningModule):
 
     def __init__(self,
                  in_channels=1,
-                 hidden_channels=64,
+                 hidden_channels=[32, 64, 128],
                  out_channels=1,
                  train_rollout=1,
                  validation_rollout=5,
@@ -170,8 +171,9 @@ class AutoRegressiveModel(L.LightningModule):
                                      activation=conv_activation,
                                      dilation_factor=dilation_factor)
         # Regression layers:
-        self.mlp = nn.Sequential(nn.Linear(hidden_channels, hidden_channels // 2), nn.SiLU(),
-                                 nn.Linear(hidden_channels // 2, out_channels))
+        final_hidden_channel = hidden_channels[-1]
+        self.mlp = nn.Sequential(nn.Linear(final_hidden_channel, final_hidden_channel // 4), nn.SiLU(),
+                                 nn.Linear(final_hidden_channel // 4, out_channels))
         if use_tanh_output:
             self.mlp.add_module("tanh", nn.Tanh())
 

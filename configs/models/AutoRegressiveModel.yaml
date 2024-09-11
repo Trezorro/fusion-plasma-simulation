@@ -4,7 +4,7 @@ model:
   future_work: Smarter channel scaling
   params:
     in_channels: 8
-    hidden_channels: 128
+    hidden_channels: [32,32,64,64,128,256,512]
     out_channels: 1
     kernel_size: 5
     num_layers: 7
