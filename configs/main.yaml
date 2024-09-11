@@ -1,12 +1,12 @@
 # run_name: TestRunName
 seq_length: 250
-train_rollout: 10
+train_rollout: 20
 validation_rollout: 100
 crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
 random_start: true
 epochs: 6000
 batch_size: 16
-patience: 200
+patience: 300
 # model: model.yaml # To be replaced by respective yaml file content
 model: configs/models/AutoRegressiveModel.yaml
 
