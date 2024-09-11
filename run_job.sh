@@ -7,11 +7,17 @@
 
 # Debugging: Print the shell script being executed
 echo "==============================="
-echo "Starting job script $0 for run: $1"
 echo $(date)
 echo "-------------------------------"
+echo $1
+echo "==============================="
+echo "\nJob script $0"
 
 # Debugging: Print the current environment before sourcing anything
+echo "Current working directory:"
+pwd
+echo "\n-------------------------------"
+# Print current working directory
 echo "Conda - Initial conda environment:"
 conda info --envs
 
@@ -38,12 +44,9 @@ echo "-------------------------------"
 # Print Python version and location
 echo "Python executable path:"
 which python
-echo "Python version:"
-python --version
+echo "Version: $(python --version 2>&1)"
 
-# Print current working directory
-echo "Current working directory:"
-pwd
+
 
 # Export wandb env variable
 export WANDB_DIR="/home/TUE/s162507/fusion-plasma-simulation/output"

@@ -13,7 +13,7 @@ model:
     use_batch_norm: false # didn't help for CCNs
     conv_activation: SiLU # SiLU # ReLU
     use_padding: false
-    use_tanh_output: false
+    use_tanh_output: true
     train_rollout: ${ train_rollout }
     validation_rollout: ${ validation_rollout }
     loss: ${ loss }

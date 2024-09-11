@@ -8,6 +8,8 @@ REPO_PATH="~/fusion-plasma-simulation"
 JOB_SCRIPT="run_job.sh"
 SLURM_PARTITION="zirconium"  # Adjust as needed
 GIT_BRANCH="main"  # Branch to pull from
+REMOTE_SLURM_DIR="TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms"
+LOCAL_HPC_PATH="output/hpc/"
 
 # Check if a job name argument is provided
 if [ "$#" -ne 1 ] || [ -z "$1" ]; then
@@ -66,19 +68,26 @@ sleep 10
 ssh $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
-rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
+
+# Run rsync and capture the output
+RSYNC_OUTPUT=$(rsync -avzv $REMOTE_SLURM_DIR $LOCAL_HPC_PATH)
+
+# Filter and format the output
+echo "$RSYNC_OUTPUT" | grep '.out' | grep -v 'is uptodate' | awk -v LOCAL_HPC_PATH="$LOCAL_HPC_PATH" '{print LOCAL_HPC_PATH $1}'
+
+rsync -avzv TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
 echo "Syncing results from HPC in 30 seconds..."
 sleep 30
 ssh $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
-rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
+rsync -avzv TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
 echo "Syncing results from HPC in 1 minute..."
 sleep 60
 ssh $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
-rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
+rsync -avzv TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
 echo "Re-sync results with:"
 echo "rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/"
 exit 0
