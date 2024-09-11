@@ -11,15 +11,14 @@ echo $(date)
 echo "-------------------------------"
 echo $1
 echo "==============================="
-echo "\nJob script $0"
+echo
+echo "Job script $0"
 
 # Debugging: Print the current environment before sourcing anything
 echo "Current working directory:"
 pwd
-echo "\n-------------------------------"
-# Print current working directory
-echo "Conda - Initial conda environment:"
-conda info --envs
+echo
+echo "-------------------------------"
 
 # Source the conda setup script
 echo "Sourcing conda setup..."

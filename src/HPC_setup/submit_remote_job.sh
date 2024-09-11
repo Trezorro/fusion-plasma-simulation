@@ -62,32 +62,54 @@ ssh $REMOTE_USER@$REMOTE_HOST << EOF
 EOF
 
 echo "Code updated, SLURM job '$JOB_NAME' submitted, and Git tag '$JOB_NAME' created. :D"
+
+sync_slurms() {
+    # Run rsync and capture the output
+    RSYNC_OUTPUT=$(rsync -avzv $REMOTE_SLURM_DIR $LOCAL_HPC_PATH)
+    # Filter and format the output
+    echo "Updated files:"
+    echo "$RSYNC_OUTPUT" | grep '\.out' | grep -v 'is uptodate' | awk -v LOCAL_HPC_PATH="$LOCAL_HPC_PATH" '{print LOCAL_HPC_PATH $1}'
+}
+
 sleep 1
 echo "Syncing results from HPC in 10 seconds..."
 sleep 10
 ssh $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
+echo "-----------------------------------------------------------"
+sync_slurms
+echo "-----------------------------------------------------------"
 
-# Run rsync and capture the output
-RSYNC_OUTPUT=$(rsync -avzv $REMOTE_SLURM_DIR $LOCAL_HPC_PATH)
-
-# Filter and format the output
-echo "$RSYNC_OUTPUT" | grep '.out' | grep -v 'is uptodate' | awk -v LOCAL_HPC_PATH="$LOCAL_HPC_PATH" '{print LOCAL_HPC_PATH $1}'
-
-rsync -avzv TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
 echo "Syncing results from HPC in 30 seconds..."
 sleep 30
 ssh $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
-rsync -avzv TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
+echo "-----------------------------------------------------------"
+sync_slurms
+echo "-----------------------------------------------------------"
+
 echo "Syncing results from HPC in 1 minute..."
 sleep 60
 ssh $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
-rsync -avzv TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
+echo "-----------------------------------------------------------"
+sync_slurms
+echo "-----------------------------------------------------------"
+
+
+echo "Syncing results from HPC in 2 minutes..."
+sleep 120
+ssh $REMOTE_USER@$REMOTE_HOST << EOF
+    squeue
+EOF
+echo "-----------------------------------------------------------"
+sync_slurms
+echo "-----------------------------------------------------------"
+
+
 echo "Re-sync results with:"
 echo "rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/"
 exit 0
