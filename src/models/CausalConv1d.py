@@ -38,14 +38,14 @@ class CausalConv1d(nn.Module):
             out_channels,
             kernel_size,
             stride=1,
-            padding=0,
+            padding=0,  # padding is done in forward
             dilation=dilation,
             **kwargs,
         )
 
     def forward(self, x):
         if self.padding != 0:
-            x = torch.nn.functional.pad(x, (self.padding, 0))
+            x = torch.nn.functional.pad(x, (self.padding, 0))  # padding only on the left
         conv1d_out = self.conv1d(x)
         if self.A:
             return conv1d_out[:, :, :-1]
