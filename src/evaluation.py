@@ -55,11 +55,12 @@ def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Ten
 
 def plot_sample(df: pd.DataFrame, title="", cutoff_t=50):
     """Plot a shot of the data. Df shot be a single shot."""
-    df_stacked = df.set_index('t',
-                              append=True).stack(future_stack=True).reset_index(name='value').rename(columns={
-                                  'level_0': 'shot',
-                                  'level_2': 'variable'
-                              })
+    df_stacked = df.set_index('t', append=True).stack(future_stack=True).reset_index(name='value').rename(
+        columns={
+            'level_0': 'shot',
+            'level_2': 'variable'
+        }
+    )
     df_stacked['is_prediction'] = df_stacked['variable'].str.startswith('^').map({
         True: 'Prediction',
         False: 'Actual'

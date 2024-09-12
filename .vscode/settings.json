@@ -1,6 +1,7 @@
 {
     "yapf.args": [
-        "--style", "{based_on_style: google, indent_width: 4, column_limit: 110}"
+        "--style", 
+        "{based_on_style: google, indent_width: 4, column_limit: 110, DEDENT_CLOSING_BRACKETS: True}"
     ],
     "editor.rulers": [
         {
