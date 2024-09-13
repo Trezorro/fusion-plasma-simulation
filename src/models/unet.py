@@ -125,6 +125,7 @@ class UNet(L.LightningModule):
         x_channels: int,
         out_channels: int,
         forecast_window: int,
+        kernel_size: int = 3,
         loss: str = "MSELoss",
         num_layers: int = 4,
         conv_activation: str = 'ReLU',
@@ -135,14 +136,14 @@ class UNet(L.LightningModule):
         self.val_rollout = forecast_window
         self.train_rollout = forecast_window
         self.cx_channels = c_channels + x_channels
-        self.kernel_size = 3
+        self.kernel_size = kernel_size
         self.out_channels = out_channels
         self.loss = getattr(torch.nn, loss)()
         # self.n_blocks = n_blocks
-        self.in_conv_A = DoubleConv(c_channels, 64)  # L = 64
-        self.down_B = DownBlock(64, 128)  # L = 32
-        self.down_C = DownBlock(128, 256)  # L = 16
-        self.down_D = DownBlock(256, 512)  # L = 8
+        self.in_conv_A = DoubleConv(c_channels, 64, kernel_size=kernel_size)  # L = 64
+        self.down_B = DownBlock(64, 128, kernel_size=kernel_size)  # L = 32
+        self.down_C = DownBlock(128, 256, kernel_size=kernel_size)  # L = 16
+        self.down_D = DownBlock(256, 512, kernel_size=kernel_size)  # L = 8
         enc_padding = 0
         self.state_encoder = nn.Sequential(  # Encodes Xt-1 and Ct-1 into a state matrix St-1.
             DoubleConv(self.cx_channels, 64, kernel_size=self.kernel_size, padding=enc_padding), # Min Length: 64
@@ -152,10 +153,10 @@ class UNet(L.LightningModule):
             DownBlock(512, 1024, kernel_size=self.kernel_size, padding=enc_padding)  # Min Length: 4
         )
 
-        self.up_D = UpBlock(1024, 512, 512)  # Min Length: 8
-        self.up_C = UpBlock(512, 256, 256)  # Min Length: 16
-        self.up_B = UpBlock(256, 128, 128)  # Min Length: 32
-        self.up_A = UpBlock(128, 64, 64)  # Min Length: 64
+        self.up_D = UpBlock(1024, 512, 512, kernel_size=kernel_size)  # Min Length: 8
+        self.up_C = UpBlock(512, 256, 256, kernel_size=kernel_size)  # Min Length: 16
+        self.up_B = UpBlock(256, 128, 128, kernel_size=kernel_size)  # Min Length: 32
+        self.up_A = UpBlock(128, 64, 64, kernel_size=kernel_size)  # Min Length: 64
         self.out_conv = nn.Conv1d(64, self.out_channels, kernel_size=1)
 
     def forward(self, x_in: torch.Tensor, c_in: torch.Tensor, c_out: torch.Tensor):
