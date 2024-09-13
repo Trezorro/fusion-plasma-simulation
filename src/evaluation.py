@@ -95,7 +95,9 @@ def log_predictions(model, data_set, n=4, title_postfix=""):  # TODO use n_sampl
     with torch.inference_mode():
         shot_numbers, controls, observables = next(
             iter(data.DataLoader(data_set, batch_size=n, shuffle=False)))
-        x_out_pred = model.prediction_step((shot_numbers, controls, observables), 0)
+        x_out_pred = model.prediction_step(
+            (shot_numbers, controls.to(model.device), observables.to(model.device)), 0
+        )
         x_out = observables[:, -model.val_rollout:].to(model.device)
         loss = model.loss(x_out_pred, x_out)
         val_train_rollout = model.loss(x_out_pred[:, :model.train_rollout], x_out[:, :model.train_rollout])
