@@ -95,15 +95,13 @@ def log_predictions(model, data_set, n=4, title_postfix=""):  # TODO use n_sampl
     with torch.inference_mode():
         shot_numbers, controls, observables = next(
             iter(data.DataLoader(data_set, batch_size=n, shuffle=False)))
-        outputs = model(c=controls.to(model.device),
-                        x=observables.to(model.device),
-                        forecast_horizon=model.val_rollout)[:, -model.val_rollout:]
-        f_x = observables[:, -model.val_rollout:].to(model.device)
-        loss = model.loss(outputs, f_x)
-        val_train_rollout = model.loss(outputs[:, :model.train_rollout], f_x[:, :model.train_rollout])
+        x_out_pred = model.prediction_step((shot_numbers, controls, observables), 0)
+        x_out = observables[:, -model.val_rollout:].to(model.device)
+        loss = model.loss(x_out_pred, x_out)
+        val_train_rollout = model.loss(x_out_pred[:, :model.train_rollout], x_out[:, :model.train_rollout])
         pred_out = observables.clone()
         # pred_out = torch.full_like(observables, fill_value=np.nan) # use if you want to start the forecast horizon cleanly.
-        pred_out[:, -C.validation_rollout:] = outputs[:, -C.validation_rollout:].cpu()
+        pred_out[:, -C.validation_rollout:] = x_out_pred[:, -C.validation_rollout:].cpu()
         df = build_output_df(shot_numbers, controls, observables, pred_out)
         fig = plot_sample(df,
                           title=title_postfix +

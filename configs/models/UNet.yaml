@@ -1,14 +1,23 @@
-# run_name: TestRunName
-crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
-random_start: true
-epochs: 6000
-batch_size: 16
-patience: 300
-# model: model.yaml # To be replaced by respective yaml file content
-model: configs/models/UNet.yaml
-seq_length: 200
-train_rollout: ${ model.params.train_rollout }
-validation_rollout: ${ model.params.validation_rollout }
+model:
+  Class: UNet
+  description: U net taking in a window xt-1, ct-1, and, conditioined on ct, predicting xt
+  future_work: Padding strategy, dataloader and eval refractor. Set fuze length, let that determine layers.
+  params:
+    c_channels: 7
+    x_channels: 1
+    out_channels: 1
+    forecast_window: 64
+    hidden_channels_u: [64, 128, 256, 512]
+    hidden_channels_s: [64, 128, 256, 512, 1024]
+    kernel_size: 3
+    num_layers: 4
+    use_batch_norm: false # didn't help for CCNs
+    conv_activation: SiLU # SiLU # ReLU
+    use_padding: false
+    use_tanh_output: true
+    train_rollout: ${ model.params.forecast_window }
+    validation_rollout: ${ model.params.forecast_window }
+    loss: MSELoss # L1Loss #  TODO try absolute error
 
 
 data:
