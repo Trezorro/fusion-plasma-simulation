@@ -6,7 +6,7 @@ batch_size: 16
 patience: 300
 # model: model.yaml # To be replaced by respective yaml file content
 model: configs/models/UNet.yaml
-seq_length: 200
+seq_length: 220
 train_rollout: ${ model.params.train_rollout }
 validation_rollout: ${ model.params.validation_rollout }
 
