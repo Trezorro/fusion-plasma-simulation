@@ -247,6 +247,7 @@ class UNet(L.LightningModule):
                 # "trainable"
             ],
         )  # (batch_size, seq_length, input_size)
+        # TODO: Print fuze lengths
         wandb.log(
             {
                 "model/summary": str(summary),

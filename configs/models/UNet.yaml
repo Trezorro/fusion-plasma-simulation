@@ -3,10 +3,10 @@ model:
   description: U net taking in a window xt-1, ct-1, and, conditioined on ct, predicting xt
   future_work: Padding strategy, dataloader and eval refractor. Set fuze length, let that determine layers.
   params:
-    c_channels: 7
+    c_channels: 11
     x_channels: 1
-    out_channels: 1
-    forecast_window: 64
+    out_channels: ${ model.params.x_channels }
+    forecast_window: 40
     hidden_channels_u: [64, 128, 256, 512]
     hidden_channels_s: [64, 128, 256, 512, 1024]
     kernel_size: 3
@@ -43,5 +43,11 @@ data:
     - a_minor  # reel gemeten plasma shape a k d (horizontale radius
     - KAPPA
     - DELTA  # linkerbovenhoek naar links vanuit hetmidden
+    # From X:
+    -  "FIR_core"  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
+    - "DML"
+    - "POHM"
+    - "Z_axis"
+
     label:
     - LHD_label
