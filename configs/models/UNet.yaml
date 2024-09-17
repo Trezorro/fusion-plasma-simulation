@@ -9,7 +9,7 @@ model:
     forecast_window: 40
     hidden_channels_u: [64, 128, 256, 512]
     hidden_channels_s: [64, 128, 256, 512, 1024]
-    kernel_size: 5
+    kernel_size: 3
     num_layers: 4
     use_batch_norm: false # didn't help for CCNs
     conv_activation: SiLU # SiLU # ReLU
