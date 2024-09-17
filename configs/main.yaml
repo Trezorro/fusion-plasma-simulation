@@ -2,7 +2,7 @@
 crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
 random_start: true
 epochs: 6000
-batch_size: 64
+batch_size: 32
 patience: 300
 # model: model.yaml # To be replaced by respective yaml file content
 model: configs/models/UNet.yaml

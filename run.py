@@ -57,8 +57,9 @@ trainer = L.Trainer(
     check_val_every_n_epoch=1,  # May validate less often
     callbacks=[
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
-        PlotPredictionsCallback(num_samples=5, every_n_epochs=5)
-    ])
+        PlotPredictionsCallback(num_samples=5, every_n_epochs=5, train_every_n_epochs=20),
+    ]
+)
 
 trainer.validate(model=model, dataloaders=val_loader)
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)

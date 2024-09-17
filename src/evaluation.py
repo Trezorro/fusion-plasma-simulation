@@ -117,11 +117,12 @@ def log_predictions(model, data_set, n=4, title_postfix=""):  # TODO use n_sampl
 
 class PlotPredictionsCallback(L.Callback):
 
-    def __init__(self, num_samples=8, every_n_epochs=5):
+    def __init__(self, num_samples=8, every_n_epochs=5, train_every_n_epochs=20):
         super().__init__()
         self.num_samples = num_samples  # Number of samples to log
         # Only save those images every N epochs (otherwise tensorboard gets quite large)
         self.every_n_epochs = every_n_epochs
+        self.train_every_n_epochs = train_every_n_epochs
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
         # Skip for all other epochs
@@ -131,9 +132,29 @@ class PlotPredictionsCallback(L.Callback):
                 model=pl_module,
                 data_set=trainer.val_dataloaders.dataset,  # type: ignore
                 n=self.num_samples,
-                title_postfix=f"Epoch {trainer.current_epoch}")
+                title_postfix=f"Epoch {trainer.current_epoch}"
+            )
             wandb.log(
                 {  #"predictions/val": table, 
                     "val/prediction_plot": fig
                 },
-                commit=False)
+                commit=False
+            )
+
+    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
+        if self.train_every_n_epochs:
+            # Skip for all other epochs
+            if trainer.current_epoch % self.train_every_n_epochs == 0:
+                # Generate images
+                fig = log_predictions(
+                    model=pl_module,
+                    data_set=trainer.train_dataloader.dataset,  # type: ignore
+                    n=self.num_samples,
+                    title_postfix=f"TRAINDATA - Epoch {trainer.current_epoch}"
+                )
+                wandb.log(
+                    {  #"predictions/val": table, 
+                        "train/prediction_plot": fig
+                    },
+                    commit=False
+                )
