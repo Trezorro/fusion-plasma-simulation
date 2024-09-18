@@ -36,11 +36,11 @@ class DoubleConv(nn.Sequential):
             mid_channels = out_channels
         layers = [
             nn.Conv1d(in_channels, mid_channels, kernel_size=kernel_size, padding=padding,
-                      bias=False),  # Bias was false in the original implementation
-            nn.BatchNorm1d(mid_channels),
+                      bias=True),  # Bias was false in the original implementation
+            # nn.BatchNorm1d(mid_channels),
             nn.ReLU(inplace=True),
-            nn.Conv1d(mid_channels, out_channels, kernel_size=kernel_size, padding=padding, bias=False),
-            nn.BatchNorm1d(out_channels),
+            nn.Conv1d(mid_channels, out_channels, kernel_size=kernel_size, padding=padding, bias=True),
+            # nn.BatchNorm1d(out_channels),
             nn.ReLU(inplace=True)
         ]
         super().__init__(*layers)
