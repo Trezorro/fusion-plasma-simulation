@@ -11,12 +11,14 @@ import src.models
 from src.data_loaders import MyDataset
 
 conf = load_config_from_file()
-run = wandb.init(name=conf.get("run_name", None),
-                 project="plasma",
-                 notes="Smarter CCN experiments. batchnorm and dilations",
-                 tags=[],
-                 config=conf,
-                 dir="./output/wandb")
+run = wandb.init(
+    name=conf.get("run_name", None),
+    project="plasma",
+    notes="Unet, now with transposed convolutions",
+    tags=[],
+    config=conf,
+    dir="./output/wandb"
+)
 C = get_current_config()
 wandb.define_metric("loss/train", summary="min")
 wandb.define_metric("loss/val", summary="min")

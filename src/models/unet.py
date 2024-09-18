@@ -154,9 +154,9 @@ class UNet(L.LightningModule):
         )
 
         self.up_D = UpBlock(1024, 512, 512, kernel_size=kernel_size)  # Min Length: 8
-        self.up_C = UpBlock(512, 256, 256, kernel_size=kernel_size)  # Min Length: 16
-        self.up_B = UpBlock(256, 128, 128, kernel_size=kernel_size)  # Min Length: 32
-        self.up_A = UpBlock(128, 64, 64, kernel_size=kernel_size)  # Min Length: 64
+        self.up_C = UpBlock(512, 256, 256, kernel_size=kernel_size, bilinear=False)  # Min Length: 16
+        self.up_B = UpBlock(256, 128, 128, kernel_size=kernel_size, bilinear=False)  # Min Length: 32
+        self.up_A = UpBlock(128, 64, 64, kernel_size=kernel_size, bilinear=False)  # Min Length: 64
         self.out_conv = nn.Conv1d(64, self.out_channels, kernel_size=1)
 
     def forward(self, x_in: torch.Tensor, c_in: torch.Tensor, c_out: torch.Tensor):
