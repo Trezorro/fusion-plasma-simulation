@@ -17,9 +17,8 @@ class MyDataset(data.Dataset):
         self.shot_numbers = self.data['ShotNum'].unique()
         self.min = self.data[columns_C + columns_X].min()
         self.max = self.data[columns_C + columns_X].max()
-        self.data[
-            columns_C +
-            columns_X] = (self.data[columns_C + columns_X] - self.min) / (0.5 * (self.max - self.min)) - 1
+        self.data[columns_C +
+                  columns_X] = (self.data[columns_C + columns_X] - self.min) / (self.max - self.min)
 
     def __len__(self):
         return len(self.shot_numbers)
