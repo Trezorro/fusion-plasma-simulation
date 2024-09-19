@@ -204,6 +204,7 @@ class UNet(L.LightningModule):
         ax = self.up_A(cx, ac)  # Min Length: 64
         # Output layer
         x_out = self.out_conv(ax)
+        x_out = torch.exp(x_out)
 
         return x_out.permute(0, 2, 1)  # Returned as (batch_size, seq_length, variables x)
 
