@@ -65,7 +65,13 @@ class DownBlock(nn.Module):
 class UpBlock(nn.Module):
 
     def __init__(
-        self, in_channels_left, in_channels_skip, out_channels, kernel_size=3, bilinear=True, padding='both'
+        self,
+        in_channels_left,
+        in_channels_skip,
+        out_channels,
+        kernel_size=3,
+        up_method: str | bool = 'upsample',
+        padding='both'
     ):
         """Upscales the input and concats it with the skip connection. Then applies double convolutions.
 
@@ -80,19 +86,25 @@ class UpBlock(nn.Module):
         """
         super().__init__()
         self.padding = padding
-
-        # if bilinear, use the normal convolutions to reduce the number of channels
         total_channels = in_channels_left + in_channels_skip
-        if bilinear:
+        if type(up_method) == bool:
+            # map True to 'upsample' and False to 'identity'
+            up_method = 'upsample' if up_method else 'identity'
+
+        if up_method.lower() in ('upsample', 'bilinear'):
             self.up = nn.Upsample(scale_factor=2, mode='linear', align_corners=True)
+            # if bilinear, use the normal convolutions to reduce the number of channels
             self.conv = DoubleConv(total_channels, out_channels, total_channels // 2, kernel_size=kernel_size)
-        else:
+        elif up_method.lower() in ('transposed', 'conv'):
             # idea: use this only in the upper expanding layers. In the lower layers, it hasn't conditioned on
             # c_out yet, so it doesn't know how to conditionally upscale.
             self.up = nn.ConvTranspose1d(in_channels_left, in_channels_left // 2, kernel_size=2, stride=2)
             self.conv = DoubleConv(
                 in_channels_left // 2 + in_channels_skip, out_channels, kernel_size=kernel_size
             )
+        else:
+            self.up = nn.Identity()
+            self.conv = DoubleConv(total_channels, out_channels, total_channels // 2, kernel_size=kernel_size)
 
     def forward(self, expanding_input, skip):
         expanding_input = self.up(expanding_input)
@@ -129,6 +141,7 @@ class UNet(L.LightningModule):
         loss: str = "MSELoss",
         num_layers: int = 4,
         conv_activation: str = 'ReLU',
+        upsample_at_fusing: bool = False,
         **kwargs
     ):
         super().__init__()
@@ -138,6 +151,7 @@ class UNet(L.LightningModule):
         self.cx_channels = c_channels + x_channels
         self.kernel_size = kernel_size
         self.out_channels = out_channels
+        self.upsample_at_fusing = upsample_at_fusing
         self.loss = getattr(torch.nn, loss)()
         # self.n_blocks = n_blocks
         self.in_conv_A = DoubleConv(c_channels, 64, kernel_size=kernel_size)  # L = 64
@@ -153,10 +167,16 @@ class UNet(L.LightningModule):
             DownBlock(512, 1024, kernel_size=self.kernel_size, padding=enc_padding)  # Min Length: 4
         )
 
-        self.up_D = UpBlock(1024, 512, 512, kernel_size=kernel_size)  # Min Length: 8
-        self.up_C = UpBlock(512, 256, 256, kernel_size=kernel_size, bilinear=False)  # Min Length: 16
-        self.up_B = UpBlock(256, 128, 128, kernel_size=kernel_size, bilinear=False)  # Min Length: 32
-        self.up_A = UpBlock(128, 64, 64, kernel_size=kernel_size, bilinear=False)  # Min Length: 64
+        self.up_D = UpBlock(
+            1024,
+            512,
+            512,
+            kernel_size=kernel_size,
+            up_method=('conv' if self.upsample_at_fusing else 'identity')
+        )  # Min Length: 8
+        self.up_C = UpBlock(512, 256, 256, kernel_size=kernel_size, up_method="conv")  # Min Length: 16
+        self.up_B = UpBlock(256, 128, 128, kernel_size=kernel_size, up_method="conv")  # Min Length: 32
+        self.up_A = UpBlock(128, 64, 64, kernel_size=kernel_size, up_method="conv")  # Min Length: 64
         self.out_conv = nn.Conv1d(64, self.out_channels, kernel_size=1)
 
     def forward(self, x_in: torch.Tensor, c_in: torch.Tensor, c_out: torch.Tensor):
@@ -176,7 +196,7 @@ class UNet(L.LightningModule):
         cc = self.down_C(bc)
         dc = self.down_D(cc)
         # State encoder conditioned on Xt-1 and Ct-1 (warmup window)
-        max_s_length = dc.size(2) // 2
+        max_s_length = dc.size(2) // 2 if self.upsample_at_fusing else dc.size(2)
         s = self.state_encoder(warmup_window)[:, :, -max_s_length:]  # Min Length: 4
         # Conditioned eXpanding path D to A
         dx = self.up_D(s, dc)  # Min Length: 8
