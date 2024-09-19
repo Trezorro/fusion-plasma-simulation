@@ -1,6 +1,5 @@
 from math import e
 from typing import Optional
-from numpy import c_
 import torch
 import torch.nn as nn
 import lightning as L
@@ -267,11 +266,21 @@ class UNet(L.LightningModule):
                 "mult_adds",
                 # "trainable"
             ],
+            verbose=1
         )  # (batch_size, seq_length, input_size)
+        summary_layers = {l.var_name: l for l in summary.summary_list}
         # TODO: Print fuze lengths
+        for layer in summary.summary_list:
+            if 0 < layer.depth < 3:
+                print_layer_line(layer)
+
+        fuse_length = summary_layers['down_D'].output_size[2]
+        if __name__ == '__main__':  # Don't log to wandb in test mode, break now.
+            return
         wandb.log(
             {
                 "model/summary": str(summary),
+                "model/fuse_length": fuse_length,
                 "model/trainable_params": sum(p.numel() for p in self.parameters() if p.requires_grad),
                 # "model/minimum_input_length": self.convnet.minimum_input_length,
             },
@@ -279,7 +288,34 @@ class UNet(L.LightningModule):
         )
 
 
-# class UNetAuto(L.LightningModule):
+def print_layer_line(layer_summary):
+    """Prints a line of a layer summary.
 
-#     def __init__(self):
-#         super().__init__()
+    var_name
+    class_name
+    depth
+    input_size
+    output_size
+    """
+    _, in_channels, in_length = layer_summary.input_size
+    _, out_channels, out_length = layer_summary.output_size
+    if layer_summary.depth == 1:
+        print("-" * 45)
+        print(f"{layer_summary.var_name:<13}", end="")
+    else:
+        print(f"{layer_summary.var_name:>13}", end="")
+    print(
+        f" | C {in_channels:>4} > {out_channels:>4} | "
+        f"L {in_length:>3} > {out_length:<3} | ({layer_summary.class_name})"
+        # f"K : {str(layer_summary.kernel_size):>10} | Params {layer_summary.num_params:>10}"
+    )
+
+
+if __name__ == '__main__':
+    import os, sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
+    from src.config import load_config_from_file
+
+    C = load_config_from_file(as_omega=True)
+    model = UNet(**C['model']['params'])
+    model.log_summary(C)
