@@ -276,6 +276,12 @@ class UNet(L.LightningModule):
                 print_layer_line(layer)
 
         fuse_length = summary_layers['down_D'].output_size[2]
+        print(f"Fuse length: {fuse_length}")
+        print(
+            "State encoding length in / out: ", summary_layers['state_encoder'].input_size[2], " / ",
+            summary_layers['state_encoder'].output_size[2],
+            f"with {summary_layers['state_encoder'].output_size[1]} out channels."
+        )
         if __name__ == '__main__':  # Don't log to wandb in test mode, break now.
             return
         wandb.log(

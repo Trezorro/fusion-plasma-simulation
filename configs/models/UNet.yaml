@@ -6,7 +6,7 @@ model:
     c_channels: 11
     x_channels: 1
     out_channels: ${ model.params.x_channels }
-    forecast_window: 40
+    forecast_window: 20
     hidden_channels_u: [64, 128, 256, 512]
     hidden_channels_s: [64, 128, 256, 512, 1024]
     kernel_size: 3
@@ -19,6 +19,8 @@ model:
     train_rollout: ${ model.params.forecast_window }
     validation_rollout: ${ model.params.forecast_window }
     loss: MSELoss # L1Loss #  TODO try absolute error
+
+seq_length: 210
 
 
 data:
