@@ -141,6 +141,7 @@ class UNet(L.LightningModule):
         num_layers: int = 4,
         conv_activation: str = 'ReLU',
         upsample_at_fusing: bool = False,
+        output_activation: str = "Softplus",
         **kwargs
     ):
         super().__init__()
@@ -177,6 +178,12 @@ class UNet(L.LightningModule):
         # self.up_B = UpBlock(256, 128, 128, kernel_size=kernel_size, up_method="conv")  # Min Length: 32
         self.up_A = UpBlock(256, 64, 64, kernel_size=kernel_size, up_method="conv")  # Min Length: 64
         self.out_conv = nn.Conv1d(64, self.out_channels, kernel_size=1)
+        if output_activation.lower() == 'softplus':
+            self.out_activation = nn.Softplus(beta=2)
+        elif output_activation.lower() == 'exp':
+            self.out_activation = torch.exp
+        else:
+            self.out_activation = nn.Identity()
 
     def forward(self, x_in: torch.Tensor, c_in: torch.Tensor, c_out: torch.Tensor):
         """Predicts the window x_out, which will be the same length as the given c_out.
@@ -204,7 +211,7 @@ class UNet(L.LightningModule):
         ax = self.up_A(cx, ac)  # Min Length: 64
         # Output layer
         x_out = self.out_conv(ax)
-        x_out = torch.exp(x_out)
+        x_out = self.out_activation(x_out)
 
         return x_out.permute(0, 2, 1)  # Returned as (batch_size, seq_length, variables x)
 

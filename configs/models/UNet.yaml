@@ -11,6 +11,7 @@ model:
     hidden_channels_s: [64, 128, 256, 512, 1024]
     kernel_size: 3
     num_layers: 4
+    output_activation: softplus
     upsample_at_fusing: false  # Changes the first up block to identity upsample, giving more space to state
     use_batch_norm: false # didn't help for CCNs
     conv_activation: SiLU # SiLU # ReLU
