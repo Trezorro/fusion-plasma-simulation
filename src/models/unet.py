@@ -155,9 +155,9 @@ class UNet(L.LightningModule):
         self.loss = getattr(torch.nn, loss)()
         # self.n_blocks = n_blocks
         self.in_conv_A = DoubleConv(c_channels, 64, kernel_size=kernel_size)  # L = 64
-        self.down_B = DownBlock(64, 128, kernel_size=kernel_size)  # L = 32
-        self.down_C = DownBlock(128, 256, kernel_size=kernel_size)  # L = 16
-        self.down_D = DownBlock(256, 512, kernel_size=kernel_size)  # L = 8
+        # self.down_B = DownBlock(64, 128, kernel_size=kernel_size)  # L = 32
+        self.down_C = DownBlock(64, 128, kernel_size=kernel_size)  # L = 16
+        self.down_D = DownBlock(128, 256, kernel_size=kernel_size)  # L = 8
         enc_padding = 0
         self.state_encoder = nn.Sequential(  # Encodes Xt-1 and Ct-1 into a state matrix St-1.
             DoubleConv(self.cx_channels, 64, kernel_size=self.kernel_size, padding=enc_padding), # Min Length: 64
@@ -169,14 +169,14 @@ class UNet(L.LightningModule):
 
         self.up_D = UpBlock(
             1024,
-            512,
+            256,
             512,
             kernel_size=kernel_size,
             up_method=('conv' if self.upsample_at_fusing else 'identity')
         )  # Min Length: 8
-        self.up_C = UpBlock(512, 256, 256, kernel_size=kernel_size, up_method="conv")  # Min Length: 16
-        self.up_B = UpBlock(256, 128, 128, kernel_size=kernel_size, up_method="conv")  # Min Length: 32
-        self.up_A = UpBlock(128, 64, 64, kernel_size=kernel_size, up_method="conv")  # Min Length: 64
+        self.up_C = UpBlock(512, 128, 256, kernel_size=kernel_size, up_method="conv")  # Min Length: 16
+        # self.up_B = UpBlock(256, 128, 128, kernel_size=kernel_size, up_method="conv")  # Min Length: 32
+        self.up_A = UpBlock(256, 64, 64, kernel_size=kernel_size, up_method="conv")  # Min Length: 64
         self.out_conv = nn.Conv1d(64, self.out_channels, kernel_size=1)
 
     def forward(self, x_in: torch.Tensor, c_in: torch.Tensor, c_out: torch.Tensor):
@@ -192,8 +192,8 @@ class UNet(L.LightningModule):
 
         # Contracting path A to D
         ac = self.in_conv_A(c_out)
-        bc = self.down_B(ac)
-        cc = self.down_C(bc)
+        # bc = self.down_B(ac)
+        cc = self.down_C(ac)
         dc = self.down_D(cc)
         # State encoder conditioned on Xt-1 and Ct-1 (warmup window)
         max_s_length = dc.size(2) // 2 if self.upsample_at_fusing else dc.size(2)
@@ -201,8 +201,8 @@ class UNet(L.LightningModule):
         # Conditioned eXpanding path D to A
         dx = self.up_D(s, dc)  # Min Length: 8
         cx = self.up_C(dx, cc)  # Min Length: 16
-        bx = self.up_B(cx, bc)  # Min Length: 32
-        ax = self.up_A(bx, ac)  # Min Length: 64
+        # bx = self.up_B(cx, bc)  # Min Length: 32
+        ax = self.up_A(cx, ac)  # Min Length: 64
         # Output layer
         x_out = self.out_conv(ax)
 
