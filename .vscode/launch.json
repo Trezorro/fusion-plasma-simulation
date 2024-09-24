@@ -10,7 +10,8 @@
             "request": "launch",
             "module": "run",
             "env": {
-                "WANDB_MODE":"disabled"
+                "WANDB_MODE":"disabled",
+                "WANDB_NOTES": "debugging",
             },
             "args": [
                 "epochs=2"

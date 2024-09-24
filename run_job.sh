@@ -49,6 +49,7 @@ echo "Version: $(python --version 2>&1)"
 
 # Export wandb env variable
 export WANDB_DIR="/home/TUE/s162507/fusion-plasma-simulation/output"
+export WANDB_NOTES=$(git log -n 3 --pretty=format:"%B (%h - %ar) %N")
 
 # Run the Python script
 echo "Running testcuda.py..."

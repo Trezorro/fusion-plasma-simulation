@@ -12,12 +12,7 @@ from src.data_loaders import MyDataset
 
 conf = load_config_from_file()
 run = wandb.init(
-    name=conf.get("run_name", None),
-    project="plasma",
-    notes="Softplus activation beta 2",
-    tags=[],
-    config=conf,
-    dir="./output/wandb"
+    name=conf.get("run_name", None), project="plasma", tags=[], config=conf, dir="./output/wandb"
 )
 C = get_current_config()
 wandb.define_metric("loss/train", summary="min")
