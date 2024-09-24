@@ -20,7 +20,7 @@ wandb.define_metric("loss/val", summary="min")
 wandb.define_metric("loss/val_train_rollout", summary="min")
 
 wandb_logger = WandbLogger(
-    log_model=False,
+    log_model=True,
     experiment=run,
     save_dir="output/",
 )

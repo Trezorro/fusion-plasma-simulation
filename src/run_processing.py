@@ -12,8 +12,8 @@ rich.traceback.install()
 
 # %%
 # data_dir = 'shots/'
-DATA_INPUT_DIR = '../data/LHD_labeled_TCV/'
-DATA_SET_NAME = "2024_05_01-NaNsFiltered"
+DATA_INPUT_DIR = "/Users/milan/Downloads/tcv_data/maurizio"
+DATA_SET_NAME = "2024_09_24-Maurizio"
 DATE = pd.Timestamp.now().strftime("%Y_%m_%d")
 
 COLS_META = [
@@ -49,15 +49,13 @@ def index_shot_names(data_dir: str) -> tuple[dict[int, str], dict[int, str]]:
     # use regex to get sample number:
     sig_all = {int(re.findall(r'\d+', x)[0]): x for x in rich.progress.track(sig_all_names, "Indexing shots")}
     shot_no_list = list(sig_all.keys())
-    label_all = glob.glob(data_dir + 'TCV_*_apau_labeled.csv')
+    label_all = glob.glob(data_dir + 'TCV_*_*_labeled.csv')
     label_all = {
-        int(x.split("TCV_")[1].split("_apau_labeled.csv")[0]): x
-        for x in rich.progress.track(label_all, "Indexing labels")
+        int(x.split("TCV_")[1].split("_")[0]): x for x in rich.progress.track(label_all, "Indexing labels")
     }
     label_no_list = list(label_all.keys())
-    assert set(shot_no_list) <= set(
-        label_no_list
-    ), f"Not all shots have labels: {set(shot_no_list) - set(label_no_list)}"
+    assert set(shot_no_list
+              ) <= set(label_no_list), f"Not all shots have labels: {set(shot_no_list) - set(label_no_list)}"
     print(f"All shots: {shot_no_list}")
     print("Amount of shots: ", len(shot_no_list))
     print(f"Labels: {len(label_all)}")
@@ -92,7 +90,9 @@ def analyze_nans(one_shot_df: pd.DataFrame) -> tuple[pd.DataFrame, tuple[int, in
     consecutive_non_nans = {}
     for col in nan_cols:
         # Split groups by NaNs via cumsum, then get the maximum length of consecutive non-NaNs
-        around_nan_windows = one_shot_df[col].notnull().astype(int).groupby(one_shot_df[col].isnull().cumsum())
+        around_nan_windows = one_shot_df[col].notnull().astype(int).groupby(
+            one_shot_df[col].isnull().cumsum()
+        )
         consecutive_non_nans[col] = around_nan_windows.sum().max()
     # get start and end step of the longest window of non-NaNs over all columns:
     usable_rows = one_shot_df.dropna()
@@ -103,15 +103,19 @@ def analyze_nans(one_shot_df: pd.DataFrame) -> tuple[pd.DataFrame, tuple[int, in
         viable_time_steps = one_shot_df.loc[one_shot_df['nan_splits'] == longest_window, 'time_step']
         first_step = viable_time_steps.iloc[0]
         last_step = viable_time_steps.iloc[-1]
-    summary = pd.DataFrame({
-        "ShotNum": one_shot_df["ShotNum"].iloc[0],
-        "NaNs": nan_counts,
-                            "NaN ratio": nan_counts / len(one_shot_df),
-                            "Consecutive non-NaNs": consecutive_non_nans})
+    summary = pd.DataFrame(
+        {
+            "ShotNum": one_shot_df["ShotNum"].iloc[0],
+            "NaNs": nan_counts,
+            "NaN ratio": nan_counts / len(one_shot_df),
+            "Consecutive non-NaNs": consecutive_non_nans
+        }
+    )
     summary['Consecutive ratio'] = summary['Consecutive non-NaNs'] / len(one_shot_df)
     summary["Small C-ratio"] = summary["Consecutive ratio"] < 0.3
     summary['Total'] = len(one_shot_df)
     return summary, (first_step, last_step)
+
 
 def analyze_nans_over_all_shots(data_df: pd.DataFrame):
     if "Small C-ratio" in data_df.columns:
@@ -125,7 +129,7 @@ def analyze_nans_over_all_shots(data_df: pd.DataFrame):
             if summmary.empty:
                 continue
             results.append(summmary)
-        res_df= pd.concat(results)
+        res_df = pd.concat(results)
     # What columns are most often unusable?
     print("These are the columns that are most often unusable (they have no usable window without NaNs):")
     print(res_df["Small C-ratio"].groupby(level=0).sum().sort_values(ascending=False))
@@ -133,7 +137,9 @@ def analyze_nans_over_all_shots(data_df: pd.DataFrame):
     shots_n = data_df["ShotNum"].nunique()
     unusable_counts = res_df.groupby("ShotNum")["Small C-ratio"].sum().value_counts()
     n_unusable_columns_per_shot = unusable_counts.drop(0).sum()
-    print(f"Out of {shots_n} shots, {n_unusable_columns_per_shot} shots have 1 or more unusable columns. ({n_unusable_columns_per_shot/shots_n:.2%})")
+    print(
+        f"Out of {shots_n} shots, {n_unusable_columns_per_shot} shots have 1 or more unusable columns. ({n_unusable_columns_per_shot/shots_n:.2%})"
+    )
     print(unusable_counts)
 
 
@@ -144,9 +150,8 @@ def check_time_consistency(signal_df, frequency_tolerance=3e-3):
     frequency = 1 / time_diff.mean()
     step_size_std = time_diff.std()
     is_consistent = step_size_std < 1e-7 and abs(frequency - 1e4) < frequency_tolerance
-    inconsistent_steps = ~np.isclose(
-        time_diff[1:], time_diff.mean(), atol=1e-7, rtol=1e-2, equal_nan=True)
-    if 0< inconsistent_steps.sum() < 6:
+    inconsistent_steps = ~np.isclose(time_diff[1:], time_diff.mean(), atol=1e-7, rtol=1e-2, equal_nan=True)
+    if 0 < inconsistent_steps.sum() < 6:
         print(f"Inconsistent steps at: {signal_df['time'].iloc[2:-2][inconsistent_steps].to_list()}")
     # print(f"Frequency: {frequency}, is broadly consistent: {is_consistent}")
     # print(f"{inconsistent_steps.sum()} steps out of {len(inconsistent_steps)} were not exaclty the same as the mean step size.")
@@ -154,10 +159,12 @@ def check_time_consistency(signal_df, frequency_tolerance=3e-3):
 
 
 #%% Function definition: Combine all shots into one dataframe
-def combine_all_shots(sig_all: dict[int, str],
-                      label_all: dict[int, str],
-                      min_steps_filter: int = 5000,
-                      frequency_tolerance=3e-3) -> pd.DataFrame:
+def combine_all_shots(
+    sig_all: dict[int, str],
+    label_all: dict[int, str],
+    min_steps_filter: int = 5000,
+    frequency_tolerance=3e-3
+) -> pd.DataFrame:
     """Load and combine all shots into one dataframe. Check for consistency and discrepancies. 
 
     Guarantuees a frequency of 10 kHz and that the shot is at least min_steps_filter long.
@@ -204,9 +211,7 @@ def combine_all_shots(sig_all: dict[int, str],
             time_discrepancy += 1
         # check monotonicity of time
         if not sig["time"].is_monotonic_increasing:
-            print(
-                f"Time is not monotonically increasing for shot signal {shotno}"
-            )
+            print(f"Time is not monotonically increasing for shot signal {shotno}")
         if not label["time"].is_monotonic_increasing:
             print(f"Time is not monotonically increasing for label {shotno}")
 
@@ -217,18 +222,19 @@ def combine_all_shots(sig_all: dict[int, str],
 
         # check time consistency
         is_consistent, n_inconsistent, freq, step_size_std, t_start, t_end = check_time_consistency(
-            sig, frequency_tolerance=frequency_tolerance)
+            sig, frequency_tolerance=frequency_tolerance
+        )
         if not is_consistent or n_inconsistent > 10:
-            rich.print(f"Time is not consistent for shot {shotno}: Frequency: {freq}, Standard deviation of steps: {step_size_std}. {n_inconsistent} steps have a different time step.")
+            rich.print(
+                f"Time is not consistent for shot {shotno}: Frequency: {freq}, Standard deviation of steps: {step_size_std}. {n_inconsistent} steps have a different time step."
+            )
             print("Skipping shot.")
             time_inconsistency += 1
             continue
         ### End of consistency checks ###
 
-
         # extract columns from signal
-        shot_out = sig[ALL_SIG_COLLS].reset_index(
-            names='time_step').set_index("time")
+        shot_out = sig[ALL_SIG_COLLS].reset_index(names='time_step').set_index("time")
         # resample labels with ffill to time steps of signal
         label = label.set_index("time")
         label = label.reindex(shot_out.index, method='nearest', tolerance=0.01)
@@ -240,16 +246,21 @@ def combine_all_shots(sig_all: dict[int, str],
         ### Handle NaNs ###
         # count amount of columns with any nans
         raw_nan_summary, longest_window = analyze_nans(shot_out)
-        nan_summaries.append(raw_nan_summary) # for later analysis
+        nan_summaries.append(raw_nan_summary)  # for later analysis
         # Replace nans in NBI with 0, as per yoeri's suggestion
         shot_out.loc[shot_out["NBI"].isnull(), "NBI"] = 0
         nan_summary, (start_usable, end_usable) = analyze_nans(shot_out)
         # print a representation of the usable window in 100 steps
         last_time_step = shot_out["time_step"].iloc[-1]
-        print("Using",start_usable, "to", end_usable, ":","-" * ceil(start_usable/200) + "X" * ((end_usable - start_usable)//200) + "-" * ceil((last_time_step - end_usable)/200))
+        print(
+            "Using", start_usable, "to", end_usable, ":", "-" * ceil(start_usable / 200) + "X" *
+            ((end_usable - start_usable) // 200) + "-" * ceil((last_time_step - end_usable) / 200)
+        )
         # Other columns with too many NaNs are problmeatic, so we drop the shot
         if not nan_summary.empty and nan_summary["Small C-ratio"].any():
-            rich.print(f"Shot {shotno} has columns with too many NaNs ({nan_summary.index.tolist()}). Dropping the shot.")
+            rich.print(
+                f"Shot {shotno} has columns with too many NaNs ({nan_summary.index.tolist()}). Dropping the shot."
+            )
             nan_rejects += 1
             continue
         # slice the dataframe to only include the longest window of non-NaNs, using the time_step start and end
@@ -281,6 +292,7 @@ def load_shot(shotno: int, sig_all: dict[int, str], label_all: dict[int, str]):
     label_df = pd.read_csv(label_all[shotno])
     return sig_df, label_df
 
+
 def generate_report(data: str | pd.DataFrame):
     """Profile a dataframe from a saved parquet file or a freshly made dataframe directly.
 
@@ -293,8 +305,39 @@ def generate_report(data: str | pd.DataFrame):
         name = DATA_SET_NAME
         data_df = data
     profile = ProfileReport(data_df, title="Profiling Report " + name, explorative=True)
-    profile.to_file(name+".html")
-    print("Saved report to ", name+".html")
+    profile.to_file(name + ".html")
+    print("Saved report to ", name + ".html")
+
+
+#%% CHeck multiple data sets and compare them
+def compare_data_sets(input_dirs: list[str]):
+    shot_sets = {}
+    for data_dir in input_dirs:
+        data_name = data_dir.split("/")[-1]
+        sig_all, label_all = index_shot_names(data_dir)
+        print(data_name)
+        print(" - Duplicate shots: ", len(label_all) - len(set(label_all.keys())))
+        shot_sets[data_name] = list(label_all.keys())
+    total_set = set()
+    for name, shot_set in shot_sets.items():
+        new_elements = set(shot_set) - total_set
+        total_set |= set(shot_set)
+        print(f"Total shots in {name}: {len(shot_set)} (+ adding {len(new_elements)} new shots to the total.)")
+    print("Total uniqie shot set: ", len(total_set))
+    # Compare the sets
+    for i, (name, shot_set) in enumerate(shot_sets.items()):
+        for name2, shot_set2 in list(shot_sets.items())[i + 1:]:
+            print(f"Comparing {name} and {name2}")
+            print("Lengths of sets: ", len(shot_set), len(shot_set2))
+            left_unique = set(shot_set) - set(shot_set2)
+            right_unique = set(shot_set2) - set(shot_set)
+            print(" - Only in", name, "but not in", name2, "", len(left_unique), left_unique)
+            print(" - Only in", name2, "but not in", name, "", len(right_unique), right_unique)
+            print(" - In both sets: ", len(set(shot_set) & set(shot_set2)))
+
+    # data_df = combine_all_shots(sig_all, label_all)
+    # generate_report(data=data_df)
+    # result = {}
 
 
 #%% Run!
@@ -312,7 +355,14 @@ if __name__ == "__main__":
 #%%
 generate_report("data/" + DATA_SET_NAME + ".parquet")
 
-
+#%%
+data_set_dirs = [
+    "/Users/milan/Code/fusion/data/LHD_labeled_TCV",
+    "/Users/milan/Downloads/tcv_data/ffelici",
+    "/Users/milan/Downloads/tcv_data/maurizio",
+    "/Users/milan/Downloads/tcv_data/labit",
+]
+compare_data_sets(data_set_dirs)
 
 # %% Notebook style testing and profiling
 # generate_report("data/2024_04_23-all_preprocessed.parquet")

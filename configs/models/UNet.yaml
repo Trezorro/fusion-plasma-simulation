@@ -3,7 +3,7 @@ model:
   description: U net taking in a window xt-1, ct-1, and, conditioined on ct, predicting xt
   future_work: Padding strategy, dataloader and eval refractor. Set fuze length, let that determine layers.
   params:
-    c_channels: 11
+    c_channels: 7
     x_channels: 1
     out_channels: ${ model.params.x_channels }
     forecast_window: 20
@@ -11,7 +11,7 @@ model:
     hidden_channels_s: [64, 128, 256, 512, 1024]
     kernel_size: 3
     num_layers: 4
-    output_activation: softplus
+    output_activation: none
     upsample_at_fusing: false  # Changes the first up block to identity upsample, giving more space to state
     use_batch_norm: false # didn't help for CCNs
     conv_activation: SiLU # SiLU # ReLU
@@ -53,10 +53,10 @@ data:
     - KAPPA
     - DELTA  # linkerbovenhoek naar links vanuit hetmidden
     # # From X:
-    -  "FIR_core"  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
-    - "DML"
-    - "POHM"
-    - "Z_axis"
+    # -  "FIR_core"  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
+    # - "DML"
+    # - "POHM"
+    # - "Z_axis"
 
     label:
     - LHD_label
