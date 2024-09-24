@@ -142,6 +142,7 @@ class UNet(L.LightningModule):
         conv_activation: str = 'ReLU',
         upsample_at_fusing: bool = False,
         output_activation: str = "Softplus",
+        optimizer_params: dict = {},
         **kwargs
     ):
         super().__init__()
@@ -153,6 +154,7 @@ class UNet(L.LightningModule):
         self.out_channels = out_channels
         self.upsample_at_fusing = upsample_at_fusing
         self.loss = getattr(torch.nn, loss)()
+        self.optimizer_params = optimizer_params
         # self.n_blocks = n_blocks
         self.in_conv_A = DoubleConv(c_channels, 64, kernel_size=kernel_size)  # L = 64
         # self.down_B = DownBlock(64, 128, kernel_size=kernel_size)  # L = 32
@@ -253,7 +255,7 @@ class UNet(L.LightningModule):
         return x_out_pred
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+        optimizer = torch.optim.Adam(self.parameters(), **self.optimizer_params)
         return optimizer
 
     def log_summary(self, config: DictConfig):
