@@ -3,7 +3,7 @@ crop_margin: 1000  # Determines the unused period at start and end of each shot 
 random_start: true
 epochs: 6000
 batch_size: 32
-patience: 300
+patience: 500
 # model: model.yaml # To be replaced by respective yaml file content
 model: configs/models/UNet.yaml
 train_rollout: ${ model.params.train_rollout }
