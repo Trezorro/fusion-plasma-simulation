@@ -105,7 +105,7 @@ def analyze_nans(one_shot_df: pd.DataFrame) -> tuple[pd.DataFrame, tuple[int, in
         last_step = viable_time_steps.iloc[-1]
     summary = pd.DataFrame({
         "ShotNum": one_shot_df["ShotNum"].iloc[0],
-        "NaNs": nan_counts, 
+        "NaNs": nan_counts,
                             "NaN ratio": nan_counts / len(one_shot_df),
                             "Consecutive non-NaNs": consecutive_non_nans})
     summary['Consecutive ratio'] = summary['Consecutive non-NaNs'] / len(one_shot_df)
@@ -223,9 +223,9 @@ def combine_all_shots(sig_all: dict[int, str],
             print("Skipping shot.")
             time_inconsistency += 1
             continue
-        ### End of consistency checks ### 
+        ### End of consistency checks ###
 
-        
+
         # extract columns from signal
         shot_out = sig[ALL_SIG_COLLS].reset_index(
             names='time_step').set_index("time")
@@ -238,7 +238,7 @@ def combine_all_shots(sig_all: dict[int, str],
         memory += shot_out.memory_usage().sum()
 
         ### Handle NaNs ###
-        # count amount of columns with any nans 
+        # count amount of columns with any nans
         raw_nan_summary, longest_window = analyze_nans(shot_out)
         nan_summaries.append(raw_nan_summary) # for later analysis
         # Replace nans in NBI with 0, as per yoeri's suggestion
@@ -265,7 +265,7 @@ def combine_all_shots(sig_all: dict[int, str],
     print(f"Label shot number discrepancy: {label_shot_num_discrepancy}")
     print(f"Rejected shots due to too many NaNs: {nan_rejects}")
     rich.print(f"Memory usage: {memory / 1e6} MB")
-    
+
     return pd.concat(all_shot_dfs)
 
 
@@ -307,8 +307,10 @@ if __name__ == "__main__":
     generate_report(data=data_df)
     print("Saved to ", out_path)
 
-#%%
+    #%%
     exit(0)
+#%%
+generate_report("data/" + DATA_SET_NAME + ".parquet")
 
 
 

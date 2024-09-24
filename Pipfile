@@ -15,7 +15,7 @@ name = "pytorch"
 torch = {version = "*", index = "pytorch"}
 wandb = "*"
 pandas = "*"
-numpy = "*"
+numpy = "<2"
 matplotlib = "*"
 pyarrow = "*"
 plotly = "*"
