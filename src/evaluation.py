@@ -103,7 +103,7 @@ def get_and_plot_predictions(model, data_set, n=4, title_base=""):
     Plots n shots in the signal plot, and one signal from one shot in the spectogram plot.
     """
     C = get_current_config()
-    fourier_loss = FourierMSLE()
+    fourier_loss = FourierMSLE().to(model.device)
     model.eval()
     with torch.inference_mode():
         shot_numbers, controls, observables = next(
