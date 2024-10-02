@@ -4,8 +4,18 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import torch
 import torchaudio.transforms as audio_transforms
+import torchmetrics
 
 from src.config import get_current_config
+
+
+class FourierMSLE(torchmetrics.MeanSquaredLogError):
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor):
+        preds_fft = torch.abs(torch.fft.fft(preds))
+        target_fft = torch.abs(torch.fft.fft(target))
+        assert preds_fft.shape == target_fft.shape
+        super().update(preds_fft, target_fft)
 
 
 def get_sine_wave(frequency, duration, sample_rate=20000):
@@ -55,14 +65,14 @@ def spectogram_plot(signal: np.ndarray, title="", hop_length=10, win_length=50):
     fig.add_trace(
         px.line(
             x=np.arange(len(amplitudes)),  # t in sync with the hop windows
-            y=amplitudes,
+            y=np.log(amplitudes),
             labels={
                 'x': 'Frequency',
                 'y': 'Amplitude'
             },
             line_shape='linear',
             color_discrete_sequence=["rgb(255, 10, 10)"]
-        ).data[0].update(name='Frequency Spectrum', showlegend=True),
+        ).data[0].update(name='Frequency Spectrum (log)', showlegend=True),
         secondary_y=False,
     )
     # Signal
@@ -80,7 +90,7 @@ def spectogram_plot(signal: np.ndarray, title="", hop_length=10, win_length=50):
     )
 
     fig.update_layout(
-        title=title,
+        title="Fourier plot: " + title,
         legend=dict(
             x=0.01,
             y=0.99,
@@ -91,5 +101,4 @@ def spectogram_plot(signal: np.ndarray, title="", hop_length=10, win_length=50):
             borderwidth=2
         )
     )
-    fig.show()
     return fig

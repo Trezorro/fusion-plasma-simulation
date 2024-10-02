@@ -6,6 +6,7 @@ import lightning as L
 import torchinfo
 from omegaconf import DictConfig
 import wandb
+from src.fourier import FourierMSLE
 
 
 class DoubleConv(nn.Sequential):
@@ -154,6 +155,8 @@ class UNet(L.LightningModule):
         self.out_channels = out_channels
         self.upsample_at_fusing = upsample_at_fusing
         self.loss = getattr(torch.nn, loss)()
+        self.fourier_loss_train = FourierMSLE()
+        self.fourier_loss_val = FourierMSLE()
         self.optimizer_params = optimizer_params
         # self.n_blocks = n_blocks
         self.in_conv_A = DoubleConv(c_channels, 64, kernel_size=kernel_size)  # L = 64
@@ -226,6 +229,8 @@ class UNet(L.LightningModule):
         x_out_pred = self(x_in, c_in, c_out)
         loss = self.loss(x_out_pred, x_out)
         self.log("loss/train", loss, prog_bar=True)
+        self.fourier_loss_train(x_out_pred, x_out)
+        self.log("fourier_loss/train", self.fourier_loss_train, prog_bar=True, on_epoch=True, on_step=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -237,6 +242,8 @@ class UNet(L.LightningModule):
         x_out_pred = self(x_in, c_in, c_out)
         loss = self.loss(x_out_pred, x_out)
         self.log("loss/val", loss, prog_bar=True)
+        self.fourier_loss_val(x_out_pred, x_out)
+        self.log("fourier_loss/val", self.fourier_loss_val, prog_bar=True, on_epoch=True, on_step=True)
         return dict(loss=loss, outputs=x_out_pred)
 
     test_step = validation_step

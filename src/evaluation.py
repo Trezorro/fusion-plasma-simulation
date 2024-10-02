@@ -8,7 +8,7 @@ import lightning as L
 import lightning.pytorch as pl
 
 import wandb
-from src.fourier import spectogram_plot
+from src.fourier import spectogram_plot, FourierMSLE
 from src.config import get_current_config
 
 
@@ -81,7 +81,7 @@ def plot_shot_batch(df: pd.DataFrame, title="", cutoff_t=50):
         line_dash='is_prediction',
         line_shape='linear',
         category_orders={'is_prediction': ["Actual", "Prediction"]},
-        title=f"{wandb.run.name} | Predictions {title}"
+        title=f"Signal Plot: {title}"
     )
     C = get_current_config()
     fig.add_vrect(
@@ -97,12 +97,13 @@ def plot_shot_batch(df: pd.DataFrame, title="", cutoff_t=50):
     return fig
 
 
-def get_and_plot_predictions(model, data_set, n=4, title_postfix=""):
+def get_and_plot_predictions(model, data_set, n=4, title_base=""):
     """Get and plot predictions for a batch of shots. 
 
     Plots n shots in the signal plot, and one signal from one shot in the spectogram plot.
     """
     C = get_current_config()
+    fourier_loss = FourierMSLE()
     model.eval()
     with torch.inference_mode():
         shot_numbers, controls, observables = next(
@@ -113,26 +114,34 @@ def get_and_plot_predictions(model, data_set, n=4, title_postfix=""):
         )
         x_out = observables[:, -model.val_rollout:].to(model.device)
         loss = model.loss(x_out_pred, x_out)
+        fourier_loss_batch = fourier_loss(x_out_pred, x_out)
         val_train_rollout = model.loss(x_out_pred[:, :model.train_rollout], x_out[:, :model.train_rollout])
-        pred_out = observables.clone()
+        pred_full_line = observables.clone()
         # pred_out = torch.full_like(observables, fill_value=np.nan) # use if you want to start the forecast horizon cleanly.
-        pred_out[:, -C.validation_rollout:] = x_out_pred[:, -C.validation_rollout:].cpu()
-        df = build_output_df(shot_numbers, controls, observables, pred_out)
-        fig_shots = plot_shot_batch(
-            df,
-            title=title_postfix + f" (TRO Loss: {val_train_rollout:.5f} / Full Loss: {loss:.5f})",
-            cutoff_t=C.seq_length - C.validation_rollout
+        pred_full_line[:, -C.validation_rollout:] = x_out_pred[:, -C.validation_rollout:].cpu()
+        df = build_output_df(shot_numbers, controls, observables, pred_full_line)
+        title = title_base + f" (Fourier Loss: {fourier_loss_batch:.5f} / Full Loss: {loss:.5f})"
+        fig_shots = plot_shot_batch(df, title=title, cutoff_t=C.seq_length - C.validation_rollout)
+        # Plot spectograms of each prediction pair in each shot
+        # start with plotting: 1. the ground truth in the forecast horizon.
+        # Get the signal for the first shot, below the cutoff_t, for only the target variable.
+        # TODO: Test what happens if we have multiple variables.
+        first_shot = df.loc[df.index[0]]
+        forecast_only = first_shot.query("t >= @C.seq_length - @C.validation_rollout")
+        signal_pred = forecast_only[[f"^{i}" for i in C.data.cols.x]].values
+        signal_true = forecast_only[C.data.cols.x].values
+        fourier_loss_forecast = FourierMSLE()(torch.tensor(signal_pred), torch.tensor(signal_true))
+        full_true_signal = first_shot[C.data.cols.x].values
+        fig_spec = spectogram_plot(
+            full_true_signal,
+            title=title_base + f" shot #{df.index[0]} (Fourier Loss forecast: {fourier_loss_forecast:.6f})",
+            hop_length=10,
+            win_length=50
         )
+        if wandb.run.disabled:
+            fig_shots.show()
+            fig_spec.show()
     model.train()
-    # Plot spectograms of each prediction pair in each shot
-    # start with plotting: 1. the ground truth in the forecast horizon.
-    # Get the signal for the first shot, below the cutoff_t, for only the target variable.
-    # TODO: Test what happens if we have multiple variables.
-    signal = df.loc[df.index[0]][C.data.cols.x].values
-    fig_spec = spectogram_plot(signal, title_postfix, hop_length=10, win_length=50)
-    if wandb.run.disabled:
-        fig_shots.show()
-        fig_spec.show()
     return fig_shots, fig_spec
 
 
@@ -153,7 +162,7 @@ class PlotPredictionsCallback(L.Callback):
                 model=pl_module,
                 data_set=trainer.val_dataloaders.dataset,  # type: ignore
                 n=self.num_samples,
-                title_postfix=f"Epoch {trainer.current_epoch}"
+                title_base=f"{wandb.run.name} | Epoch {trainer.current_epoch}"
             )
             wandb.log({"val/prediction_plot": fig_shots, "val/spectogram_plot": fig_spec}, commit=False)
 
@@ -166,7 +175,7 @@ class PlotPredictionsCallback(L.Callback):
                     model=pl_module,
                     data_set=trainer.train_dataloader.dataset,  # type: ignore
                     n=self.num_samples,
-                    title_postfix=f"TRAINDATA - Epoch {trainer.current_epoch}"
+                    title_base=f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
                 )
                 wandb.log(
                     {
