@@ -2,10 +2,13 @@
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import torch
 from torch.utils import data
 import lightning as L
 import lightning.pytorch as pl
+import torchaudio.transforms as audio_transforms
 
 import wandb
 from src.config import get_current_config
@@ -21,7 +24,9 @@ def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Ten
         controls (torch.Tensor): The control variables. (batch_size, seq_length, n_controls)
         observables (torch.Tensor): The observable variables. (batch_size, seq_length, n_observables)
         outputs (torch.Tensor): The model outputs. (batch_size, seq_length, n_observables)
-
+    Returns (pd.DataFrame): The dataframe with the predictions.
+        Index: ShotNum
+        Columns: t, Target variables predictions, ground truth target variables
     """
     C = get_current_config()
     output_cols = [f"^{i}" for i in C.data.cols.x]
@@ -37,10 +42,10 @@ def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Ten
         columns=["t"] + output_cols + C.data.cols.x  # + C.data.cols.c
     )
     for shot, output, control_seq, observable_seq in zip(
-            shot_numbers,
-            outputs,
-            controls,
-            observables,
+        shot_numbers,
+        outputs,
+        controls,
+        observables,
     ):
         df.loc[int(shot)] = np.concatenate(
             [
@@ -49,7 +54,8 @@ def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Ten
                 observable_seq.numpy(),
                 # control_seq.numpy()
             ],
-            axis=1)
+            axis=1
+        )
     return df
 
 
@@ -61,20 +67,24 @@ def plot_sample(df: pd.DataFrame, title="", cutoff_t=50):
             'level_2': 'variable'
         }
     )
-    df_stacked['is_prediction'] = df_stacked['variable'].str.startswith('^').map({
-        True: 'Prediction',
-        False: 'Actual'
-    })
+    df_stacked['is_prediction'] = df_stacked['variable'].str.startswith('^').map(
+        {
+            True: 'Prediction',
+            False: 'Actual'
+        }
+    )
     df_stacked['variable'] = df_stacked['variable'].str.replace('^', '')
-    fig = px.line(df_stacked,
-                  x='t',
-                  y='value',
-                  color='shot',
-                  symbol='variable',
-                  line_dash='is_prediction',
-                  line_shape='linear',
-                  category_orders={'is_prediction': ["Actual", "Prediction"]},
-                  title=f"{wandb.run.name} | Predictions {title}")
+    fig = px.line(
+        df_stacked,
+        x='t',
+        y='value',
+        color='shot',
+        symbol='variable',
+        line_dash='is_prediction',
+        line_shape='linear',
+        category_orders={'is_prediction': ["Actual", "Prediction"]},
+        title=f"{wandb.run.name} | Predictions {title}"
+    )
     C = get_current_config()
     fig.add_vrect(
         # type="line",
@@ -89,12 +99,95 @@ def plot_sample(df: pd.DataFrame, title="", cutoff_t=50):
     return fig
 
 
-def log_predictions(model, data_set, n=4, title_postfix=""):  # TODO use n_samples instead of n
+def get_sine_wave(frequency, duration, sample_rate=20000):
+    """Generate a sine wave with the given frequency and duration."""
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    x = np.sin(2 * np.pi * frequency * t)
+    return x
+
+
+def spectogram_plot(df: pd.DataFrame, title="", cutoff_t=50):
+    """Plot the spectogram of the data. Df should be a single shot."""
+    C = get_current_config()
+    filtered_df = df[df['t'] <= 190]
+    hop_length = 10
+    win_length = 50
+    to_spectrogram = audio_transforms.Spectrogram(
+        n_fft=190, win_length=win_length, hop_length=hop_length, power=1, pad=0
+    )
+    sine = get_sine_wave(500, 0.0191, sample_rate=10000)
+    sine += get_sine_wave(1000, 0.0191, sample_rate=10000)
+    sine += get_sine_wave(4000, 0.0191, sample_rate=10000)
+    # sine += get_sine_wave(4999, 1, sample_rate=10000)
+    signal = sine
+    signal = filtered_df[C.data.cols.x].values.astype('float64').squeeze()
+    # spectogram = to_spectrogram(torch.tensor(sine).float()).numpy()
+    spectogram = to_spectrogram(torch.tensor(signal)).numpy()
+    freq_domain = torch.fft.fft(torch.tensor(signal)).numpy()
+    amplitudes = np.abs(freq_domain)
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(
+        go.Heatmap(
+            z=np.log(spectogram),
+            dx=hop_length,
+            colorscale='Viridis',
+            colorbar=dict(title='Log Value'),
+            name=f'STFT spectrogram (Win: {win_length}, Hop: {hop_length})',
+            showlegend=True
+        ),
+        secondary_y=False
+    )
+
+    fig.add_trace(
+        px.line(
+            x=np.arange(len(amplitudes)),  # t in sync with the hop windows
+            y=amplitudes,
+            labels={
+                'x': 'Frequency',
+                'y': 'Amplitude'
+            },
+            line_shape='linear',
+            color_discrete_sequence=["rgb(255, 10, 10)"]
+        ).data[0].update(name='Frequency Spectrum', showlegend=True),
+        secondary_y=False,
+    )
+
+    fig.add_trace(
+        px.line(
+            x=np.arange(len(signal)),  # t in sync with the hop windows
+            y=signal,
+            labels={
+                'x': 'Time',
+                'y': 'Value'
+            },
+            line_shape='linear'
+        ).data[0].update(name='Signal', showlegend=True),
+        secondary_y=True
+    )
+
+    fig.update_layout(
+        title=title,
+        legend=dict(
+            x=0.01,
+            y=0.99,
+            traceorder='normal',
+            font=dict(family='sans-serif', size=12, color='black'),
+            bgcolor='LightSteelBlue',
+            bordercolor='Black',
+            borderwidth=2
+        )
+    )
+    fig.show()
+    return fig
+
+
+def get_and_plot_predictions(model, data_set, n=4, title_postfix=""):
     C = get_current_config()
     model.eval()
     with torch.inference_mode():
         shot_numbers, controls, observables = next(
-            iter(data.DataLoader(data_set, batch_size=n, shuffle=False)))
+            iter(data.DataLoader(data_set, batch_size=n, shuffle=False))
+        )
         x_out_pred = model.prediction_step(
             (shot_numbers, controls.to(model.device), observables.to(model.device)), 0
         )
@@ -105,15 +198,20 @@ def log_predictions(model, data_set, n=4, title_postfix=""):  # TODO use n_sampl
         # pred_out = torch.full_like(observables, fill_value=np.nan) # use if you want to start the forecast horizon cleanly.
         pred_out[:, -C.validation_rollout:] = x_out_pred[:, -C.validation_rollout:].cpu()
         df = build_output_df(shot_numbers, controls, observables, pred_out)
-        fig = plot_sample(df,
-                          title=title_postfix +
-                          f" (TRO Loss: {val_train_rollout:.5f} / Full Loss: {loss:.5f})",
-                          cutoff_t=C.seq_length - C.validation_rollout)
+        fig = plot_sample(
+            df,
+            title=title_postfix + f" (TRO Loss: {val_train_rollout:.5f} / Full Loss: {loss:.5f})",
+            cutoff_t=C.seq_length - C.validation_rollout
+        )
     model.train()
     if wandb.run.disabled:
         fig.show()
+    # Plot spectograms of each prediction pair in each shot
+    # start with plotting: 1. the ground truth in the forecast horizon.
+    fig = spectogram_plot(df.loc[df.index[0]], title_postfix, cutoff_t=C.seq_length - C.validation_rollout)
     # table = wandb.Table(dataframe=df.reset_index(names='ShotNum'))
     return fig
+
 
 class PlotPredictionsCallback(L.Callback):
 
@@ -128,7 +226,7 @@ class PlotPredictionsCallback(L.Callback):
         # Skip for all other epochs
         if trainer.current_epoch % self.every_n_epochs == 0:
             # Generate images
-            fig = log_predictions(
+            fig = get_and_plot_predictions(
                 model=pl_module,
                 data_set=trainer.val_dataloaders.dataset,  # type: ignore
                 n=self.num_samples,
@@ -146,7 +244,7 @@ class PlotPredictionsCallback(L.Callback):
             # Skip for all other epochs
             if trainer.current_epoch % self.train_every_n_epochs == 0:
                 # Generate images
-                fig = log_predictions(
+                fig = get_and_plot_predictions(
                     model=pl_module,
                     data_set=trainer.train_dataloader.dataset,  # type: ignore
                     n=self.num_samples,
