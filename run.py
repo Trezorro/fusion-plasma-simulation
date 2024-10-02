@@ -57,7 +57,10 @@ trainer = L.Trainer(
         PlotPredictionsCallback(num_samples=5, every_n_epochs=5, train_every_n_epochs=20),
     ]
 )
-
+print("Starting training with first validation...")
 trainer.validate(model=model, dataloaders=val_loader)
+print("Starting model fit...")
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+print("Starting final validation...")
 trainer.test(model=model, dataloaders=val_loader)
+print("Finished training.")
