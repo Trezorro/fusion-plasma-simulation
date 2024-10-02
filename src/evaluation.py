@@ -2,15 +2,13 @@
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import torch
 from torch.utils import data
 import lightning as L
 import lightning.pytorch as pl
-import torchaudio.transforms as audio_transforms
 
 import wandb
+from src.fourier import spectogram_plot
 from src.config import get_current_config
 
 
@@ -26,20 +24,20 @@ def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Ten
         outputs (torch.Tensor): The model outputs. (batch_size, seq_length, n_observables)
     Returns (pd.DataFrame): The dataframe with the predictions.
         Index: ShotNum
-        Columns: t, Target variables predictions, ground truth target variables
+        Columns: t,
+            Target variables predictions (^FIR, ^PD, ^DML, ^POHM, ^Z_axis),
+            ground truth target variables (FIR, PD, DML, POHM, Z_axis)
+            Removed: control variables (IP, gas_fringes, NBI, ECRH, a_minor, KAPPA, DELTA)
     """
     C = get_current_config()
     output_cols = [f"^{i}" for i in C.data.cols.x]
     seq_length = outputs.shape[1]
-    # DF will have columns:
-    # ShotNum, t,
-    # ^FIR, ^PD, ^DML, ^POHM, ^Z_axis,
-    # FIR, PD, DML, POHM, Z_axis,
-    # IP, gas_fringes, NBI, ECRH, a_minor, KAPPA, DELTA
+
     df = pd.DataFrame(
         index=np.repeat(shot_numbers.numpy().astype(int),
                         seq_length),  # ShotNum, each repeated seq_length times
-        columns=["t"] + output_cols + C.data.cols.x  # + C.data.cols.c
+        columns=["t"] + output_cols + C.data.cols.x,  # + C.data.cols.c,
+        dtype=np.float32
     )
     for shot, output, control_seq, observable_seq in zip(
         shot_numbers,
@@ -59,8 +57,8 @@ def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Ten
     return df
 
 
-def plot_sample(df: pd.DataFrame, title="", cutoff_t=50):
-    """Plot a shot of the data. Df shot be a single shot."""
+def plot_shot_batch(df: pd.DataFrame, title="", cutoff_t=50):
+    """Plot a batch of shots into one plot, with predictions on the right in dotted lines."""
     df_stacked = df.set_index('t', append=True).stack(future_stack=True).reset_index(name='value').rename(
         columns={
             'level_0': 'shot',
@@ -99,89 +97,11 @@ def plot_sample(df: pd.DataFrame, title="", cutoff_t=50):
     return fig
 
 
-def get_sine_wave(frequency, duration, sample_rate=20000):
-    """Generate a sine wave with the given frequency and duration."""
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    x = np.sin(2 * np.pi * frequency * t)
-    return x
-
-
-def spectogram_plot(df: pd.DataFrame, title="", cutoff_t=50):
-    """Plot the spectogram of the data. Df should be a single shot."""
-    C = get_current_config()
-    filtered_df = df[df['t'] <= 190]
-    hop_length = 10
-    win_length = 50
-    to_spectrogram = audio_transforms.Spectrogram(
-        n_fft=190, win_length=win_length, hop_length=hop_length, power=1, pad=0
-    )
-    sine = get_sine_wave(500, 0.0191, sample_rate=10000)
-    sine += get_sine_wave(1000, 0.0191, sample_rate=10000)
-    sine += get_sine_wave(4000, 0.0191, sample_rate=10000)
-    # sine += get_sine_wave(4999, 1, sample_rate=10000)
-    signal = sine
-    signal = filtered_df[C.data.cols.x].values.astype('float64').squeeze()
-    # spectogram = to_spectrogram(torch.tensor(sine).float()).numpy()
-    spectogram = to_spectrogram(torch.tensor(signal)).numpy()
-    freq_domain = torch.fft.fft(torch.tensor(signal)).numpy()
-    amplitudes = np.abs(freq_domain)
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_trace(
-        go.Heatmap(
-            z=np.log(spectogram),
-            dx=hop_length,
-            colorscale='Viridis',
-            colorbar=dict(title='Log Value'),
-            name=f'STFT spectrogram (Win: {win_length}, Hop: {hop_length})',
-            showlegend=True
-        ),
-        secondary_y=False
-    )
-
-    fig.add_trace(
-        px.line(
-            x=np.arange(len(amplitudes)),  # t in sync with the hop windows
-            y=amplitudes,
-            labels={
-                'x': 'Frequency',
-                'y': 'Amplitude'
-            },
-            line_shape='linear',
-            color_discrete_sequence=["rgb(255, 10, 10)"]
-        ).data[0].update(name='Frequency Spectrum', showlegend=True),
-        secondary_y=False,
-    )
-
-    fig.add_trace(
-        px.line(
-            x=np.arange(len(signal)),  # t in sync with the hop windows
-            y=signal,
-            labels={
-                'x': 'Time',
-                'y': 'Value'
-            },
-            line_shape='linear'
-        ).data[0].update(name='Signal', showlegend=True),
-        secondary_y=True
-    )
-
-    fig.update_layout(
-        title=title,
-        legend=dict(
-            x=0.01,
-            y=0.99,
-            traceorder='normal',
-            font=dict(family='sans-serif', size=12, color='black'),
-            bgcolor='LightSteelBlue',
-            bordercolor='Black',
-            borderwidth=2
-        )
-    )
-    fig.show()
-    return fig
-
-
 def get_and_plot_predictions(model, data_set, n=4, title_postfix=""):
+    """Get and plot predictions for a batch of shots. 
+
+    Plots n shots in the signal plot, and one signal from one shot in the spectogram plot.
+    """
     C = get_current_config()
     model.eval()
     with torch.inference_mode():
@@ -198,19 +118,22 @@ def get_and_plot_predictions(model, data_set, n=4, title_postfix=""):
         # pred_out = torch.full_like(observables, fill_value=np.nan) # use if you want to start the forecast horizon cleanly.
         pred_out[:, -C.validation_rollout:] = x_out_pred[:, -C.validation_rollout:].cpu()
         df = build_output_df(shot_numbers, controls, observables, pred_out)
-        fig = plot_sample(
+        fig_shots = plot_shot_batch(
             df,
             title=title_postfix + f" (TRO Loss: {val_train_rollout:.5f} / Full Loss: {loss:.5f})",
             cutoff_t=C.seq_length - C.validation_rollout
         )
     model.train()
-    if wandb.run.disabled:
-        fig.show()
     # Plot spectograms of each prediction pair in each shot
     # start with plotting: 1. the ground truth in the forecast horizon.
-    fig = spectogram_plot(df.loc[df.index[0]], title_postfix, cutoff_t=C.seq_length - C.validation_rollout)
-    # table = wandb.Table(dataframe=df.reset_index(names='ShotNum'))
-    return fig
+    # Get the signal for the first shot, below the cutoff_t, for only the target variable.
+    # TODO: Test what happens if we have multiple variables.
+    signal = df.loc[df.index[0]][C.data.cols.x].values
+    fig_spec = spectogram_plot(signal, title_postfix, hop_length=10, win_length=50)
+    if wandb.run.disabled:
+        fig_shots.show()
+        fig_spec.show()
+    return fig_shots, fig_spec
 
 
 class PlotPredictionsCallback(L.Callback):
@@ -226,33 +149,28 @@ class PlotPredictionsCallback(L.Callback):
         # Skip for all other epochs
         if trainer.current_epoch % self.every_n_epochs == 0:
             # Generate images
-            fig = get_and_plot_predictions(
+            fig_shots, fig_spec = get_and_plot_predictions(
                 model=pl_module,
                 data_set=trainer.val_dataloaders.dataset,  # type: ignore
                 n=self.num_samples,
                 title_postfix=f"Epoch {trainer.current_epoch}"
             )
-            wandb.log(
-                {  #"predictions/val": table, 
-                    "val/prediction_plot": fig
-                },
-                commit=False
-            )
+            wandb.log({"val/prediction_plot": fig_shots, "val/spectogram_plot": fig_spec}, commit=False)
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
         if self.train_every_n_epochs:
             # Skip for all other epochs
             if trainer.current_epoch % self.train_every_n_epochs == 0:
                 # Generate images
-                fig = get_and_plot_predictions(
+                fig_shots, fig_spec = get_and_plot_predictions(
                     model=pl_module,
                     data_set=trainer.train_dataloader.dataset,  # type: ignore
                     n=self.num_samples,
                     title_postfix=f"TRAINDATA - Epoch {trainer.current_epoch}"
                 )
                 wandb.log(
-                    {  #"predictions/val": table, 
-                        "train/prediction_plot": fig
-                    },
-                    commit=False
+                    {
+                        "train/prediction_plot": fig_shots,
+                        "train/spectogram_plot": fig_spec
+                    }, commit=False
                 )
