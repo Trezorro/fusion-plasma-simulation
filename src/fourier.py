@@ -102,3 +102,78 @@ def spectogram_plot(signal: np.ndarray, title="", hop_length=10, win_length=50):
         )
     )
     return fig
+
+
+def signal_fourier_comparison_plot(true_signal: np.ndarray, predicted_signal: np.ndarray, title=""):
+    """Plot the true and predicted signals and their corresponding amplitudes."""
+    true_signal = true_signal.squeeze()
+    predicted_signal = predicted_signal.squeeze()
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # True Signal
+    fig.add_trace(
+        go.Scatter(
+            x=np.arange(len(true_signal)),
+            y=true_signal,
+            mode='lines+markers',
+            name='True Signal',
+            line=dict(color='blue',)
+        ),
+        secondary_y=True
+    )
+
+    # Predicted Signal
+    fig.add_trace(
+        go.Scatter(
+            x=np.arange(len(predicted_signal)),
+            y=predicted_signal,
+            mode='lines+markers',
+            name='Predicted Signal',
+            line=dict(color='blue', dash='dash')
+        ),
+        secondary_y=True
+    )
+
+    # True Signal Amplitudes
+    true_freq_domain = torch.fft.fft(torch.tensor(true_signal)).numpy()
+    true_amplitudes = np.abs(true_freq_domain)
+    fig.add_trace(
+        go.Scatter(
+            x=np.arange(len(true_amplitudes)),
+            y=np.log(true_amplitudes),
+            mode='lines',
+            name='True Signal Amplitudes (log)',
+            line=dict(color='red')
+        ),
+        secondary_y=False
+    )
+
+    # Predicted Signal Amplitudes
+    predicted_freq_domain = torch.fft.fft(torch.tensor(predicted_signal)).numpy()
+    predicted_amplitudes = np.abs(predicted_freq_domain)
+    fig.add_trace(
+        go.Scatter(
+            x=np.arange(len(predicted_amplitudes)),
+            y=np.log(predicted_amplitudes),
+            mode='lines',
+            name='Predicted Signal Amplitudes (log)',
+            line=dict(color='red', dash='dash')
+        ),
+        secondary_y=False
+    )
+
+    fig.update_layout(
+        title="Signal Comparison: " + title,
+        xaxis_title='Time / Frequency',
+        yaxis_title='Value',
+        legend=dict(
+            x=0.01,
+            y=0.99,
+            traceorder='normal',
+            font=dict(family='sans-serif', size=12, color='black'),
+            bgcolor='Azure',
+            bordercolor='Black',
+            borderwidth=2
+        )
+    )
+    return fig

@@ -1,4 +1,5 @@
 """Functions for evaluating and visualizing model performance."""
+import signal
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -8,7 +9,7 @@ import lightning as L
 import lightning.pytorch as pl
 
 import wandb
-from src.fourier import spectogram_plot, FourierMSLE
+from src.fourier import spectogram_plot, FourierMSLE, signal_fourier_comparison_plot
 from src.config import get_current_config
 
 
@@ -131,12 +132,17 @@ def get_and_plot_predictions(model, data_set, n=4, title_base=""):
         signal_pred = forecast_only[[f"^{i}" for i in C.data.cols.x]].values
         signal_true = forecast_only[C.data.cols.x].values
         fourier_loss_forecast = FourierMSLE()(torch.tensor(signal_pred), torch.tensor(signal_true))
-        full_true_signal = first_shot[C.data.cols.x].values
-        fig_spec = spectogram_plot(
-            full_true_signal,
-            title=title_base + f" shot #{df.index[0]} (Fourier Loss forecast: {fourier_loss_forecast:.6f})",
-            hop_length=10,
-            win_length=50
+        # full_true_signal = first_shot[C.data.cols.x].values
+        # fig_spec = spectogram_plot(
+        #     full_true_signal,
+        #     title=title_base + f" shot #{df.index[0]} (Fourier Loss forecast: {fourier_loss_forecast:.6f})",
+        #     hop_length=10,
+        #     win_length=50
+        # )
+        fig_spec = signal_fourier_comparison_plot(
+            signal_true,
+            signal_pred,
+            title=title_base + f" shot #{df.index[0]} (Fourier Loss forecast: {fourier_loss_forecast:.6f})"
         )
         if wandb.run.disabled:
             fig_shots.show()
