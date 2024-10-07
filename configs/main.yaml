@@ -5,7 +5,7 @@ epochs: 6000
 batch_size: 32
 patience: 500
 # model: model.yaml # To be replaced by respective yaml file content
-model: configs/models/UNet.yaml
+model: configs/models/UNet_fourier.yaml
 train_rollout: ${ model.params.train_rollout }
 validation_rollout: ${ model.params.validation_rollout }
 

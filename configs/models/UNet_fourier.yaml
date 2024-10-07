@@ -1,0 +1,62 @@
+model:
+  Class: UNetFourier
+  description: U net taking in a window xt-1, ct-1, and, conditioined on ct, predicting xt
+  future_work: Padding strategy, dataloader and eval refractor. Set fuze length, let that determine layers.
+  params:
+    c_channels: 7
+    x_channels: 1
+    out_channels: ${ model.params.x_channels }
+    forecast_window: 20
+    hidden_channels_u: [64, 128, 256, 512]
+    hidden_channels_s: [64, 128, 256, 512, 1024]
+    kernel_size: 3
+    num_layers: 4
+    output_activation: softplus
+    upsample_at_fusing: false  # Changes the first up block to identity upsample, giving more space to state
+    use_batch_norm: false # didn't help for CCNs
+    conv_activation: SiLU # SiLU # ReLU
+    use_padding: false
+    use_tanh_output: true
+    train_rollout: ${ model.params.forecast_window }
+    validation_rollout: ${ model.params.forecast_window }
+    loss: MSELoss # L1Loss #  TODO try absolute error
+    optimizer_params:
+      lr: 0.001 # Default 0.001
+      weight_decay: 0  # Default 0
+      amsgrad: true  # Default false
+
+
+seq_length: 210
+
+
+data:
+  dir: ./data/
+  file: 2024_05_01-NaNsFiltered.parquet
+  cols:
+    meta:
+    - ShotNum
+    - time
+    x: [
+            # "FIR",  # density lijn Interferometer
+            # "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
+            "PD",  # photodiode lijn op de divertor
+            # "DML",  # Magnetische respons  correleert met de energie in het plasma
+            # "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
+            # "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
+        ]
+    c:
+    - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
+    - gas_fringes  # Ingepompte gas
+    - NBI  # manieren om te verhitten: colliding Neutral beam injection
+    - ECRH  # magnetron.
+    - a_minor  # reel gemeten plasma shape a k d (horizontale radius
+    - KAPPA
+    - DELTA  # linkerbovenhoek naar links vanuit hetmidden
+    # # From X:
+    # -  "FIR_core"  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
+    # - "DML"
+    # - "POHM"
+    # - "Z_axis"
+
+    label:
+    - LHD_label

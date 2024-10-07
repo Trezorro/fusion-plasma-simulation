@@ -9,7 +9,7 @@ from src.fourier import FourierMSLE
 from src.models.unet_components import DoubleConv, DownBlock, UpBlock, print_layer_line
 
 
-class UNet(L.LightningModule):
+class UNetFourier(L.LightningModule):
 
     def __init__(
         self,
@@ -78,8 +78,11 @@ class UNet(L.LightningModule):
         with torch.no_grad():
             warmup_window = torch.cat((x_in, c_in), dim=2)  # (batch_size, seq_length, variables c + x)
             # put channel dimension second
-            warmup_window = warmup_window.permute(0, 2, 1)
-            c_out = c_out.permute(0, 2, 1)
+            warmup_window = warmup_window.permute(0, 2, 1)  # (batch_size, variables c + x, seq_length)
+            c_out = c_out.permute(0, 2, 1)  # (batch_size, variables c, forecast_window)
+
+        warmup_window = torch.fft.rfft(warmup_window, dim=2)
+        c_out = torch.fft.rfft(c_out, dim=2)
 
         # Contracting path A to D
         ac = self.in_conv_A(c_out)
@@ -98,6 +101,7 @@ class UNet(L.LightningModule):
         x_out = self.out_conv(ax)
         x_out = self.out_activation(x_out)  # (batch_size, variables x, seq_length)
 
+        x_out = torch.fft.irfft(x_out, dim=2)
         return x_out.permute(0, 2, 1)  # Returned as (batch_size, seq_length, variables x)
 
     def training_step(self, batch, batch_idx):
@@ -197,5 +201,5 @@ if __name__ == '__main__':
     from src.config import load_config_from_file
 
     C = load_config_from_file(as_omega=True)
-    model = UNet(**C['model']['params'])
+    model = UNetFourier(**C['model']['params'])
     model.log_summary(C)
