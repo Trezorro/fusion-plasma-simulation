@@ -1,6 +1,7 @@
 """Let's test how to translate a signal to fourier space and back."""
 #%%
 from matplotlib import legend
+from matplotlib.pylab import f
 from src import fourier
 import numpy as np
 import torch
@@ -97,8 +98,25 @@ def plot_signals(a: torch.Tensor, b: torch.Tensor, t: np.ndarray):
     fig.show()
 
 
+def plot_fourier_space(fourier_signal):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=np.arange(len(fourier_signal)), y=fourier_signal.abs(), mode="lines"))
+    fig.update_layout(title="Fourier Transform")
+    fig.show()
+
+
 for signal, fourier_signal in zip(signals, fourier_signals):
     inverse_signal = torch.fft.irfft(fourier_signal)
-    plot_signals(signal, fourier_signal, t)
+    plot_signals(signal, inverse_signal, t)
+    plot_fourier_space(fourier_signal)
 
+# %% Test multi channel signal dimensions
+
+signals = torch.stack([sine_wave, gaussian_wave, mixture_wave])
+signals.size()
+# %%
+fourier_space = torch.fft.rfft(signals)
+fourier_space.size()
+# %%
+torch.fft.irfft(fourier_space).size()
 # %%
