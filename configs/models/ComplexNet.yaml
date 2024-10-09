@@ -1,13 +1,25 @@
-# run_name: TestRunName
-crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
-random_start: true
-epochs: 6000
-batch_size: 32
-patience: 500
-# model: model.yaml # To be replaced by respective yaml file content
-model: configs/models/ComplexNet.yaml
-train_rollout: ${ model.params.train_rollout }
-validation_rollout: ${ model.params.validation_rollout }
+model:
+  Class: ComplexNet
+  description: Simple MLP based model that predicts via frequency domain.
+  future_work: Maybe output frequency domain
+  params:
+    c_channels: 7
+    x_channels: 1
+    out_channels: ${ model.params.x_channels }
+    warmup_window: 64
+    forecast_window: 64
+    mlp_hidden_dims: [1024, 512, 256]
+    output_activation: none
+    train_rollout: ${ model.params.forecast_window }
+    validation_rollout: ${ model.params.forecast_window }
+    loss: MSELoss # L1Loss #  TODO try absolute error
+    optimizer_params:
+      lr: 0.001 # Default 0.001
+      weight_decay: 0  # Default 0
+      amsgrad: true  # Default false
+
+
+seq_length: 128
 
 
 data:
@@ -33,5 +45,11 @@ data:
     - a_minor  # reel gemeten plasma shape a k d (horizontale radius
     - KAPPA
     - DELTA  # linkerbovenhoek naar links vanuit hetmidden
+    # # From X:
+    # -  "FIR_core"  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
+    # - "DML"
+    # - "POHM"
+    # - "Z_axis"
+
     label:
     - LHD_label
