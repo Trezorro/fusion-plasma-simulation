@@ -81,6 +81,15 @@ echo "-----------------------------------------------------------"
 sync_slurms
 echo "-----------------------------------------------------------"
 
+echo "Syncing results from HPC in 10 seconds..."
+sleep 10
+ssh $REMOTE_USER@$REMOTE_HOST << EOF
+    squeue
+EOF
+echo "-----------------------------------------------------------"
+sync_slurms
+echo "-----------------------------------------------------------"
+
 echo "Syncing results from HPC in 30 seconds..."
 sleep 30
 ssh $REMOTE_USER@$REMOTE_HOST << EOF
