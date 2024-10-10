@@ -11,6 +11,7 @@ validation_rollout: ${ model.params.validation_rollout }
 
 
 data:
+  Loader: MyDataset
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
   cols:

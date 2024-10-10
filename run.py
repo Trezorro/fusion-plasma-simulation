@@ -8,7 +8,7 @@ import lightning.pytorch.callbacks as pl_callbacks
 from src.config import get_current_config, load_config_from_file
 from src.evaluation import PlotPredictionsCallback
 import src.models
-from src.data_loaders import MyDataset
+import src.data_loaders
 
 conf = load_config_from_file()
 run = wandb.init(
@@ -31,7 +31,9 @@ model.log_summary(C)
 # log weights for analysis in W&B
 wandb_logger.watch(model, log="all", log_freq=50)
 
-data_set = MyDataset(
+DataSetClass = getattr(src.data_loaders, C.data.Loader)
+
+data_set = DataSetClass(
     file_path=C.data.dir + C.data.file,
     columns_C=list(C.data.cols.c),
     columns_X=list(C.data.cols.x),

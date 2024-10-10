@@ -79,12 +79,11 @@ class ComplexNet(L.LightningModule):
 
         Inputs and outputs are in the shape (batch_size, seq_length, channels).
         """
-        with torch.no_grad():
-            concat_xc = torch.cat((x_in, c_in, c_out), dim=2)  # (batch_size, seq_length, variables c + x)
-            # put channel dimension second
-            concat_xc = concat_xc.permute(0, 2, 1)  # (batch_size, variables c + x, seq_length)
-            input_frequencies = torch.fft.rfft(concat_xc, dim=2)
-            flattened_in_freqs = input_frequencies.reshape(input_frequencies.size(0), -1)
+        concat_xc = torch.cat((x_in, c_in, c_out), dim=2)  # (batch_size, seq_length, variables c + x)
+        # put channel dimension second
+        concat_xc = concat_xc.permute(0, 2, 1)  # (batch_size, variables c + x, seq_length)
+        input_frequencies = torch.fft.rfft(concat_xc, dim=2)
+        flattened_in_freqs = input_frequencies.reshape(input_frequencies.size(0), -1)
 
         x_out = self.net(flattened_in_freqs)
         x_out = self.out_activation(x_out)  # (batch_size, variables x * forecast_window)
