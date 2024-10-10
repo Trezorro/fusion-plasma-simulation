@@ -93,11 +93,7 @@ class ComplexNet(L.LightningModule):
         return x_out.permute(0, 2, 1)  # Returned as (batch_size, seq_length, variables x)
 
     def training_step(self, batch, batch_idx):
-        shot_number, controls, observables = batch
-        x_in = observables[:, :-self.forecast_window]
-        c_in = controls[:, :-self.forecast_window]
-        x_out = observables[:, -self.forecast_window:]
-        c_out = controls[:, -self.forecast_window:]
+        c_in, c_out, x_in, x_out = self.split_batch_data(batch)
         x_out_pred = self(x_in, c_in, c_out)
         loss = self.loss(x_out_pred, x_out)
         self.log("loss/train", loss, prog_bar=True)
@@ -106,11 +102,7 @@ class ComplexNet(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        shot_number, controls, observables = batch
-        x_in = observables[:, :-self.forecast_window]
-        c_in = controls[:, :-self.forecast_window]
-        x_out = observables[:, -self.forecast_window:]
-        c_out = controls[:, -self.forecast_window:]
+        c_in, c_out, x_in, x_out = self.split_batch_data(batch)
         x_out_pred = self(x_in, c_in, c_out)
         loss = self.loss(x_out_pred, x_out)
         self.log("loss/val", loss, prog_bar=True)
@@ -120,16 +112,24 @@ class ComplexNet(L.LightningModule):
 
     test_step = validation_step
 
-    def prediction_step(self, batch, batch_idx, dataloader_idx=0):
+    def split_batch_data(self, batch):
         shot_number, controls, observables = batch
-        # Todo: move the following logic to the dataloaders
         c_in = controls[:, :-self.forecast_window]
-        if observables.size(1) > c_in.size(1):
-            # allow to receive the whole sequence, but don't cheat by using future data
-            x_in = observables[:, :-self.forecast_window]
-        else:
-            x_in = observables
         c_out = controls[:, -self.forecast_window:]
+        if observables.size(1) == controls.size(1):
+            x_in = observables[:, :-self.forecast_window]
+            x_out = observables[:, -self.forecast_window:]
+            assert x_in.size(1) == c_in.size(1)
+            assert x_out.size(1) == c_out.size(1)
+        else:
+            # support pre-masked input
+            x_in = observables[:, :c_in.size(1)]
+            x_out = None
+        return c_in, c_out, x_in, x_out
+
+    def prediction_step(self, batch, batch_idx, dataloader_idx=0):
+        # Todo: move the following logic to the dataloaders
+        c_in, c_out, x_in, _ = self.split_batch_data(batch)
         x_out_pred = self(x_in, c_in, c_out)
         return x_out_pred
 
