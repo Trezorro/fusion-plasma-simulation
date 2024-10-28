@@ -5,13 +5,23 @@ import random
 
 class MyDataset(data.Dataset):
 
-    def __init__(self, file_path, columns_C, columns_X, seq_length=2000, crop_margin=1000, random_start=True):
+    def __init__(
+        self,
+        file_path,
+        columns_C,
+        columns_X,
+        seq_length=2000,
+        crop_margin=1000,
+        random_start=True,
+        time_last=False
+    ):
         self.file_path = file_path
         self.columns_C = columns_C
         self.columns_X = columns_X
         self.seq_length = seq_length
         self.crop_margin = crop_margin
         self.random_start = random_start
+        self.time_last = time_last
 
         self.data = pd.read_parquet(file_path)
         self.shot_numbers = self.data['ShotNum'].unique()
@@ -30,20 +40,13 @@ class MyDataset(data.Dataset):
         viable_start_max = shot_len - self.crop_margin - self.seq_length
         assert viable_start_max > self.crop_margin, (
             f"Shot {shot_number} is too short (T{shot_len}) for desired "
-            f"seq_length {self.seq_length} and crop_margin {self.crop_margin}")
+            f"seq_length {self.seq_length} and crop_margin {self.crop_margin}"
+        )
         start = random.randint(self.crop_margin, viable_start_max) if self.random_start else self.crop_margin
         end = start + self.seq_length
         C = shot_data[self.columns_C].iloc[start:end].values
         X = shot_data[self.columns_X].iloc[start:end].values
+        if self.time_last:
+            C = C.transpose()
+            X = X.transpose()
         return shot_number, C, X  # C and X shapes: (seq_length, variables)
-
-
-def slice_data(data, start_time, end_time):
-    return data[(data['Time'] >= start_time) & (data['Time'] <= end_time)]
-
-
-# def normalize_data(data):
-#     raw_sig = data.copy()
-#     sig[ALL_SIG_COLLS] = (sig[ALL_SIG_COLLS] -
-#                         sig[ALL_SIG_COLLS].mean()) / sig[ALL_SIG_COLLS].std()
-#     return (data - data.mean()) / data.std()

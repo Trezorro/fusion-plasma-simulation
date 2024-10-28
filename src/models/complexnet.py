@@ -2,10 +2,11 @@ import lightning as L
 import torch
 import torch.nn as nn
 import torchinfo
+import torchmetrics
 import wandb
 from omegaconf import DictConfig
 
-from src.fourier import FourierMSLE
+from src.fourier import FourierMSLE, FrequencySpectrumMSESimple
 
 
 class ComplexReLU(nn.Module):
@@ -32,6 +33,8 @@ class ComplexMLP(nn.Sequential):
 
 class ComplexNet(L.LightningModule):
 
+    TIME_DOMAIN_LOSS = torchmetrics.MeanSquaredLogError
+
     def __init__(
         self,
         c_channels: int,
@@ -47,17 +50,19 @@ class ComplexNet(L.LightningModule):
         **kwargs
     ):
         super().__init__()
+        self.c_channels = c_channels
+        self.x_channels = x_channels
+        self.cx_channels = c_channels + x_channels
+        self.out_channels = out_channels
         self.forecast_window = forecast_window
         self.forecast_window_freqs = forecast_window // 2 + 1
         self.warmup_window = warmup_window
         self.warmup_window_freqs = warmup_window // 2 + 1
         self.val_rollout = forecast_window
         self.train_rollout = forecast_window
-        self.cx_channels = c_channels + x_channels
-        self.out_channels = out_channels
-        self.loss = getattr(torch.nn, loss)()
-        self.fourier_loss_train = FourierMSLE()
-        self.fourier_loss_val = FourierMSLE()
+        self.loss = FrequencySpectrumMSESimple()
+        self.loss_time_domain_train = self.TIME_DOMAIN_LOSS()
+        self.loss_time_domain_val = self.TIME_DOMAIN_LOSS()
         self.optimizer_params = optimizer_params
         self.net = ComplexMLP(
             input_dim=(self.cx_channels) * self.warmup_window_freqs + c_channels * self.forecast_window_freqs,
@@ -74,63 +79,94 @@ class ComplexNet(L.LightningModule):
             case _:
                 self.out_activation = nn.Identity()
 
-    def forward(self, x_in: torch.Tensor, c_in: torch.Tensor, c_out: torch.Tensor):
-        """Predicts the window x_out, which will be the same length as the given c_out.
+    def forward(self, input_frequencies: torch.Tensor):
+        """Predicts the window x_out_frequencies, which will be length T // 2 + 1.
 
-        Inputs and outputs are in the shape (batch_size, seq_length, channels).
+        Inputs and outputs are in the shape (batch_size, variables, frequencies).
         """
-        concat_xc = torch.cat((x_in, c_in, c_out), dim=2)  # (batch_size, seq_length, variables c + x)
-        # put channel dimension second
-        concat_xc = concat_xc.permute(0, 2, 1)  # (batch_size, variables c + x, seq_length)
-        input_frequencies = torch.fft.rfft(concat_xc, dim=2)
         flattened_in_freqs = input_frequencies.reshape(input_frequencies.size(0), -1)
-
         x_out = self.net(flattened_in_freqs)
-        x_out = self.out_activation(x_out)  # (batch_size, variables x * forecast_window)
-        x_out = x_out.reshape(x_out.size(0), self.out_channels, self.forecast_window_freqs)
-        x_out = torch.fft.irfft(x_out, dim=2)
-        return x_out.permute(0, 2, 1)  # Returned as (batch_size, seq_length, variables x)
+        x_out_flat = self.out_activation(x_out)  # (batch_size, variables x * forecast_window)
+        x_frequencies_pred = x_out_flat.reshape(
+            x_out_flat.size(0), self.out_channels, self.forecast_window_freqs
+        )
+        return x_frequencies_pred  # Returned as (batch_size, variables x, seq length)
+
+    def compute_frequency_loss(self, batch):
+        c_in, c_out, x_in, x_out_true = self.split_batch_data(batch)
+        concat_xc = torch.cat((x_in, c_in, c_out), dim=1)  # (batch_size, variables c + x, seq_length)
+        input_frequencies = torch.fft.rfft(concat_xc, dim=2)
+        output_frequencies = torch.fft.rfft(x_out_true, dim=2)
+        x_out_pred_freqs = self(input_frequencies)
+        x_out_pred_time = torch.fft.irfft(x_out_pred_freqs, dim=2)
+        loss = self.loss(x_out_pred_freqs, output_frequencies)
+        return loss, x_out_true, x_out_pred_time
+
+    def prediction_step(self, batch, batch_idx, dataloader_idx=0):
+        """Prediction function that skips loss computation."""
+        # Do time split here to support autoregressive processing later. Don't do it in data loader.
+        c_in, c_out, x_in, _ = self.split_batch_data(batch)
+        concat_xc = torch.cat((x_in, c_in, c_out), dim=1)  # (batch_size, variables c + x, seq_length)
+        input_frequencies = torch.fft.rfft(concat_xc, dim=2)
+        x_out_pred_freqs = self(input_frequencies)
+        x_out_pred_time = torch.fft.irfft(x_out_pred_freqs, dim=2)
+        return x_out_pred_time, x_out_pred_freqs
 
     def training_step(self, batch, batch_idx):
-        c_in, c_out, x_in, x_out = self.split_batch_data(batch)
-        x_out_pred = self(x_in, c_in, c_out)
-        loss = self.loss(x_out_pred, x_out)
+        loss, x_out_true, x_out_pred_time = self.compute_frequency_loss(
+            batch
+        )  # Main loss in frequency domain
+        self.loss_time_domain_train(x_out_pred_time, x_out_true)
         self.log("loss/train", loss, prog_bar=True)
-        self.fourier_loss_train(x_out_pred, x_out)
-        self.log("fourier_loss/train", self.fourier_loss_train, prog_bar=True, on_epoch=True, on_step=False)
+        self.log(
+            "loss/time_domain_train",
+            self.loss_time_domain_train,
+            prog_bar=True,
+            on_epoch=True,
+            on_step=False
+        )
         return loss
 
     def validation_step(self, batch, batch_idx):
-        c_in, c_out, x_in, x_out = self.split_batch_data(batch)
-        x_out_pred = self(x_in, c_in, c_out)
-        loss = self.loss(x_out_pred, x_out)
+        loss, x_out_true, x_out_pred_time = self.compute_frequency_loss(
+            batch
+        )  # Main loss in frequency domain
+
         self.log("loss/val", loss, prog_bar=True)
-        self.fourier_loss_val(x_out_pred, x_out)
-        self.log("fourier_loss/val", self.fourier_loss_val, prog_bar=True, on_epoch=True, on_step=True)
-        return dict(loss=loss, outputs=x_out_pred)
+        self.loss_time_domain_val(x_out_pred_time, x_out_true)
+        self.log(
+            "loss/time_domain_val", self.loss_time_domain_val, prog_bar=True, on_epoch=True, on_step=True
+        )
+        return dict(loss=loss, outputs=x_out_pred_time)
 
     test_step = validation_step
 
+    def evaluate(self, batch):
+        self.eval()
+        with torch.inference_mode():
+            loss, x_out_true, x_out_pred_time = self.compute_frequency_loss(batch)
+            time_domain_loss = self.TIME_DOMAIN_LOSS()(
+                x_out_pred_time, x_out_true
+            )  # TODO probably needs to device as well
+            losses = dict(loss=loss, time_domain_loss=time_domain_loss)
+        self.train()
+        return x_out_pred_time, losses
+
     def split_batch_data(self, batch):
+        """Use self.forecast_window to split the batch into input and output, across C and X."""
         shot_number, controls, observables = batch
-        c_in = controls[:, :-self.forecast_window]
-        c_out = controls[:, -self.forecast_window:]
-        if observables.size(1) == controls.size(1):
-            x_in = observables[:, :-self.forecast_window]
-            x_out = observables[:, -self.forecast_window:]
-            assert x_in.size(1) == c_in.size(1)
-            assert x_out.size(1) == c_out.size(1)
+        c_in = controls[:, :, :-self.forecast_window].to(self.device)
+        c_out = controls[:, :, -self.forecast_window:].to(self.device)
+        if observables.size(2) == controls.size(2):
+            x_in = observables[:, :, :-self.forecast_window].to(self.device)
+            x_out = observables[:, :, -self.forecast_window:].to(self.device)
+            assert x_in.size(2) == c_in.size(2)
+            assert x_out.size(2) == c_out.size(2)
         else:
             # support pre-masked input
-            x_in = observables[:, :c_in.size(1)]
+            x_in = observables[:, :, :c_in.size(2)].to(self.device)
             x_out = None
         return c_in, c_out, x_in, x_out
-
-    def prediction_step(self, batch, batch_idx, dataloader_idx=0):
-        # Todo: move the following logic to the dataloaders
-        c_in, c_out, x_in, _ = self.split_batch_data(batch)
-        x_out_pred = self(x_in, c_in, c_out)
-        return x_out_pred
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), **self.optimizer_params)
@@ -139,11 +175,12 @@ class ComplexNet(L.LightningModule):
     def log_summary(self, config: DictConfig):
         summary = torchinfo.summary(
             self,
-            input_size=[
-                (2, config.seq_length - self.forecast_window, len(config.data.cols.x)),
-                (2, config.seq_length - self.forecast_window, len(config.data.cols.c)),
-                (2, self.forecast_window, len(config.data.cols.c)),
-            ],
+            input_size=(
+                2,
+                self.c_channels * 2 + self.x_channels,
+                self.forecast_window_freqs,
+            ),
+            dtypes=[torch.cfloat],
             # batch_dim=0,
             col_names=[
                 "input_size",

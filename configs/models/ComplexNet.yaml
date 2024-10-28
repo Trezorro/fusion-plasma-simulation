@@ -12,7 +12,7 @@ model:
     output_activation: none
     train_rollout: ${ model.params.forecast_window }
     validation_rollout: ${ model.params.forecast_window }
-    loss: MSELoss # L1Loss #  TODO try absolute error
+    # loss: MSELoss # L1Loss #  TODO try absolute error # now fixed
     optimizer_params:
       lr: 0.001 # Default 0.001
       weight_decay: 0  # Default 0
@@ -26,6 +26,7 @@ data:
   Loader: MyDataset
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
+  time_last: true  # Sets the time dim as the last dim
   cols:
     meta:
     - ShotNum

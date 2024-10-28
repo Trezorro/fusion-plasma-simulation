@@ -18,6 +18,13 @@ class FourierMSLE(torchmetrics.MeanSquaredLogError):
         super().update(preds_fft, target_fft)
 
 
+class FrequencySpectrumMSESimple(torchmetrics.MeanSquaredError):
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor):
+        super().update(preds.real, target.real)
+        super().update(preds.imag, target.imag)
+
+
 def get_sine_wave(frequency, duration, sample_rate=20000):
     """Generate a sine wave with the given frequency and duration."""
     t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)

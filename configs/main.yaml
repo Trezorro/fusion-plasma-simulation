@@ -14,6 +14,7 @@ data:
   Loader: MyDataset
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
+  time_last: false  # Sets the time dim as the last dim
   cols:
     meta:
     - ShotNum

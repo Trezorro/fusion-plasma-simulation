@@ -1,5 +1,4 @@
 """Functions for evaluating and visualizing model performance."""
-import signal
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -13,7 +12,14 @@ from src.fourier import spectogram_plot, FourierMSLE, signal_fourier_comparison_
 from src.config import get_current_config
 
 
-def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Tensor, outputs: torch.Tensor):
+def build_plotting_df(
+    shot_numbers,
+    controls: torch.Tensor,
+    observables: torch.Tensor,
+    model_predictions: torch.Tensor,
+    time_last=False,
+    isolated_prediction_line=False
+):
     """Given the model outputs, build a dataframe with the predictions.
 
     Handles multiple shots (small batch) in one go.
@@ -22,7 +28,9 @@ def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Ten
         shot_numbers (torch.Tensor): The shot numbers. (scalars)
         controls (torch.Tensor): The control variables. (batch_size, seq_length, n_controls)
         observables (torch.Tensor): The observable variables. (batch_size, seq_length, n_observables)
-        outputs (torch.Tensor): The model outputs. (batch_size, seq_length, n_observables)
+        model_predictions (torch.Tensor): The model outputs. (batch_size, seq_length, n_observables)
+        isolated_prediction_line (bool): If True, the prediction line will not connect to the last observable
+            value.
     Returns (pd.DataFrame): The dataframe with the predictions.
         Index: ShotNum
         Columns: t,
@@ -32,7 +40,20 @@ def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Ten
     """
     C = get_current_config()
     output_cols = [f"^{i}" for i in C.data.cols.x]
-    seq_length = outputs.shape[1]
+    time_dim = 2 if time_last else 1
+    seq_length = observables.shape[time_dim]
+    if isolated_prediction_line:
+        prediction_traces = np.full_like(
+            observables, fill_value=np.nan
+        )  # use if you want to start the forecast horizon cleanly.
+    else:
+        prediction_traces = observables.clone().cpu().numpy()
+    if time_last:
+        time_seq = np.arange(seq_length)[np.newaxis, :]
+        prediction_traces[:, :, -model_predictions.size(time_dim):] = model_predictions.cpu().numpy()
+    else:
+        prediction_traces[:, -model_predictions.size(time_dim):] = model_predictions.cpu().numpy()
+        time_seq = np.arange(seq_length)[:, np.newaxis]
 
     df = pd.DataFrame(
         index=np.repeat(shot_numbers.numpy().astype(int),
@@ -42,19 +63,19 @@ def build_output_df(shot_numbers, controls: torch.Tensor, observables: torch.Ten
     )
     for shot, output, control_seq, observable_seq in zip(
         shot_numbers,
-        outputs,
+        prediction_traces,
         controls,
         observables,
     ):
         df.loc[int(shot)] = np.concatenate(
             [
-                np.arange(seq_length)[:, np.newaxis],  # t
-                output.numpy(),
+                time_seq.copy(),  # t
+                output,
                 observable_seq.numpy(),
                 # control_seq.numpy()
             ],
-            axis=1
-        )
+            axis=0 if time_last else 1  # we concatenate on the variables axis
+        ).T  # TODO: make dependent on time_last
     return df
 
 
@@ -98,30 +119,32 @@ def plot_shot_batch(df: pd.DataFrame, title="", cutoff_t=50):
     return fig
 
 
+def format_losses(losses: dict):
+    """Format the losses dictionary into a string."""
+    return " / ".join([f"{k}: {v:.5f}" for k, v in losses.items()])
+
+
 def get_and_plot_predictions(model, data_set, n=4, title_base=""):
     """Get and plot predictions for a batch of shots. 
 
     Plots n shots in the signal plot, and one signal from one shot in the spectogram plot.
     """
     C = get_current_config()
-    fourier_loss = FourierMSLE().to(model.device)
     model.eval()
     with torch.inference_mode():
-        shot_numbers, controls, observables = next(
-            iter(data.DataLoader(data_set, batch_size=n, shuffle=False))
+        batch = next(iter(data.DataLoader(data_set, batch_size=n, shuffle=False)))
+        shot_numbers, controls, observables = batch
+        x_out_pred_time, losses = model.evaluate(batch)
+
+        df = build_plotting_df(
+            shot_numbers,
+            controls,
+            observables,
+            x_out_pred_time,
+            time_last=C.data.time_last,
+            isolated_prediction_line=False
         )
-        x_out_pred = model.prediction_step(
-            (shot_numbers, controls.to(model.device), observables.to(model.device)), 0
-        )
-        x_out = observables[:, -model.val_rollout:].to(model.device)
-        loss = model.loss(x_out_pred, x_out)
-        fourier_loss_batch = fourier_loss(x_out_pred, x_out)
-        val_train_rollout = model.loss(x_out_pred[:, :model.train_rollout], x_out[:, :model.train_rollout])
-        pred_full_line = observables.clone()
-        # pred_out = torch.full_like(observables, fill_value=np.nan) # use if you want to start the forecast horizon cleanly.
-        pred_full_line[:, -C.validation_rollout:] = x_out_pred[:, -C.validation_rollout:].cpu()
-        df = build_output_df(shot_numbers, controls, observables, pred_full_line)
-        title = title_base + f" (Fourier Loss: {fourier_loss_batch:.5f} / Full Loss: {loss:.5f})"
+        title = title_base + f" ({format_losses(losses)})"
         fig_shots = plot_shot_batch(df, title=title, cutoff_t=C.seq_length - C.validation_rollout)
         # Plot spectograms of each prediction pair in each shot
         # start with plotting: 1. the ground truth in the forecast horizon.

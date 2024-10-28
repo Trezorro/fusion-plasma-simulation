@@ -40,6 +40,7 @@ data_set = DataSetClass(
     seq_length=C.seq_length,
     crop_margin=C.crop_margin,
     random_start=C.random_start,
+    time_last=C.data.time_last
 )
 train_set, val_set = data.random_split(data_set, [0.9, 0.1], generator=torch.Generator().manual_seed(42))
 
