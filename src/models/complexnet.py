@@ -145,9 +145,7 @@ class ComplexNet(L.LightningModule):
         self.eval()
         with torch.inference_mode():
             loss, x_out_true, x_out_pred_time = self.compute_frequency_loss(batch)
-            time_domain_loss = self.TIME_DOMAIN_LOSS()(
-                x_out_pred_time, x_out_true
-            )  # TODO probably needs to device as well
+            time_domain_loss = self.TIME_DOMAIN_LOSS().to(self.device)(x_out_pred_time, x_out_true)
             losses = dict(loss=loss, time_domain_loss=time_domain_loss)
         self.train()
         return x_out_pred_time, losses
