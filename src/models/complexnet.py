@@ -1,3 +1,4 @@
+from typing import Optional
 import lightning as L
 import torch
 import torch.nn as nn
@@ -6,7 +7,7 @@ import torchmetrics
 import wandb
 from omegaconf import DictConfig
 
-from src.fourier import FourierMSLE, FrequencySpectrumMSESimple
+from src.fourier import FourierMSLE, FrequencySpectrumMSESimple, FrequencyPhaseAmpMSE
 
 
 class ComplexReLU(nn.Module):
@@ -34,6 +35,12 @@ class ComplexMLP(nn.Sequential):
 class ComplexNet(L.LightningModule):
 
     TIME_DOMAIN_LOSS = torchmetrics.MeanSquaredLogError
+    LOSS_OPTIONS = dict(
+        MSELoss=torch.nn.MSELoss,
+        L1Loss=torch.nn.L1Loss,
+        FrequencySpectrumMSESimple=FrequencySpectrumMSESimple,
+        FrequencyPhaseAmpMSE=FrequencyPhaseAmpMSE
+    )
 
     def __init__(
         self,
@@ -46,7 +53,7 @@ class ComplexNet(L.LightningModule):
         loss: str = "MSELoss",
         mlp_activation: str = 'ReLU',
         output_activation: str = "Softplus",
-        optimizer_params: dict = {},
+        optimizer_params: Optional[dict] = None,
         **kwargs
     ):
         super().__init__()
@@ -60,7 +67,7 @@ class ComplexNet(L.LightningModule):
         self.warmup_window_freqs = warmup_window // 2 + 1
         self.val_rollout = forecast_window
         self.train_rollout = forecast_window
-        self.loss = FrequencySpectrumMSESimple()
+        self.loss = ComplexNet.LOSS_OPTIONS[loss]()
         self.loss_time_domain_train = self.TIME_DOMAIN_LOSS()
         self.loss_time_domain_val = self.TIME_DOMAIN_LOSS()
         self.optimizer_params = optimizer_params
@@ -167,6 +174,8 @@ class ComplexNet(L.LightningModule):
         return c_in, c_out, x_in, x_out
 
     def configure_optimizers(self):
+        if self.optimizer_params is None:
+            self.optimizer_params = dict()
         optimizer = torch.optim.Adam(self.parameters(), **self.optimizer_params)
         return optimizer
 
