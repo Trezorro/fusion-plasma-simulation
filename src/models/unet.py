@@ -110,7 +110,7 @@ class UNet(L.LightningModule):
         loss = self.loss(x_out_pred, x_out)
         self.log("loss/train", loss, prog_bar=True)
         self.fourier_loss_train(x_out_pred, x_out)
-        self.log("fourier_loss/train", self.fourier_loss_train, prog_bar=True, on_epoch=True, on_step=False)
+        self.log("fourier_loss/train", self.fourier_loss_train, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -123,7 +123,7 @@ class UNet(L.LightningModule):
         loss = self.loss(x_out_pred, x_out)
         self.log("loss/val", loss, prog_bar=True)
         self.fourier_loss_val(x_out_pred, x_out)
-        self.log("fourier_loss/val", self.fourier_loss_val, prog_bar=True, on_epoch=True, on_step=True)
+        self.log("fourier_loss/val", self.fourier_loss_val, prog_bar=True)
         return dict(loss=loss, outputs=x_out_pred)
 
     test_step = validation_step

@@ -193,7 +193,14 @@ class PlotPredictionsCallback(L.Callback):
                 n=self.num_samples,
                 title_base=f"{wandb.run.name} | Epoch {trainer.current_epoch}"
             )
-            wandb.log({"val/prediction_plot": fig_shots, "val/spectogram_plot": fig_spec}, commit=False)
+            wandb.log(
+                {
+                    "val/prediction_plot": fig_shots,
+                    "val/spectogram_plot": fig_spec,
+                    "trainer/global_step": trainer.global_step
+                },
+                commit=False
+            )
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
         if self.train_every_n_epochs:
@@ -209,6 +216,8 @@ class PlotPredictionsCallback(L.Callback):
                 wandb.log(
                     {
                         "train/prediction_plot": fig_shots,
-                        "train/spectogram_plot": fig_spec
-                    }, commit=False
+                        "train/spectogram_plot": fig_spec,
+                        "trainer/global_step": trainer.global_step
+                    },
+                    commit=False
                 )

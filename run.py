@@ -53,6 +53,7 @@ trainer = L.Trainer(
     enable_progress_bar=False,
     max_epochs=C["epochs"],
     logger=wandb_logger,
+    num_sanity_val_steps=2,
     log_every_n_steps=1,
     check_val_every_n_epoch=1,  # May validate less often
     callbacks=[

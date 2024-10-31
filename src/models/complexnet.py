@@ -125,13 +125,7 @@ class ComplexNet(L.LightningModule):
         )  # Main loss in frequency domain
         self.loss_time_domain_train(x_out_pred_time, x_out_true)
         self.log("loss/train", loss, prog_bar=True)
-        self.log(
-            "loss/time_domain_train",
-            self.loss_time_domain_train,
-            prog_bar=True,
-            on_epoch=True,
-            on_step=False
-        )
+        self.log("loss/time_domain_train", self.loss_time_domain_train, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -141,9 +135,7 @@ class ComplexNet(L.LightningModule):
 
         self.log("loss/val", loss, prog_bar=True)
         self.loss_time_domain_val(x_out_pred_time, x_out_true)
-        self.log(
-            "loss/time_domain_val", self.loss_time_domain_val, prog_bar=True, on_epoch=True, on_step=True
-        )
+        self.log("loss/time_domain_val", self.loss_time_domain_val, prog_bar=True)
         return dict(loss=loss, outputs=x_out_pred_time)
 
     test_step = validation_step

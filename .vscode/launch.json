@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Run Training",
+            "name": "Run Training Offline",
             "type": "debugpy",
             "request": "launch",
             "module": "run",
@@ -14,7 +14,22 @@
                 "WANDB_NOTES": "debugging",
             },
             "args": [
-                "epochs=2"
+                "epochs=1"
+            ],
+            "justMyCode": false
+            
+        },
+        {
+            "name": "Run Training With Wandb",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "run",
+            "env": {
+                // "WANDB_MODE":"disabled",
+                "WANDB_NOTES": "debugging",
+            },
+            "args": [
+                "epochs=11"
             ],
             "justMyCode": false
             
