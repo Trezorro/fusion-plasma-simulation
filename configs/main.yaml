@@ -1,6 +1,3 @@
-# run_name: TestRunName
-crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
-random_start: true
 epochs: 6000
 batch_size: 32
 patience: 500
@@ -8,12 +5,16 @@ patience: 500
 model: configs/models/ComplexNet.yaml
 train_rollout: ${ model.params.train_rollout }
 validation_rollout: ${ model.params.validation_rollout }
-
+tags: 
+  -  frequencyspace
 
 data:
-  Loader: MyDataset
+  Class: ShotWindowDataset
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
+  seq_length: 200
+  crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
+  random_start: true
   time_last: false  # Sets the time dim as the last dim
   cols:
     meta:

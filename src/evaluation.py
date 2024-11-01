@@ -115,7 +115,7 @@ def plot_shot_batch(df: pd.DataFrame, title="", cutoff_t=50):
         layer="below",
         fillcolor="LightSalmon",
     )
-    fig.update_xaxes(range=[-0.5, C.seq_length])
+    fig.update_xaxes(range=[-0.5, C.data.seq_length])
     return fig
 
 
@@ -145,13 +145,13 @@ def get_and_plot_predictions(model, data_set, n=4, title_base=""):
             isolated_prediction_line=False
         )
         title = title_base + f" ({format_losses(losses)})"
-        fig_shots = plot_shot_batch(df, title=title, cutoff_t=C.seq_length - C.validation_rollout)
+        fig_shots = plot_shot_batch(df, title=title, cutoff_t=C.data.seq_length - C.validation_rollout)
         # Plot spectograms of each prediction pair in each shot
         # start with plotting: 1. the ground truth in the forecast horizon.
         # Get the signal for the first shot, below the cutoff_t, for only the target variable.
         # TODO: Test what happens if we have multiple variables.
         first_shot = df.loc[df.index[0]]
-        forecast_only = first_shot.query("t >= @C.seq_length - @C.validation_rollout")
+        forecast_only = first_shot.query("t >= @C.data.seq_length - @C.validation_rollout")
         signal_pred = forecast_only[[f"^{i}" for i in C.data.cols.x]].values
         signal_true = forecast_only[C.data.cols.x].values
         fourier_loss_forecast = FourierMSLE()(torch.tensor(signal_pred), torch.tensor(signal_true))

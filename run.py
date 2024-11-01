@@ -12,7 +12,11 @@ import src.data_loaders
 
 conf = load_config_from_file()
 run = wandb.init(
-    name=conf.get("run_name", None), project="plasma", tags=[], config=conf, dir="./output/wandb"
+    name=conf.get("run_name", None),
+    tags=conf.get("tags", None),
+    project="plasma",
+    config=conf,
+    dir="./output/wandb"
 )
 C = get_current_config()
 wandb.define_metric("loss/train", summary="min")
@@ -31,17 +35,9 @@ model.log_summary(C)
 # log weights for analysis in W&B
 wandb_logger.watch(model, log="all", log_freq=50)
 
-DataSetClass = getattr(src.data_loaders, C.data.Loader)
+DataSetClass = getattr(src.data_loaders, C.data.Class)
+data_set = DataSetClass(**C.data)
 
-data_set = DataSetClass(
-    file_path=C.data.dir + C.data.file,
-    columns_C=list(C.data.cols.c),
-    columns_X=list(C.data.cols.x),
-    seq_length=C.seq_length,
-    crop_margin=C.crop_margin,
-    random_start=C.random_start,
-    time_last=C.data.time_last
-)
 train_set, val_set = data.random_split(data_set, [0.9, 0.1], generator=torch.Generator().manual_seed(42))
 
 train_loader = data.DataLoader(train_set, batch_size=C.batch_size, shuffle=True)
