@@ -7,7 +7,7 @@ import torchmetrics
 import wandb
 from omegaconf import DictConfig
 
-from src.fourier import FourierMSLE, FrequencySpectrumMSESimple, FrequencyPhaseAmpMSE
+from src.fourier import FourierMSLE, FrequencySpectrumMSESimple, FrequencyPhaseAmpMSE, FrequencyAmpMSE
 
 
 class ComplexReLU(nn.Module):
@@ -39,7 +39,8 @@ class ComplexNet(L.LightningModule):
         MSELoss=torch.nn.MSELoss,
         L1Loss=torch.nn.L1Loss,
         FrequencySpectrumMSESimple=FrequencySpectrumMSESimple,
-        FrequencyPhaseAmpMSE=FrequencyPhaseAmpMSE
+        FrequencyPhaseAmpMSE=FrequencyPhaseAmpMSE,
+        FrequencyAmpMSE=FrequencyAmpMSE,
     )
 
     def __init__(

@@ -32,6 +32,12 @@ class FrequencyPhaseAmpMSE(torchmetrics.MeanSquaredError):
         super().update(preds.angle(), target.angle())
 
 
+class FrequencyAmpMSE(torchmetrics.MeanSquaredError):
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor):
+        super().update(preds.abs(), target.abs())
+
+
 def get_sine_wave(frequency, duration, sample_rate=20000):
     """Generate a sine wave with the given frequency and duration."""
     t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
