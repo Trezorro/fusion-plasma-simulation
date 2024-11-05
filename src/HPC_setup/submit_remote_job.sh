@@ -16,7 +16,7 @@ if [ "$#" -ne 1 ] || [ -z "$1" ]; then
     echo "To submit a new job, use: $0 <job_name>"
     echo "Will check the queue and sync results from HPC."
     # SSH into the main node, check the queue status, and run rsync
-    ssh $REMOTE_USER@$REMOTE_HOST << EOF
+    ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
         squeue
 EOF
     rsync -avzv TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/
@@ -51,7 +51,7 @@ fi
 git push origin "$JOB_NAME"
 
 # SSH into the main node, pull latest code, submit SLURM job, and inspect queue
-ssh $REMOTE_USER@$REMOTE_HOST << EOF
+ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     cd $REPO_PATH
     git fetch origin
     git reset --hard origin/$GIT_BRANCH  # Reset local branch to match remote
@@ -74,7 +74,7 @@ sync_slurms() {
 sleep 1
 echo "Syncing results from HPC in 10 seconds..."
 sleep 10
-ssh $REMOTE_USER@$REMOTE_HOST << EOF
+ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
 echo "-----------------------------------------------------------"
@@ -83,7 +83,7 @@ echo "-----------------------------------------------------------"
 
 echo "Syncing results from HPC in 10 seconds..."
 sleep 10
-ssh $REMOTE_USER@$REMOTE_HOST << EOF
+ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
 echo "-----------------------------------------------------------"
@@ -91,7 +91,7 @@ sync_slurms
 echo "-----------------------------------------------------------"
 echo "Syncing results from HPC in 10 seconds..."
 sleep 10
-ssh $REMOTE_USER@$REMOTE_HOST << EOF
+ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
 echo "-----------------------------------------------------------"
@@ -99,7 +99,7 @@ sync_slurms
 echo "-----------------------------------------------------------"
 echo "Syncing results from HPC in 30 seconds..."
 sleep 30
-ssh $REMOTE_USER@$REMOTE_HOST << EOF
+ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
 echo "-----------------------------------------------------------"
@@ -108,7 +108,7 @@ echo "-----------------------------------------------------------"
 
 echo "Syncing results from HPC in 1 minute..."
 sleep 60
-ssh $REMOTE_USER@$REMOTE_HOST << EOF
+ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
 echo "-----------------------------------------------------------"
@@ -118,7 +118,7 @@ echo "-----------------------------------------------------------"
 
 echo "Syncing results from HPC in 2 minutes..."
 sleep 120
-ssh $REMOTE_USER@$REMOTE_HOST << EOF
+ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     squeue
 EOF
 echo "-----------------------------------------------------------"
