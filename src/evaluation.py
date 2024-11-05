@@ -60,7 +60,7 @@ def build_plotting_df_time(
         time_seq = np.arange(seq_length)[:, np.newaxis]
 
     df = pd.DataFrame(
-        index=np.repeat(shot_numbers.numpy().astype(int),
+        index=np.repeat(shot_numbers.cpu().numpy().astype(int),
                         seq_length),  # ShotNum, each repeated seq_length times
         columns=["t"] + output_cols + C.data.cols.x,  # + C.data.cols.c,
         dtype=np.float32
@@ -75,7 +75,7 @@ def build_plotting_df_time(
             [
                 time_seq.copy(),  # t
                 output,
-                observable_seq.numpy(),
+                observable_seq.cpu().numpy(),
                 # control_seq.numpy()
             ],
             axis=0 if time_last else 1  # we concatenate on the variables axis
@@ -99,11 +99,11 @@ def build_plotting_df_freq(x_pred_freq, x_target_freq, shot_numbers):
     window_length = C.model.params.forecast_window
     sample_spacing = 1. / C.data.sample_rate
     # Transform the 3D array into a stacked dataframe in a vectorized manner
-    shot_numbers_repeated = np.repeat(shot_numbers.numpy(), n_vars * n_freqs)
+    shot_numbers_repeated = np.repeat(shot_numbers.cpu().numpy(), n_vars * n_freqs)
     variable_repeated = np.tile(np.repeat(C.data.cols.x, n_freqs), n_shots)
     frequency_bins = np.tile(np.fft.rfftfreq(window_length, d=sample_spacing), n_shots * n_vars)
-    predicted_values = x_pred_freq.abs().numpy().flatten()
-    target_values = x_target_freq.abs().numpy().flatten()
+    predicted_values = x_pred_freq.abs().cpu().numpy().flatten()
+    target_values = x_target_freq.abs().cpu().numpy().flatten()
 
     df = pd.DataFrame(
         {
