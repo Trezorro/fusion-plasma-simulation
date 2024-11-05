@@ -257,16 +257,14 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t):
             dict(
                 type="buttons",
                 direction="left",
-                buttons=list(
-                    [
-                        dict(args=[{
-                            "yaxis2.type": "log"
-                        }], label="Log", method="relayout"),
-                        dict(args=[{
-                            "yaxis2.type": "linear"
-                        }], label="Linear", method="relayout"),
-                    ]
-                ),
+                buttons=[
+                    dict(args=[{
+                        "yaxis2.type": "log"
+                    }], label="Log", method="relayout"),
+                    dict(args=[{
+                        "yaxis2.type": "linear"
+                    }], label="Linear", method="relayout")
+                ],
                 pad={
                     "r": 0,
                     "t": 0
@@ -277,9 +275,40 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t):
                 y=0.44,
                 yanchor="top"
             ),
+            dict(
+                type="buttons",
+                direction="left",
+                buttons=[
+                    dict(args=[{
+                        "visible": [True] * len(fig.data)
+                    }], label="Show All", method="update"),
+                    dict(
+                        args=[{
+                            "visible": [trace.name.startswith('Predicted') for trace in fig.data]
+                        }],
+                        label="Predicted",
+                        method="update"
+                    ),
+                    dict(
+                        args=[{
+                            "visible": [trace.name.startswith('Target') for trace in fig.data]
+                        }],
+                        label="Targets",
+                        method="update"
+                    ),
+                ],
+                pad={
+                    "r": 0,
+                    "t": 0
+                },
+                showactive=True,
+                x=1.005,
+                xanchor="left",
+                y=1.02,
+                yanchor="bottom"
+            ),
         ]
     )
-    fig.show()
     return fig
 
 
