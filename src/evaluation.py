@@ -1,7 +1,11 @@
 """Functions for evaluating and visualizing model performance."""
+from os import name
+from matplotlib.pylab import f
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import torch
 from torch.utils import data
 import lightning as L
@@ -12,7 +16,7 @@ from src.fourier import spectogram_plot, FourierMSLE, signal_fourier_comparison_
 from src.config import get_current_config
 
 
-def build_plotting_df(
+def build_plotting_df_time(
     shot_numbers,
     controls: torch.Tensor,
     observables: torch.Tensor,
@@ -76,33 +80,61 @@ def build_plotting_df(
             ],
             axis=0 if time_last else 1  # we concatenate on the variables axis
         ).T  # TODO: make dependent on time_last
-    return df
+
+    df_stacked = df.reset_index(names='shot').melt(id_vars=['shot', 't'])
+    df_stacked['is_prediction'] = df_stacked['variable'].str.startswith('^').map(
+        {
+            True: 'Predicted',
+            False: 'Target'
+        }
+    )
+    df_stacked['variable'] = df_stacked['variable'].str.replace('^', '')
+    return df_stacked
+
+
+def build_plotting_df_freq(x_pred_freq, x_target_freq, shot_numbers):
+    # input (batch, variables (7), frequency bins)
+    n_shots, n_vars, n_freqs = x_pred_freq.size()
+    C = get_current_config()
+    window_length = C.model.params.forecast_window
+    sample_spacing = 1. / C.data.sample_rate
+    # Transform the 3D array into a stacked dataframe in a vectorized manner
+    shot_numbers_repeated = np.repeat(shot_numbers.numpy(), n_vars * n_freqs)
+    variable_repeated = np.tile(np.repeat(C.data.cols.x, n_freqs), n_shots)
+    frequency_bins = np.tile(np.fft.rfftfreq(window_length, d=sample_spacing), n_shots * n_vars)
+    predicted_values = x_pred_freq.abs().numpy().flatten()
+    target_values = x_target_freq.abs().numpy().flatten()
+
+    df = pd.DataFrame(
+        {
+            'shot': shot_numbers_repeated,
+            'variable': variable_repeated,
+            'frequency_bin': frequency_bins,
+            'Predicted': predicted_values,
+            'Target': target_values
+        }
+    )
+    df_stacked = df.melt(
+        value_vars=['Predicted', 'Target'],
+        var_name='is_prediction',
+        value_name='amplitude',
+        id_vars=['shot', 'variable', 'frequency_bin'],
+    )
+    return df_stacked
 
 
 def plot_shot_batch(df: pd.DataFrame, title="", cutoff_t=50):
     """Plot a batch of shots into one plot, with predictions on the right in dotted lines."""
-    df_stacked = df.set_index('t', append=True).stack(future_stack=True).reset_index(name='value').rename(
-        columns={
-            'level_0': 'shot',
-            'level_2': 'variable'
-        }
-    )
-    df_stacked['is_prediction'] = df_stacked['variable'].str.startswith('^').map(
-        {
-            True: 'Prediction',
-            False: 'Actual'
-        }
-    )
-    df_stacked['variable'] = df_stacked['variable'].str.replace('^', '')
+
     fig = px.line(
-        df_stacked,
+        df,
         x='t',
         y='value',
         color='shot',
         symbol='variable',
         line_dash='is_prediction',
         line_shape='linear',
-        category_orders={'is_prediction': ["Actual", "Prediction"]},
+        category_orders={'is_prediction': ["Actual", "Predicted"]},
         title=f"Signal Plot: {title}"
     )
     C = get_current_config()
@@ -134,44 +166,121 @@ def get_and_plot_predictions(model, data_set, n=4, title_base=""):
     with torch.inference_mode():
         batch = next(iter(data.DataLoader(data_set, batch_size=n, shuffle=False)))
         shot_numbers, controls, observables = batch
-        x_out_pred_time, losses = model.evaluate(batch)
+        losses, outputs = model.evaluate(batch)
+        title = title_base + f" ({format_losses(losses)})"
 
-        df = build_plotting_df(
+        df = build_plotting_df_time(
             shot_numbers,
             controls,
             observables,
-            x_out_pred_time,
+            outputs['x_pred_t'],
             time_last=C.data.time_last,
             isolated_prediction_line=False
         )
-        title = title_base + f" ({format_losses(losses)})"
+        df_freq = build_plotting_df_freq(outputs['x_pred_freq'], outputs['x_target_freq'], shot_numbers)
         fig_shots = plot_shot_batch(df, title=title, cutoff_t=C.data.seq_length - C.validation_rollout)
-        # Plot spectograms of each prediction pair in each shot
-        # start with plotting: 1. the ground truth in the forecast horizon.
-        # Get the signal for the first shot, below the cutoff_t, for only the target variable.
-        # TODO: Test what happens if we have multiple variables.
-        first_shot = df.loc[df.index[0]]
-        forecast_only = first_shot.query("t >= @C.data.seq_length - @C.validation_rollout")
-        signal_pred = forecast_only[[f"^{i}" for i in C.data.cols.x]].values
-        signal_true = forecast_only[C.data.cols.x].values
-        fourier_loss_forecast = FourierMSLE()(torch.tensor(signal_pred), torch.tensor(signal_true))
-        # full_true_signal = first_shot[C.data.cols.x].values
-        # fig_spec = spectogram_plot(
-        #     full_true_signal,
-        #     title=title_base + f" shot #{df.index[0]} (Fourier Loss forecast: {fourier_loss_forecast:.6f})",
-        #     hop_length=10,
-        #     win_length=50
-        # )
-        fig_spec = signal_fourier_comparison_plot(
-            signal_true,
-            signal_pred,
-            title=title_base + f" shot #{df.index[0]} (Fourier Loss forecast: {fourier_loss_forecast:.6f})"
+        fig_time_and_freq = plot_signal_and_spectrum(
+            df, df_freq=df_freq, title=title, cutoff_t=C.data.seq_length - C.validation_rollout
         )
+
         if wandb.run.disabled:
             fig_shots.show()
-            fig_spec.show()
+            fig_time_and_freq.show()
     model.train()
-    return fig_shots, fig_spec
+    return fig_shots, fig_time_and_freq
+
+
+def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t):
+    # Create subplots
+    fig = make_subplots(
+        rows=2, cols=1, subplot_titles=("Time-Domain Signal", "Frequency Spectrum"), vertical_spacing=0.1
+    )
+
+    # Time-domain signal plot
+    time_fig = px.line(
+        df_stacked_time,
+        x='t',
+        y='value',
+        color='shot',
+        symbol='variable',
+        line_dash='is_prediction',
+        line_shape='linear',
+        category_orders={'is_prediction': ["Target", "Predicted"]},
+        title=f"Signal Plot: {title}"
+    )
+    for trace in time_fig.data:
+        shot, is_predicted, variable = trace.name.split(', ')
+        trace.name = f"{is_predicted} {variable} time domain"
+        trace.legendgroup = shot + is_predicted + variable
+        trace.legendgrouptitle = {'text': f"Shot {shot}: {is_predicted} {variable} signal"}
+        fig.add_trace(trace, row=1, col=1)
+
+    # Frequency spectrum plot
+    spectrum_fig = px.line(
+        df_freq,
+        x='frequency_bin',
+        y='amplitude',
+        color='shot',
+        line_dash='is_prediction',
+        category_orders={'is_prediction': ["Target", "Predicted"]},
+        symbol='variable',
+        line_shape='linear',
+        markers=True,
+        title="Frequency Spectrum (in forecast horizon)"
+    )
+    for trace in spectrum_fig.data:
+        shot, is_predicted, variable = trace.name.split(', ')
+        trace.name = f"{is_predicted} {variable} frequency spectrum"
+        trace.legendgroup = shot + is_predicted + variable
+        trace.legendgrouptitle = {'text': f"Shot {shot}: {is_predicted} {variable} signal"}
+        fig.add_trace(trace, row=2, col=1)
+
+    # Add vertical rectangle to time-domain plot
+    C = get_current_config()
+    fig.add_vrect(
+        x0=-0.5,
+        x1=cutoff_t - 0.5,
+        opacity=0.2,
+        line_width=0,
+        layer="below",
+        fillcolor="LightSalmon",
+        row=1,
+        col=1
+    )
+    fig.update_xaxes(range=[-0.5, C.data.seq_length], row=1, col=1)
+
+    fig.update_layout(title_text=f"Signal and Frequency Spectrum: {title}")
+    fig.update_yaxes(type="log", row=2, col=1)  # Set y-axis to log scale for the frequency spectrum plot
+    # Add dropdown
+    fig.update_layout(
+        updatemenus=[
+            dict(
+                type="buttons",
+                direction="left",
+                buttons=list(
+                    [
+                        dict(args=[{
+                            "yaxis2.type": "log"
+                        }], label="Log", method="relayout"),
+                        dict(args=[{
+                            "yaxis2.type": "linear"
+                        }], label="Linear", method="relayout"),
+                    ]
+                ),
+                pad={
+                    "r": 0,
+                    "t": 0
+                },
+                showactive=True,
+                x=.995,
+                xanchor="right",
+                y=0.44,
+                yanchor="top"
+            ),
+        ]
+    )
+    fig.show()
+    return fig
 
 
 class PlotPredictionsCallback(L.Callback):

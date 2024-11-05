@@ -149,6 +149,7 @@ class ComplexNet(L.LightningModule):
     test_step = validation_step
 
     def evaluate(self, batch):
+        """Return losses and target and prediction outputs, as used by the model, for a batch."""
         self.eval()
         with torch.inference_mode():
             input_xc_freq, x_target_freq, x_target_t = self.split_and_prep_batch(batch)
