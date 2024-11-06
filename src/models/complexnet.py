@@ -32,6 +32,31 @@ class ComplexMLP(nn.Sequential):
         )
 
 
+class FakeComplexMLP(nn.Sequential):
+
+    def __init__(self, input_dim, output_dim, hidden_dims=[512, 256, 128]):
+        super().__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        current_dim = input_dim
+        for hidden_dim in hidden_dims:
+            self.add_module(
+                f'linear_{current_dim}*2_{hidden_dim}*2',
+                nn.Linear(current_dim * 2, hidden_dim * 2, dtype=torch.float)
+            )
+            self.add_module(f'activation_{hidden_dim}*2', nn.ReLU())
+            current_dim = hidden_dim
+        self.add_module(
+            f'linear_{current_dim}*2_{output_dim}*2',
+            nn.Linear(current_dim * 2, output_dim * 2, dtype=torch.float)
+        )
+
+    def forward(self, complex_input):
+        as_real = torch.concat((complex_input.real, complex_input.imag), dim=1)
+        real_output = super().forward(as_real)
+        return torch.complex(real_output[:, :self.output_dim], real_output[:, self.output_dim:])
+
+
 class ComplexNet(L.LightningModule):
 
     TIME_DOMAIN_LOSS = torchmetrics.MeanSquaredLogError
@@ -42,6 +67,10 @@ class ComplexNet(L.LightningModule):
         FrequencyPhaseAmpMSE=FrequencyPhaseAmpMSE,
         FrequencyAmpMSE=FrequencyAmpMSE,
     )
+    MODEL_OPTIONS = dict(
+        ComplexMLP=ComplexMLP,
+        FakeComplexMLP=FakeComplexMLP,
+    )
 
     def __init__(
         self,
@@ -51,6 +80,7 @@ class ComplexNet(L.LightningModule):
         mlp_hidden_dims: list,
         warmup_window: int,
         forecast_window: int,
+        model: str = "ComplexMLP",
         loss: str = "MSELoss",
         mlp_activation: str = 'ReLU',
         output_activation: str = "Softplus",
@@ -72,7 +102,7 @@ class ComplexNet(L.LightningModule):
         self.loss_time_domain_train = self.TIME_DOMAIN_LOSS()
         self.loss_time_domain_val = self.TIME_DOMAIN_LOSS()
         self.optimizer_params = optimizer_params
-        self.net = ComplexMLP(
+        self.net = ComplexNet.MODEL_OPTIONS[model](
             input_dim=(self.cx_channels) * self.warmup_window_freqs + c_channels * self.forecast_window_freqs,
             output_dim=out_channels * self.forecast_window_freqs,
             hidden_dims=mlp_hidden_dims
