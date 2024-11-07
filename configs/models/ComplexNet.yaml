@@ -9,8 +9,8 @@ model:
     c_channels: 7
     x_channels: 1
     out_channels: ${ model.params.x_channels }
-    warmup_window: 128
-    forecast_window: 128
+    warmup_window: 64
+    forecast_window: 64
     model: FakeComplexMLP
     mlp_hidden_dims: [1024, 1024, 512, 256,64]
     output_activation: none
@@ -29,7 +29,7 @@ data:
   Class: DummyDataSet
   n_columns_C: 7
   n_columns_X: 1
-  seq_length: 256
+  seq_length: 128
   random_start: true
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
