@@ -28,6 +28,9 @@ class ShotWindowDataset(data.Dataset):
         self.time_last = time_last
 
         self.data = pd.read_parquet(self.file_path)
+        self.data['ShotNum'] = self.data['ShotNum'].astype(
+            np.int32
+        )  # Reduce memory usage and quicker indexing
         self.shot_numbers = self.data['ShotNum'].unique()
         self.min = self.data[self.columns_C + self.columns_X].min()
         self.max = self.data[self.columns_C + self.columns_X].max()
