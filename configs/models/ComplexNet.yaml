@@ -3,8 +3,8 @@ tags:
 
 model:
   Class: ComplexNet
-  description: Simple MLP based model that predicts via frequency domain.
-  future_work: Maybe output frequency domain
+  description: Simple MLP based model that predicts via frequency domain. Time loss is now absolute error.
+  future_work: Different activation function than relu
   params:
     c_channels: 7
     x_channels: 1

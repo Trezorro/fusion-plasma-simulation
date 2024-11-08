@@ -178,16 +178,16 @@ def get_and_plot_predictions(model, data_set, n=4, title_base=""):
             isolated_prediction_line=False
         )
         df_freq = build_plotting_df_freq(outputs['x_pred_freq'], outputs['x_target_freq'], shot_numbers)
-        fig_shots = plot_shot_batch(df, title=title, cutoff_t=C.data.seq_length - C.validation_rollout)
+        # fig_shots = plot_shot_batch(df, title=title, cutoff_t=C.data.seq_length - C.validation_rollout)
         fig_time_and_freq = plot_signal_and_spectrum(
             df, df_freq=df_freq, title=title, cutoff_t=C.data.seq_length - C.validation_rollout
         )
 
         if wandb.run.disabled:
-            fig_shots.show()
+            # fig_shots.show()
             fig_time_and_freq.show()
     model.train()
-    return fig_shots, fig_time_and_freq
+    return fig_time_and_freq
 
 
 def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t):
@@ -325,7 +325,7 @@ class PlotPredictionsCallback(L.Callback):
         # Skip for all other epochs
         if trainer.current_epoch % self.every_n_epochs == 0:
             # Generate images
-            fig_shots, fig_spec = get_and_plot_predictions(
+            fig_spec = get_and_plot_predictions(
                 model=pl_module,
                 data_set=trainer.val_dataloaders.dataset,  # type: ignore
                 n=self.num_samples,
@@ -333,11 +333,9 @@ class PlotPredictionsCallback(L.Callback):
             )
             wandb.log(
                 {
-                    "val/prediction_plot": fig_shots,
                     "val/spectogram_plot": fig_spec,
                     "trainer/global_step": trainer.global_step
-                },
-                commit=False
+                }, commit=False
             )
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
@@ -345,7 +343,7 @@ class PlotPredictionsCallback(L.Callback):
             # Skip for all other epochs
             if trainer.current_epoch % self.train_every_n_epochs == 0:
                 # Generate images
-                fig_shots, fig_spec = get_and_plot_predictions(
+                fig_spec = get_and_plot_predictions(
                     model=pl_module,
                     data_set=trainer.train_dataloader.dataset,  # type: ignore
                     n=self.num_samples,
@@ -353,7 +351,6 @@ class PlotPredictionsCallback(L.Callback):
                 )
                 wandb.log(
                     {
-                        "train/prediction_plot": fig_shots,
                         "train/spectogram_plot": fig_spec,
                         "trainer/global_step": trainer.global_step
                     },

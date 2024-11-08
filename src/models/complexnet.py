@@ -59,7 +59,7 @@ class FakeComplexMLP(nn.Sequential):
 
 class ComplexNet(L.LightningModule):
 
-    TIME_DOMAIN_LOSS = torchmetrics.MeanSquaredLogError
+    TIME_DOMAIN_LOSS = torchmetrics.MeanAbsoluteError
     LOSS_OPTIONS = dict(
         MSELoss=torch.nn.MSELoss,
         L1Loss=torch.nn.L1Loss,
