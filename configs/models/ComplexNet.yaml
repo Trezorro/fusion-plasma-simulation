@@ -11,7 +11,7 @@ model:
     out_channels: ${ model.params.x_channels }
     warmup_window: 64
     forecast_window: 64
-    model: FakeComplexMLP
+    model: PolarComplexMLP
     mlp_hidden_dims: [1024, 1024, 512, 256,64]
     output_activation: none
     train_rollout: ${ model.params.forecast_window }

@@ -33,6 +33,7 @@ class ComplexMLP(nn.Sequential):
 
 
 class FakeComplexMLP(nn.Sequential):
+    """A fake complex MLP that treats complex numbers as two real numbers. All given dimensions are doubled."""
 
     def __init__(self, input_dim, output_dim, hidden_dims=[512, 256, 128]):
         super().__init__()
@@ -57,6 +58,14 @@ class FakeComplexMLP(nn.Sequential):
         return torch.complex(real_output[:, :self.output_dim], real_output[:, self.output_dim:])
 
 
+class PolarComplexMLP(FakeComplexMLP):
+
+    def forward(self, complex_input):
+        as_polar = torch.concat((complex_input.abs(), complex_input.angle()), dim=1)
+        real_output = super(FakeComplexMLP, self).forward(as_polar)
+        return torch.polar(real_output[:, :self.output_dim], real_output[:, self.output_dim:])
+
+
 class ComplexNet(L.LightningModule):
 
     TIME_DOMAIN_LOSS = torchmetrics.MeanAbsoluteError
@@ -70,6 +79,7 @@ class ComplexNet(L.LightningModule):
     MODEL_OPTIONS = dict(
         ComplexMLP=ComplexMLP,
         FakeComplexMLP=FakeComplexMLP,
+        PolarComplexMLP=PolarComplexMLP,
     )
 
     def __init__(
