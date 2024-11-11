@@ -63,7 +63,11 @@ class PolarComplexMLP(FakeComplexMLP):
     def forward(self, complex_input):
         as_polar = torch.concat((complex_input.abs(), complex_input.angle()), dim=1)
         real_output = super(FakeComplexMLP, self).forward(as_polar)
-        return torch.polar(real_output[:, :self.output_dim], real_output[:, self.output_dim:])
+        magnitude_log_space = real_output[:, :self.output_dim]
+        magnitude = torch.exp(magnitude_log_space)
+        angle_linear = real_output[:, self.output_dim:]
+        angle = torch.tanh(angle_linear) * torch.pi
+        return torch.polar(magnitude, angle)
 
 
 class ComplexNet(L.LightningModule):
