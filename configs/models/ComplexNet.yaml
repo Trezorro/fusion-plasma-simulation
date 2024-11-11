@@ -26,7 +26,7 @@ model:
 
 
 data:
-  Class: ShotWindowDataset
+  Class: DummyDataSet # ShotWindowDataset or DummyDataSet
   n_columns_C: 7
   n_columns_X: 1
   seq_length: 128
