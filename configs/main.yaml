@@ -8,8 +8,6 @@ model: configs/models/ComplexNet.yaml
 train_rollout: ${ model.params.train_rollout }
 validation_rollout: ${ model.params.validation_rollout }
 
-tags: 
-  -  frequencyspace
 data:
   Class: ShotWindowDataset
   dir: ./data/

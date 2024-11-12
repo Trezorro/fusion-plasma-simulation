@@ -52,6 +52,7 @@ trainer = L.Trainer(
     num_sanity_val_steps=2,
     log_every_n_steps=1,
     check_val_every_n_epoch=1,  # May validate less often
+    gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
     callbacks=[
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
         PlotPredictionsCallback(num_samples=5, every_n_epochs=5, train_every_n_epochs=20),
