@@ -1,6 +1,8 @@
 tags:
   - ComplexNet
 
+gradient_clip_val: 10
+
 model:
   Class: ComplexNet
   description: Simple MLP based model that predicts via frequency domain. Time loss is now absolute error.
