@@ -127,7 +127,7 @@ class ComplexNet(L.LightningModule):
         self.out_channels = out_channels
         self.forecast_window = forecast_window
         self.forecast_window_freqs = (forecast_window // 2 +
-                                      1) * (1 + use_polar_pre_split)  # double for magnitude angle split
+                                      1) * (1 + use_polar_pre_split)  # double for magnitude angle pre-split
         self.warmup_window = warmup_window
         self.warmup_window_freqs = (warmup_window // 2 + 1) * (1 + use_polar_pre_split)
         self.val_rollout = forecast_window

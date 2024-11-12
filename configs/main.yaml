@@ -4,7 +4,7 @@ patience: 1000
 gradient_clip_val: 1000
 
 # model: model.yaml # To be replaced by respective yaml file content
-model: configs/models/ComplexNet.yaml
+model: configs/models/ComplexSplitNet.yaml
 train_rollout: ${ model.params.train_rollout }
 validation_rollout: ${ model.params.validation_rollout }
 

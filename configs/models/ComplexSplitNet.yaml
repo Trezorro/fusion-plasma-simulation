@@ -1,5 +1,5 @@
 tags:
-  - ComplexNet
+  - PreSplitTrick
 
 gradient_clip_val: 5
 
@@ -13,18 +13,17 @@ model:
     out_channels: ${ model.params.x_channels }
     warmup_window: 64
     forecast_window: 64
-    model: PolarComplexMLP
-    use_polar_pre_split: false  # If true, the model will split the input into magnitude and phase before feeding it to the model. Make sure to use normal MSE then and an appropriate MLP model.
-    mlp_hidden_dims: [1024, 1024, 512, 256,64]
+    model: MLP
+    loss: MSELoss # L1Loss
+    use_polar_pre_split: true  # If true, the model will split the input into magnitude and phase before feeding it to the model. Make sure to use normal MSE then.
+    mlp_hidden_dims: [2048,2048, 1024, 512, 128]
     output_activation: none
     train_rollout: ${ model.params.forecast_window }
     validation_rollout: ${ model.params.forecast_window }
-    loss: FrequencyPhaseAmpMSE # L1Loss
     optimizer_params:
       lr: 0.001 # Default 0.001
       weight_decay: 0  # Default 0
       amsgrad: false  # Default false
-
 
 
 
