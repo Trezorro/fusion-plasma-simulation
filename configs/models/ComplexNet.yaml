@@ -1,7 +1,7 @@
 tags:
   - ComplexNet
 
-gradient_clip_val: 0.5
+gradient_clip_val: 5
 
 model:
   Class: ComplexNet
