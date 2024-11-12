@@ -64,7 +64,7 @@ class PolarComplexMLP(FakeComplexMLP):
         as_polar = torch.concat((complex_input.abs(), complex_input.angle()), dim=1)
         real_output = super(FakeComplexMLP, self).forward(as_polar)
         magnitude_log_space = real_output[:, :self.output_dim]
-        magnitude = torch.exp(magnitude_log_space)
+        magnitude = torch.nn.Identity()(magnitude_log_space)  # Was torch.exp, but didn't learn.
         angle_linear = real_output[:, self.output_dim:]
         angle = torch.tanh(angle_linear) * torch.pi
         return torch.polar(magnitude, angle)
