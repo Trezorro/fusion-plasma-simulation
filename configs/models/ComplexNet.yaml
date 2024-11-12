@@ -5,7 +5,7 @@ gradient_clip_val: 10
 
 model:
   Class: ComplexNet
-  description: Simple MLP based model that predicts via frequency domain. Time loss is now absolute error.
+  description: Simple MLP based model that predicts via frequency domain. Time loss is now absolute error. With exponential magnitude output.
   future_work: Different activation function than relu
   params:
     c_channels: 7
