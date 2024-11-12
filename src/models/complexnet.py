@@ -10,6 +10,22 @@ from omegaconf import DictConfig
 from src.fourier import FourierMSLE, FrequencySpectrumMSESimple, FrequencyPhaseAmpMSE, FrequencyAmpMSE
 
 
+class MLP(nn.Sequential):
+
+    def __init__(self, input_dim, output_dim, hidden_dims=[512, 256, 128]):
+        super().__init__()
+        current_dim = input_dim
+        for hidden_dim in hidden_dims:
+            self.add_module(
+                f'linear_{current_dim}_{hidden_dim}', nn.Linear(current_dim, hidden_dim, dtype=torch.float)
+            )
+            self.add_module(f'activation_{hidden_dim}', nn.ReLU())
+            current_dim = hidden_dim
+        self.add_module(
+            f'linear_{current_dim}_{output_dim}', nn.Linear(current_dim, output_dim, dtype=torch.float)
+        )
+
+
 class ComplexReLU(nn.Module):
 
     def forward(self, input):
@@ -61,7 +77,7 @@ class FakeComplexMLP(nn.Sequential):
 class PolarComplexMLP(FakeComplexMLP):
 
     def forward(self, complex_input):
-        as_polar = torch.concat((complex_input.abs(), complex_input.angle()), dim=1)
+        as_polar = torch.concat((torch.log(complex_input.abs()), complex_input.angle()), dim=1)
         real_output = super(FakeComplexMLP, self).forward(as_polar)
         magnitude_log_space = real_output[:, :self.output_dim]
         # magnitude = torch.nn.Identity()(magnitude_log_space)  # Was torch.exp, but didn't learn.
@@ -82,6 +98,7 @@ class ComplexNet(L.LightningModule):
         FrequencyAmpMSE=FrequencyAmpMSE,
     )
     MODEL_OPTIONS = dict(
+        MLP=MLP,
         ComplexMLP=ComplexMLP,
         FakeComplexMLP=FakeComplexMLP,
         PolarComplexMLP=PolarComplexMLP,
@@ -97,6 +114,7 @@ class ComplexNet(L.LightningModule):
         forecast_window: int,
         model: str = "ComplexMLP",
         loss: str = "MSELoss",
+        use_polar_pre_split: bool = False,
         mlp_activation: str = 'ReLU',
         output_activation: str = "Softplus",
         optimizer_params: Optional[dict] = None,
@@ -108,15 +126,17 @@ class ComplexNet(L.LightningModule):
         self.cx_channels = c_channels + x_channels
         self.out_channels = out_channels
         self.forecast_window = forecast_window
-        self.forecast_window_freqs = forecast_window // 2 + 1
+        self.forecast_window_freqs = (forecast_window // 2 +
+                                      1) * (1 + use_polar_pre_split)  # double for magnitude angle split
         self.warmup_window = warmup_window
-        self.warmup_window_freqs = warmup_window // 2 + 1
+        self.warmup_window_freqs = (warmup_window // 2 + 1) * (1 + use_polar_pre_split)
         self.val_rollout = forecast_window
         self.train_rollout = forecast_window
         self.loss = ComplexNet.LOSS_OPTIONS[loss]()
         self.loss_time_domain_train = self.TIME_DOMAIN_LOSS()
         self.loss_time_domain_val = self.TIME_DOMAIN_LOSS()
         self.optimizer_params = optimizer_params
+        self.use_polar_pre_split = use_polar_pre_split
         self.net = ComplexNet.MODEL_OPTIONS[model](
             input_dim=(self.cx_channels) * self.warmup_window_freqs + c_channels * self.forecast_window_freqs,
             output_dim=out_channels * self.forecast_window_freqs,
@@ -153,21 +173,38 @@ class ComplexNet(L.LightningModule):
         x_in = observables[:, :, :c_in.size(2)].to(self.device)
         concat_xc = torch.cat((x_in, c_in, c_out), dim=1)  # (batch_size, variables c + x, seq_length)
         input_xc_freq = torch.fft.rfft(concat_xc, dim=2)
+        if self.use_polar_pre_split:
+            input_xc_mag = torch.log(input_xc_freq.abs() + 1)
+            input_xc_freq = torch.concat((input_xc_mag, input_xc_freq.angle()), dim=2)
 
-        if observables.size(2) == controls.size(2):
-            x_target_t = observables[:, :, -self.forecast_window:].to(self.device)
-            assert x_in.size(2) == c_in.size(2)
-            assert x_target_t.size(2) == c_out.size(2)
-            x_target_freq = torch.fft.rfft(x_target_t, dim=2)
-            return input_xc_freq, x_target_freq, x_target_t
+        if observables.size(2) < controls.size(2):
+            return input_xc_freq, None, None  # for prediction without target
+        # Else, we have a target
+        x_target_t = observables[:, :, -self.forecast_window:].to(self.device)
+        assert x_in.size(2) == c_in.size(2)
+        assert x_target_t.size(2) == c_out.size(2)
+        x_target_freq = torch.fft.rfft(x_target_t, dim=2)
+        if self.use_polar_pre_split:
+            x_target_mag = torch.log(x_target_freq.abs() + 1)
+            x_target_freq = torch.concat(
+                (x_target_mag, x_target_freq.angle()), dim=2
+            )  # (batch_size, variables x, freq_bins*2)
+        return input_xc_freq, x_target_freq, x_target_t
 
-        return input_xc_freq, None, None  # for prediction without target
+    def reverse_pre_split_to_complex(self, mag_angle_result):
+        """Reverse the splitting of magnitude and angle."""
+        num_actual_freqs = mag_angle_result.size(2) // 2
+        mag = torch.exp(mag_angle_result[:, :, :num_actual_freqs]) - 1
+        angle = mag_angle_result[:, :, num_actual_freqs:]
+        return torch.polar(mag, angle)
 
     def prediction_step(self, batch, batch_idx, dataloader_idx=0):
         """Prediction function that skips loss computation."""
         # Do time split here to support autoregressive processing later. Don't do it in data loader.
         input_xc_freq, x_target_freq, x_target_t = self.split_and_prep_batch(batch)
         x_pred_freq = self(input_xc_freq)
+        if self.use_polar_pre_split:
+            x_pred_freq = self.reverse_pre_split_to_complex(x_pred_freq)
         x_pred_t = torch.fft.irfft(x_pred_freq, dim=2)
         return x_pred_t, x_pred_freq, x_target_t, x_target_freq
 
@@ -177,6 +214,8 @@ class ComplexNet(L.LightningModule):
         loss = self.loss(x_pred_freq, x_target_freq)
         self.log("loss/train", loss, prog_bar=True)
         # Optional time domain loss:
+        if self.use_polar_pre_split:
+            x_pred_freq = self.reverse_pre_split_to_complex(x_pred_freq.detach())
         x_pred_t = torch.fft.irfft(x_pred_freq, dim=2)
         self.loss_time_domain_train(x_pred_t, x_target_t)
         self.log("loss/time_domain_train", self.loss_time_domain_train, prog_bar=True)
@@ -186,6 +225,8 @@ class ComplexNet(L.LightningModule):
         input_xc_freq, x_target_freq, x_target_t = self.split_and_prep_batch(batch)
         x_pred_freq = self(input_xc_freq)  # call model forward
         loss = self.loss(x_pred_freq, x_target_freq)
+        if self.use_polar_pre_split:
+            x_pred_freq = self.reverse_pre_split_to_complex(x_pred_freq)
         x_pred_t = torch.fft.irfft(x_pred_freq, dim=2)
         self.log("loss/val", loss, prog_bar=True)
         self.loss_time_domain_val(x_pred_t, x_target_t)
@@ -201,6 +242,9 @@ class ComplexNet(L.LightningModule):
             input_xc_freq, x_target_freq, x_target_t = self.split_and_prep_batch(batch)
             x_pred_freq = self(input_xc_freq)  # call model forward
             loss = self.loss(x_pred_freq, x_target_freq)
+            if self.use_polar_pre_split:
+                x_pred_freq = self.reverse_pre_split_to_complex(x_pred_freq)
+                x_target_freq = self.reverse_pre_split_to_complex(x_target_freq)
             x_pred_t = torch.fft.irfft(x_pred_freq, dim=2)
             time_domain_loss = self.TIME_DOMAIN_LOSS().to(self.device)(x_pred_t, x_target_t)
             losses = dict(loss=loss, time_domain_loss=time_domain_loss)
@@ -228,7 +272,7 @@ class ComplexNet(L.LightningModule):
                 self.c_channels * 2 + self.x_channels,
                 self.forecast_window_freqs,
             ),
-            dtypes=[torch.cfloat],
+            dtypes=[torch.float if self.use_polar_pre_split else torch.cfloat],
             # batch_dim=0,
             col_names=[
                 "input_size",
