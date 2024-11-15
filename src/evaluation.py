@@ -259,11 +259,12 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t, subtitle
         col=1
     )
     fig.update_xaxes(range=[-0.5, C.data.seq_length], row=1, col=1)
-    fig.update_layout(
-        title_text=f"{title} | Signal and Frequency Spectrum", title_automargin=True, title_y=.99
-    )
+    title += "| Signal and Frequency Spectrum"
     if subtitle:
-        fig.update_layout(title_subtitle=dict(text=str(subtitle)))
+        title += f"<br><sub>{subtitle}</sub>"
+    fig.update_layout(title_text=title, title_automargin=True, title_y=.97)
+    # if subtitle:
+    #     fig.update_layout(title_subtitle=dict(text=str(subtitle)))
 
     fig.update_yaxes(type="log", row=2, col=1)  # Set y-axis to log scale for the frequency spectrum plot
     # Add dropdown
