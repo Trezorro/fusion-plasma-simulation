@@ -175,7 +175,7 @@ class ComplexNet(L.LightningModule):
         c_out = controls[:, :, -self.forecast_window:].to(self.device)
         x_in = observables[:, :, :c_in.size(2)].to(self.device)
         concat_xc = torch.cat((x_in, c_in, c_out), dim=1)  # (batch_size, variables c + x, seq_length)
-        input_xc_freq = torch.fft.rfft(concat_xc, dim=2)
+        input_xc_freq = torch.fft.rfft(concat_xc, dim=2).contiguous()
         if self.use_polar_pre_split:
             input_xc_mag = torch.log(input_xc_freq.abs() + 1)
             input_xc_freq = torch.concat((input_xc_mag, input_xc_freq.angle()), dim=2)
@@ -183,7 +183,7 @@ class ComplexNet(L.LightningModule):
         if observables.size(2) < controls.size(2):
             return input_xc_freq, None, None  # for prediction without target
         # Else, we have a target
-        x_target_t = observables[:, :, -self.forecast_window:].to(self.device)
+        x_target_t = observables[:, :, -self.forecast_window:].to(self.device).contiguous()
         assert x_in.size(2) == c_in.size(2)
         assert x_target_t.size(2) == c_out.size(2)
         x_target_freq = torch.fft.rfft(x_target_t, dim=2)
