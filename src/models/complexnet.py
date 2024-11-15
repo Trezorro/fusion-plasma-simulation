@@ -49,7 +49,10 @@ class ComplexMLP(nn.Sequential):
 
 
 class FakeComplexMLP(nn.Sequential):
-    """A fake complex MLP that treats complex numbers as two real numbers. All given dimensions are doubled."""
+    """A fake complex MLP that treats complex numbers as two real numbers. All given dimensions are doubled.
+
+    Works well with AmpPhase loss.
+    """
 
     def __init__(self, input_dim, output_dim, hidden_dims=[512, 256, 128]):
         super().__init__()

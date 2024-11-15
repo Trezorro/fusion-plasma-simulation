@@ -13,7 +13,7 @@ model:
     out_channels: ${ model.params.x_channels }
     warmup_window: 64
     forecast_window: 64
-    model: PolarComplexMLP
+    model: FakeComplexMLP
     use_polar_pre_split: false  # If true, the model will split the input into magnitude and phase before feeding it to the model. Make sure to use normal MSE then and an appropriate MLP model.
     mlp_hidden_dims: [1024, 1024, 512, 256,64]
     output_activation: none
