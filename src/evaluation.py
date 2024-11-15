@@ -1,4 +1,5 @@
 """Functions for evaluating and visualizing model performance."""
+#%%
 from os import name
 from matplotlib.pylab import f
 import numpy as np
@@ -14,6 +15,8 @@ import lightning.pytorch as pl
 import wandb
 from src.fourier import spectogram_plot, FourierMSLE, signal_fourier_comparison_plot
 from src.config import get_current_config
+
+#%%
 
 
 def build_plotting_df_time(
@@ -153,7 +156,12 @@ def plot_shot_batch(df: pd.DataFrame, title="", cutoff_t=50):
 
 def format_losses(losses: dict):
     """Format the losses dictionary into a string."""
-    return " / ".join([f"{k}: {v:.5f}" for k, v in losses.items()])
+    if len(losses) < 5:
+        return " / ".join([f"{k}: {v:.5f}" for k, v in losses.items()])
+    else:
+        first_line = max(len(losses) // 2, 4)
+        str_list = [f"{k}: {v:.5f}" for k, v in losses.items()]
+        return " / ".join(str_list[:first_line]) + "<br>" + " / ".join(str_list[first_line:])
 
 
 def get_and_plot_predictions(model, data_set, n=4, title_base=""):
@@ -167,7 +175,6 @@ def get_and_plot_predictions(model, data_set, n=4, title_base=""):
         batch = next(iter(data.DataLoader(data_set, batch_size=n, shuffle=False)))
         shot_numbers, controls, observables = batch
         losses, outputs = model.evaluate(batch)
-        title = title_base + f" ({format_losses(losses)})"
 
         df = build_plotting_df_time(
             shot_numbers,
@@ -180,7 +187,11 @@ def get_and_plot_predictions(model, data_set, n=4, title_base=""):
         df_freq = build_plotting_df_freq(outputs['x_pred_freq'], outputs['x_target_freq'], shot_numbers)
         # fig_shots = plot_shot_batch(df, title=title, cutoff_t=C.data.seq_length - C.validation_rollout)
         fig_time_and_freq = plot_signal_and_spectrum(
-            df, df_freq=df_freq, title=title, cutoff_t=C.data.seq_length - C.validation_rollout
+            df,
+            df_freq=df_freq,
+            title=title_base,
+            subtitle=format_losses(losses),
+            cutoff_t=C.data.seq_length - C.validation_rollout
         )
 
         if wandb.run.disabled:
@@ -190,7 +201,7 @@ def get_and_plot_predictions(model, data_set, n=4, title_base=""):
     return fig_time_and_freq
 
 
-def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t):
+def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t, subtitle=""):
     # Create subplots
     fig = make_subplots(
         rows=2, cols=1, subplot_titles=("Time-Domain Signal", "Frequency Spectrum"), vertical_spacing=0.1
@@ -248,8 +259,12 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t):
         col=1
     )
     fig.update_xaxes(range=[-0.5, C.data.seq_length], row=1, col=1)
+    fig.update_layout(
+        title_text=f"{title} | Signal and Frequency Spectrum", title_automargin=True, title_y=.99
+    )
+    if subtitle:
+        fig.update_layout(title_subtitle=dict(text=str(subtitle)))
 
-    fig.update_layout(title_text=f"Signal and Frequency Spectrum: {title}")
     fig.update_yaxes(type="log", row=2, col=1)  # Set y-axis to log scale for the frequency spectrum plot
     # Add dropdown
     fig.update_layout(
@@ -281,7 +296,7 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t):
                 buttons=[
                     dict(args=[{
                         "visible": [True] * len(fig.data)
-                    }], label="Show All", method="update"),
+                    }], label="All", method="update"),
                     dict(
                         args=[{
                             "visible": [trace.name.startswith('Predicted') for trace in fig.data]
@@ -298,8 +313,8 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t):
                     ),
                 ],
                 pad={
-                    "r": 0,
-                    "t": 0
+                    "r": 10,
+                    "t": 10
                 },
                 showactive=True,
                 x=1.005,
@@ -310,6 +325,34 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t):
         ]
     )
     return fig
+
+
+def batch_variance(time_series_batch, mean_adjusted=False, reduce='mean'):
+    """Calculate the variance in between a batch of time series, for each time step.
+
+    Optionally, first normalize the time series by dividing by the mean of each series.
+
+    Args:
+        time_series_batch (torch.Tensor): The time series batch. (batch_size, n_variables, seq_length)
+        mean_adjusted (bool): If True, divide each time series by its mean before calculating variance.
+
+    """
+    if mean_adjusted:
+        time_series_batch = time_series_batch / (time_series_batch.mean(dim=2, keepdim=True) + 1e-8)
+    variances = time_series_batch.var(dim=0)
+    if reduce == 'mean':
+        return variances.mean()
+    elif reduce == 'sum':
+        return variances.sum()
+    else:
+        return variances
+
+
+def output_variance_per_input_variance(output_batch, input_batch, mean_adjusted=False):
+    """Calculate the ratio of the output variance to the input variance."""
+    output_var = batch_variance(output_batch, mean_adjusted=mean_adjusted)
+    input_var = batch_variance(input_batch, mean_adjusted=mean_adjusted)
+    return output_var / input_var
 
 
 class PlotPredictionsCallback(L.Callback):
@@ -356,3 +399,6 @@ class PlotPredictionsCallback(L.Callback):
                     },
                     commit=False
                 )
+
+
+# %%

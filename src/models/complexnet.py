@@ -7,6 +7,7 @@ import torchmetrics
 import wandb
 from omegaconf import DictConfig
 
+from src.evaluation import batch_variance, output_variance_per_input_variance
 from src.fourier import FourierMSLE, FrequencySpectrumMSESimple, FrequencyPhaseAmpMSE, FrequencyAmpMSE
 
 
@@ -234,6 +235,26 @@ class ComplexNet(L.LightningModule):
         self.log("loss/val", loss, prog_bar=True)
         self.loss_time_domain_val(x_pred_t, x_target_t)
         self.log("loss/time_domain_val", self.loss_time_domain_val, prog_bar=True)
+        # Variance metrics
+        time_output_variance = batch_variance(x_pred_t)
+        self.log("val/time_output_variance", batch_variance(x_pred_t), prog_bar=True)
+        self.log(
+            "val/time_output_variance_mean_adjusted",
+            batch_variance(x_pred_t, mean_adjusted=True),
+            prog_bar=True
+        )
+        self.log("val/freq_output_variance", batch_variance(x_pred_freq), prog_bar=True)
+        self.log(
+            "val/freq_output_variance_mean_adjusted",
+            batch_variance(x_pred_freq, mean_adjusted=True),
+            prog_bar=True
+        )
+        self.log(
+            "val/freq_output_input_variance_ratio",
+            output_variance_per_input_variance(x_pred_freq, input_xc_freq, mean_adjusted=False),
+            prog_bar=True
+        )
+
         return dict(loss=loss, outputs=x_pred_t)
 
     test_step = validation_step
@@ -250,9 +271,20 @@ class ComplexNet(L.LightningModule):
                 x_target_freq = self.reverse_pre_split_to_complex(x_target_freq)
             x_pred_t = torch.fft.irfft(x_pred_freq, dim=2)
             time_domain_loss = self.TIME_DOMAIN_LOSS().to(self.device)(x_pred_t, x_target_t)
-            losses = dict(loss=loss, time_domain_loss=time_domain_loss)
+
+            losses = dict(
+                loss=loss,
+                time_domain_loss=time_domain_loss,
+                time_output_variance=batch_variance(x_pred_t),
+                time_output_var_mean_adj=batch_variance(x_pred_t, mean_adjusted=True),
+                freq_output_variance=batch_variance(x_pred_freq),
+                freq_output_var_mean_adj=batch_variance(x_pred_freq, mean_adjusted=True),
+                freq_output_input_variance_ratio=output_variance_per_input_variance(
+                    x_pred_freq, input_xc_freq
+                )
+            )
             outputs = dict(
-                # input_xc_freq=input_xc_freq,
+                input_xc_freq=input_xc_freq,
                 x_pred_freq=x_pred_freq,
                 x_pred_t=x_pred_t,
                 x_target_freq=x_target_freq,
