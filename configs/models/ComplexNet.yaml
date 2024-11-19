@@ -1,12 +1,12 @@
-tags:
-  - ComplexNet
+# tags:
+#   - 
 
 gradient_clip_val: 5
 
 model:
   Class: ComplexNet
   description: Simple MLP based model that predicts via frequency domain. Time loss is now absolute error. With exponential magnitude output.
-  future_work: Different activation function than relu
+  future_work: Try lower learning rate, activation function, and more layers.
   params:
     c_channels: 7
     x_channels: 1
@@ -48,17 +48,17 @@ data:
             # "FIR",  # density lijn Interferometer
             # "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
             # "PD",  # photodiode lijn op de divertor
-            # "DML",  # Magnetische respons  correleert met de energie in het plasma
+            "DML",  # Magnetische respons  correleert met de energie in het plasma
             # "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
-            "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
+            # "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
         ]
     c:
     - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
     - gas_fringes  # Ingepompte gas
     - NBI  # manieren om te verhitten: colliding Neutral beam injection
     - ECRH  # magnetron.
-    - a_minor  # reel gemeten plasma shape a k d (horizontale radius
-    - KAPPA
+    - a_minor  # The radius of the smallest cross-section of the plasma, related to plasma shape and confinement efficiency.
+    - KAPPA # Describes the ratio of plasma height to width, affecting stability and confinement.
     - DELTA  # linkerbovenhoek naar links vanuit hetmidden
     # # From X:
     # -  "FIR_core"  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
