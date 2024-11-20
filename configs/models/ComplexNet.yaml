@@ -35,7 +35,7 @@ data:
   n_columns_X: 1
   seq_length: 128
   random_start: true
-  n_frequencies: 4
+  n_frequencies: 3
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
   time_last: true  # Sets the time dim as the last dim
