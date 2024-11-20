@@ -253,20 +253,20 @@ class ComplexNet(L.LightningModule):
             output_variance_per_input_variance(x_pred_freq, input_xc_freq, mean_adjusted=False),
             prog_bar=True
         )
-        self.log("val/time_target_variance", batch_variance(x_target_t), prog_bar=True)
+        self.log("val/time_target_batch_variance", batch_variance(x_target_t), prog_bar=True)
         self.log(
-            "val/time_target_var_mean_adjusted",
+            "val/time_target_batch_var_mean_adjusted",
             batch_variance(x_target_t, mean_adjusted=True),
             prog_bar=True
         )
-        self.log("val/freq_target_variance", batch_variance(x_target_freq), prog_bar=True)
+        self.log("val/freq_target_batch_variance", batch_variance(x_target_freq), prog_bar=True)
         self.log(
-            "val/freq_target_var_mean_adjusted",
+            "val/freq_target_batch_var_mean_adjusted",
             batch_variance(x_target_freq, mean_adjusted=True),
             prog_bar=True
         )
         self.log(
-            "val/freq_target_input_variance_ratio",
+            "val/freq_target_batch_input_variance_ratio",
             output_variance_per_input_variance(x_target_freq, input_xc_freq, mean_adjusted=False),
             prog_bar=True
         )
@@ -291,11 +291,11 @@ class ComplexNet(L.LightningModule):
             losses = dict(
                 loss=loss,
                 time_domain_loss=time_domain_loss,
-                time_output_variance=batch_variance(x_pred_t),
-                time_output_var_mean_adj=batch_variance(x_pred_t, mean_adjusted=True),
-                freq_output_variance=batch_variance(x_pred_freq),
-                freq_output_var_mean_adj=batch_variance(x_pred_freq, mean_adjusted=True),
-                freq_output_input_variance_ratio=output_variance_per_input_variance(
+                time_pred_batch_variance=batch_variance(x_pred_t),
+                time_pred_batch_var_mean_adjusted=batch_variance(x_pred_t, mean_adjusted=True),
+                freq_pred_batch_variance=batch_variance(x_pred_freq),
+                freq_pred_batch_var_mean_adjusted=batch_variance(x_pred_freq, mean_adjusted=True),
+                freq_pred_batch_input_variance_ratio=output_variance_per_input_variance(
                     x_pred_freq, input_xc_freq
                 )
             )
