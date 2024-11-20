@@ -23,11 +23,18 @@ wandb.define_metric("loss/train", summary="min")
 wandb.define_metric("loss/val", summary="min")
 wandb.define_metric("loss/time_domain_train", summary="min")
 wandb.define_metric("loss/time_domain_val", summary="min")
-wandb.define_metric("val/time_output_variance", summary="max")
-wandb.define_metric("val/time_output_variance_mean_adjusted", summary="max")
-wandb.define_metric("val/freq_output_variance", summary="max")
-wandb.define_metric("val/freq_output_variance_mean_adjusted", summary="max")
-wandb.define_metric("val/freq_output_input_variance_ratio", summary="max")
+
+wandb.define_metric("val/time_pred_batch_variance", summary="max")
+wandb.define_metric("val/time_pred_batch_var_mean_adjusted", summary="max")
+wandb.define_metric("val/freq_pred_batch_variance", summary="max")
+wandb.define_metric("val/freq_pred_batch_var_mean_adjusted", summary="max")
+wandb.define_metric("val/freq_pred_batch_input_variance_ratio", summary="max")
+
+wandb.define_metric("val/time_target_variance", summary="max")
+wandb.define_metric("val/time_target_var_mean_adjusted", summary="max")
+wandb.define_metric("val/freq_target_variance", summary="max")
+wandb.define_metric("val/freq_target_var_mean_adjusted", summary="max")
+wandb.define_metric("val/freq_target_input_variance_ratio", summary="max")
 
 wandb_logger = WandbLogger(
     log_model=True,

@@ -236,22 +236,38 @@ class ComplexNet(L.LightningModule):
         self.loss_time_domain_val(x_pred_t, x_target_t)
         self.log("loss/time_domain_val", self.loss_time_domain_val, prog_bar=True)
         # Variance metrics
-        time_output_variance = batch_variance(x_pred_t)
-        self.log("val/time_output_variance", batch_variance(x_pred_t), prog_bar=True)
+        self.log("val/time_pred_batch_variance", batch_variance(x_pred_t), prog_bar=True)
         self.log(
-            "val/time_output_variance_mean_adjusted",
+            "val/time_pred_batch_var_mean_adjusted",
             batch_variance(x_pred_t, mean_adjusted=True),
             prog_bar=True
         )
-        self.log("val/freq_output_variance", batch_variance(x_pred_freq), prog_bar=True)
+        self.log("val/freq_pred_batch_variance", batch_variance(x_pred_freq), prog_bar=True)
         self.log(
-            "val/freq_output_variance_mean_adjusted",
+            "val/freq_pred_batch_var_mean_adjusted",
             batch_variance(x_pred_freq, mean_adjusted=True),
             prog_bar=True
         )
         self.log(
-            "val/freq_output_input_variance_ratio",
+            "val/freq_pred_batch_input_variance_ratio",
             output_variance_per_input_variance(x_pred_freq, input_xc_freq, mean_adjusted=False),
+            prog_bar=True
+        )
+        self.log("val/time_target_variance", batch_variance(x_target_t), prog_bar=True)
+        self.log(
+            "val/time_target_var_mean_adjusted",
+            batch_variance(x_target_t, mean_adjusted=True),
+            prog_bar=True
+        )
+        self.log("val/freq_target_variance", batch_variance(x_target_freq), prog_bar=True)
+        self.log(
+            "val/freq_target_var_mean_adjusted",
+            batch_variance(x_target_freq, mean_adjusted=True),
+            prog_bar=True
+        )
+        self.log(
+            "val/freq_target_input_variance_ratio",
+            output_variance_per_input_variance(x_target_freq, input_xc_freq, mean_adjusted=False),
             prog_bar=True
         )
 
