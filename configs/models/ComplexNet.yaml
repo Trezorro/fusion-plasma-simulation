@@ -30,11 +30,12 @@ model:
 
 
 data:
-  Class: ShotWindowDataset # ShotWindowDataset or DummyDataSet
+  Class: DummyDataSet # ShotWindowDataset or DummyDataSet
   n_columns_C: 7
   n_columns_X: 1
   seq_length: 128
   random_start: true
+  n_frequencies: 2
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
   time_last: true  # Sets the time dim as the last dim

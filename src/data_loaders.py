@@ -64,7 +64,14 @@ class DummyDataSet(data.Dataset):
     SAMPLE_RATE = 10000
 
     def __init__(
-        self, n_columns_C, n_columns_X, seq_length=128, random_start=True, time_last=False, **kwargs
+        self,
+        n_columns_C,
+        n_columns_X,
+        seq_length=128,
+        random_start=True,
+        time_last=False,
+        n_frequencies=1,
+        **kwargs
     ):
         super().__init__()
         self.n_columns_C = n_columns_C
@@ -72,6 +79,7 @@ class DummyDataSet(data.Dataset):
         self.seq_length = seq_length
         self.random_start = random_start
         self.time_last = time_last
+        self.n_frequencies = n_frequencies
 
         self.time_points = self.generate_timepoints()
 
@@ -89,6 +97,18 @@ class DummyDataSet(data.Dataset):
         x = np.sin(2 * np.pi * (frequency * t + phase), dtype=np.float32) * amplitude + y_offset
         return x
 
+    @staticmethod
+    def get_multi_sine_wave(t, frequencies, amplitudes, phases, y_offsets):
+        """Generate a sum of sine waves with the given frequencies and durations."""
+        x = np.sum(
+            [
+                DummyDataSet.get_sine_wave(t, f, a, p, y)
+                for f, a, p, y in zip(frequencies, amplitudes, phases, y_offsets)
+            ],
+            axis=0
+        )
+        return x
+
     def __getitem__(self, idx):
         frequency_c = idx + 10  # should maximally be 260, which gives about 3 waves in 128 time points
         frequency_x = idx * 10 + 1  # should maximally be 2500, which gives 30 waves in 128 time points
@@ -102,17 +122,29 @@ class DummyDataSet(data.Dataset):
                 ) for _ in range(self.n_columns_C)
             ]
         )
-        X = np.array(
-            [
-                self.get_sine_wave(
-                    self.time_points,
-                    frequency_x,
-                    amplitude=np.random.rand(),
-                    phase=np.random.rand() if self.random_start else 0,
-                    y_offset=np.random.rand()
-                ) for _ in range(self.n_columns_X)
-            ]
-        )
+        if self.n_frequencies > 1:
+            frequencies = [frequency_x * (i + 1) for i in range(self.n_frequencies)]
+            amplitudes = np.random.rand(self.n_frequencies)
+            phases = np.random.rand(self.n_frequencies)
+            y_offsets = np.random.rand(self.n_frequencies)
+            X = np.array(
+                [
+                    self.get_multi_sine_wave(self.time_points, frequencies, amplitudes, phases, y_offsets)
+                    for _ in range(self.n_columns_X)
+                ]
+            )
+        else:
+            X = np.array(
+                [
+                    self.get_sine_wave(
+                        self.time_points,
+                        frequency_x,
+                        amplitude=np.random.rand(),
+                        phase=np.random.rand() if self.random_start else 0,
+                        y_offset=np.random.rand()
+                    ) for _ in range(self.n_columns_X)
+                ]
+            )
         if not self.time_last:
             C = C.transpose()
             X = X.transpose()
