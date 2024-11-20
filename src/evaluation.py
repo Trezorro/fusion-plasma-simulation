@@ -244,6 +244,10 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t, subtitle
         trace.name = f"{is_predicted} {variable} frequency spectrum"
         trace.legendgroup = shot + is_predicted + variable
         trace.legendgrouptitle = {'text': f"Shot {shot}: {is_predicted} {variable} signal"}
+        if is_predicted == "Predicted":
+            trace.fill = 'tonexty'
+            rgb = tuple(str(int(trace.line.color[i:i + 2], 16)) for i in (1, 3, 5))
+            trace.fillcolor = f'rgba({",".join(rgb)}, 0.1)'
         fig.add_trace(trace, row=2, col=1)
 
     # Add vertical rectangle to time-domain plot
@@ -279,7 +283,24 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t, subtitle
                     }], label="Log", method="relayout"),
                     dict(args=[{
                         "yaxis2.type": "linear"
-                    }], label="Linear", method="relayout")
+                    }], label="Linear", method="relayout"),
+                    # Fill color buttons
+                    dict(
+                        args=[
+                            {
+                                "fill":
+                                    [
+                                        trace.fill if trace.name.startswith('Predicted') else None
+                                        for trace in fig.data
+                                    ]
+                            }
+                        ],
+                        label="Fill",
+                        method="update"
+                    ),
+                    dict(args=[{
+                        "fill": [None for trace in fig.data]
+                    }], label="No Fill", method="update"),
                 ],
                 pad={
                     "r": 0,
@@ -288,7 +309,7 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t, subtitle
                 showactive=True,
                 x=.995,
                 xanchor="right",
-                y=0.44,
+                y=0.445,
                 yanchor="top"
             ),
             dict(
@@ -314,15 +335,15 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t, subtitle
                     ),
                 ],
                 pad={
-                    "r": 10,
-                    "t": 10
+                    "r": 0,
+                    "t": 00
                 },
                 showactive=True,
-                x=1.005,
+                x=1.015,
                 xanchor="left",
-                y=1.02,
+                y=1.01,
                 yanchor="bottom"
-            ),
+            )
         ]
     )
     return fig
