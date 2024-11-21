@@ -66,6 +66,7 @@ class FakeComplexMLP(nn.Sequential):
     ACTIVATION_OPTIONS = dict(
         ReLU=nn.ReLU,
         SiLU=nn.SiLU,
+        ELU=nn.ELU,
         Softplus=nn.Softplus,
         Identity=nn.Identity,
         Tanh=nn.Tanh,
