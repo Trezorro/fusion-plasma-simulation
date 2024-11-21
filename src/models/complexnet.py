@@ -12,15 +12,24 @@ from src.fourier import FourierMSLE, FrequencySpectrumMSESimple, FrequencyPhaseA
 
 
 class MLP(nn.Sequential):
+    ACTIVATION_OPTIONS = dict(
+        ReLU=nn.ReLU,
+        SiLU=nn.SiLU,
+        Softplus=nn.Softplus,
+        Identity=nn.Identity,
+        Tanh=nn.Tanh,
+        Sigmoid=nn.Sigmoid,
+    )
 
-    def __init__(self, input_dim, output_dim, hidden_dims=[512, 256, 128]):
+    def __init__(self, input_dim, output_dim, hidden_dims=[512, 256, 128], activation: str = 'ReLU'):
         super().__init__()
         current_dim = input_dim
+        self.activation = self.ACTIVATION_OPTIONS[activation]
         for hidden_dim in hidden_dims:
             self.add_module(
                 f'linear_{current_dim}_{hidden_dim}', nn.Linear(current_dim, hidden_dim, dtype=torch.float)
             )
-            self.add_module(f'activation_{hidden_dim}', nn.ReLU())
+            self.add_module(f'activation_{hidden_dim}', self.activation())
             current_dim = hidden_dim
         self.add_module(
             f'linear_{current_dim}_{output_dim}', nn.Linear(current_dim, output_dim, dtype=torch.float)
@@ -35,7 +44,7 @@ class ComplexReLU(nn.Module):
 
 class ComplexMLP(nn.Sequential):
 
-    def __init__(self, input_dim, output_dim, hidden_dims=[512, 256, 128]):
+    def __init__(self, input_dim, output_dim, hidden_dims=[512, 256, 128], activation: Optional[str] = None):
         super(ComplexMLP, self).__init__()
         current_dim = input_dim
         for hidden_dim in hidden_dims:
@@ -54,18 +63,27 @@ class FakeComplexMLP(nn.Sequential):
 
     Works well with AmpPhase loss.
     """
+    ACTIVATION_OPTIONS = dict(
+        ReLU=nn.ReLU,
+        SiLU=nn.SiLU,
+        Softplus=nn.Softplus,
+        Identity=nn.Identity,
+        Tanh=nn.Tanh,
+        Sigmoid=nn.Sigmoid,
+    )
 
-    def __init__(self, input_dim, output_dim, hidden_dims=[512, 256, 128]):
+    def __init__(self, input_dim, output_dim, hidden_dims=[512, 256, 128], activation: str = 'ReLU'):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
+        self.activation = self.ACTIVATION_OPTIONS[activation]
         current_dim = input_dim
         for hidden_dim in hidden_dims:
             self.add_module(
                 f'linear_{current_dim}*2_{hidden_dim}*2',
                 nn.Linear(current_dim * 2, hidden_dim * 2, dtype=torch.float)
             )
-            self.add_module(f'activation_{hidden_dim}*2', nn.ReLU())
+            self.add_module(f'activation_{hidden_dim}*2', self.activation())
             current_dim = hidden_dim
         self.add_module(
             f'linear_{current_dim}*2_{output_dim}*2',
@@ -144,7 +162,8 @@ class ComplexNet(L.LightningModule):
         self.net = ComplexNet.MODEL_OPTIONS[model](
             input_dim=(self.cx_channels) * self.warmup_window_freqs + c_channels * self.forecast_window_freqs,
             output_dim=out_channels * self.forecast_window_freqs,
-            hidden_dims=mlp_hidden_dims
+            hidden_dims=mlp_hidden_dims,
+            activation=mlp_activation
         )
         match output_activation.lower():
             case 'relu':

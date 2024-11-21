@@ -16,6 +16,7 @@ model:
     model: FakeComplexMLP
     use_polar_pre_split: false  # If true, the model will split the input into magnitude and phase before feeding it to the model. Make sure to use normal MSE then and an appropriate MLP model.
     mlp_hidden_dims: [1024, 1024, 512, 256,64]
+    mlp_activation: ReLU
     output_activation: none
     train_rollout: ${ model.params.forecast_window }
     validation_rollout: ${ model.params.forecast_window }
@@ -31,11 +32,11 @@ model:
 
 data:
   Class: DummyDataSet # ShotWindowDataset or DummyDataSet
+  n_frequencies: 10
   n_columns_C: 7
   n_columns_X: 1
   seq_length: 128
   random_start: true
-  n_frequencies: 1
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
   time_last: true  # Sets the time dim as the last dim
