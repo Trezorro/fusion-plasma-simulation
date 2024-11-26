@@ -1,3 +1,4 @@
+import time
 from typing import Optional
 import lightning as L
 import torch
@@ -137,6 +138,7 @@ class ComplexNet(L.LightningModule):
         forecast_window: int,
         model: str = "ComplexMLP",
         loss: str = "MSELoss",
+        time_loss_component=False,
         use_polar_pre_split: bool = False,
         mlp_activation: str = 'ReLU',
         output_activation: str = "Softplus",
@@ -156,6 +158,7 @@ class ComplexNet(L.LightningModule):
         self.val_rollout = forecast_window
         self.train_rollout = forecast_window
         self.loss = ComplexNet.LOSS_OPTIONS[loss]()
+        self.time_loss_component = time_loss_component
         self.loss_time_domain_train = self.TIME_DOMAIN_LOSS()
         self.loss_time_domain_val = self.TIME_DOMAIN_LOSS()
         self.optimizer_params = optimizer_params
@@ -235,15 +238,17 @@ class ComplexNet(L.LightningModule):
     def training_step(self, batch, batch_idx):
         input_xc_freq, x_target_freq, x_target_t = self.split_and_prep_batch(batch)
         x_pred_freq = self(input_xc_freq)  # call model forward
-        loss = self.loss(x_pred_freq, x_target_freq)
-        self.log("loss/train", loss, prog_bar=True)
+        f_loss = self.loss(x_pred_freq, x_target_freq)
+        self.log("loss/train", f_loss, prog_bar=True)
         # Optional time domain loss:
         if self.use_polar_pre_split:
-            x_pred_freq = self.reverse_pre_split_to_complex(x_pred_freq.detach())
+            x_pred_freq = self.reverse_pre_split_to_complex(x_pred_freq)
         x_pred_t = torch.fft.irfft(x_pred_freq, dim=2)
-        self.loss_time_domain_train(x_pred_t, x_target_t)
+        t_loss = self.loss_time_domain_train(x_pred_t, x_target_t)
         self.log("loss/time_domain_train", self.loss_time_domain_train, prog_bar=True)
-        return loss
+        if self.time_loss_component:
+            return f_loss + t_loss
+        return f_loss
 
     def validation_step(self, batch, batch_idx):
         input_xc_freq, x_target_freq, x_target_t = self.split_and_prep_batch(batch)
