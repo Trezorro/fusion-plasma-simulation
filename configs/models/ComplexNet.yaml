@@ -15,7 +15,7 @@ model:
     forecast_window: 128
     model: FakeComplexMLP
     use_polar_pre_split: false  # If true, the model will split the input into magnitude and phase before feeding it to the model. Make sure to use normal MSE then and an appropriate MLP model.
-    mlp_hidden_dims: [2048, 1024, 1024, 512, 256,64]
+    mlp_hidden_dims: [1024, 1024, 512, 256,64]
     mlp_activation: SiLU
     output_activation: none
     train_rollout: ${ model.params.forecast_window }
