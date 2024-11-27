@@ -34,7 +34,7 @@ model:
 
 data:
   Class: DummyDataSet # ShotWindowDataset or DummyDataSet
-  n_frequencies: 10
+  n_frequencies: 5
   n_columns_C: 7
   n_columns_X: 1
   seq_length: 128
