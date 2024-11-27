@@ -71,6 +71,8 @@ class DummyDataSet(data.Dataset):
         random_start=True,
         time_last=False,
         n_frequencies=1,
+        aligned_frequencies=False,
+        sample_rate=10000,
         **kwargs
     ):
         super().__init__()
@@ -80,14 +82,21 @@ class DummyDataSet(data.Dataset):
         self.random_start = random_start
         self.time_last = time_last
         self.n_frequencies = n_frequencies
-
+        self.sample_rate = sample_rate
+        self.aligned_frequencies = aligned_frequencies
+        if self.aligned_frequencies:
+            window_length = self.seq_length // 2
+            sample_spacing = 1. / self.sample_rate
+            self.freq_bins = np.fft.rfftfreq(window_length, d=sample_spacing)
         self.time_points = self.generate_timepoints()
 
     def __len__(self):
+        if self.aligned_frequencies:
+            return len(self.freq_bins)
         return 250
 
     def generate_timepoints(self):
-        duration_secs = self.seq_length / DummyDataSet.SAMPLE_RATE
+        duration_secs = self.seq_length / self.sample_rate
         t = np.linspace(0, duration_secs, self.seq_length, endpoint=False)
         return t
 
@@ -110,8 +119,14 @@ class DummyDataSet(data.Dataset):
         return x
 
     def __getitem__(self, idx):
-        frequency_c = idx + 10  # should maximally be 260, which gives about 3 waves in 128 time points
-        frequency_x = idx * 10 + 1  # should maximally be 2500, which gives 30 waves in 128 time points
+        if self.aligned_frequencies:
+            idx = idx % len(self.freq_bins)
+            frequency_x = self.freq_bins[idx]
+            frequency_c = frequency_x + 10
+            idx = frequency_x  # for logging and plotting
+        else:
+            frequency_c = idx + 10  # should maximally be 260, which gives about 3 waves in 128 time points
+            frequency_x = idx * 10 + 1  # should maximally be 2500, which gives 30 waves in 128 time points
         C = np.array(
             [
                 self.get_sine_wave(
@@ -125,7 +140,7 @@ class DummyDataSet(data.Dataset):
         if self.n_frequencies > 1:
             frequencies = [frequency_x * (i + 1) for i in range(self.n_frequencies)]
             amplitudes = np.random.rand(self.n_frequencies)
-            phases = np.random.rand(self.n_frequencies)
+            phases = np.random.rand(self.n_frequencies) if self.random_start else np.zeros(self.n_frequencies)
             y_offsets = np.random.rand(self.n_frequencies)
             X = np.array(
                 [
