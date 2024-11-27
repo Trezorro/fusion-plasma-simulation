@@ -157,7 +157,7 @@ class ComplexNet(L.LightningModule):
         self.warmup_window_freqs = (warmup_window // 2 + 1) * (1 + use_polar_pre_split)
         self.val_rollout = forecast_window
         self.train_rollout = forecast_window
-        self.loss = ComplexNet.LOSS_OPTIONS[loss]()
+        self.f_loss = ComplexNet.LOSS_OPTIONS[loss]()
         self.time_loss_component = time_loss_component
         self.loss_time_domain_train = self.TIME_DOMAIN_LOSS()
         self.loss_time_domain_val = self.TIME_DOMAIN_LOSS()
@@ -238,27 +238,35 @@ class ComplexNet(L.LightningModule):
     def training_step(self, batch, batch_idx):
         input_xc_freq, x_target_freq, x_target_t = self.split_and_prep_batch(batch)
         x_pred_freq = self(input_xc_freq)  # call model forward
-        f_loss = self.loss(x_pred_freq, x_target_freq)
-        self.log("loss/train", f_loss, prog_bar=True)
-        # Optional time domain loss:
         if self.use_polar_pre_split:
             x_pred_freq = self.reverse_pre_split_to_complex(x_pred_freq)
         x_pred_t = torch.fft.irfft(x_pred_freq, dim=2)
+
+        f_loss = self.f_loss(x_pred_freq, x_target_freq)
         t_loss = self.loss_time_domain_train(x_pred_t, x_target_t)
-        self.log("loss/time_domain_train", self.loss_time_domain_train, prog_bar=True)
         if self.time_loss_component:
-            return f_loss + t_loss
-        return f_loss
+            loss = f_loss + t_loss
+        else:
+            loss = f_loss
+        self.log("loss/train", loss, prog_bar=True)
+        self.log("loss/f_train", f_loss, prog_bar=True)
+        self.log("loss/time_domain_train", self.loss_time_domain_train, prog_bar=True)
+        return loss
 
     def validation_step(self, batch, batch_idx):
         input_xc_freq, x_target_freq, x_target_t = self.split_and_prep_batch(batch)
         x_pred_freq = self(input_xc_freq)  # call model forward
-        loss = self.loss(x_pred_freq, x_target_freq)
+        f_loss = self.f_loss(x_pred_freq, x_target_freq)
         if self.use_polar_pre_split:
             x_pred_freq = self.reverse_pre_split_to_complex(x_pred_freq)
         x_pred_t = torch.fft.irfft(x_pred_freq, dim=2)
+        t_loss = self.loss_time_domain_val(x_pred_t, x_target_t)
+        if self.time_loss_component:
+            loss = f_loss + t_loss
+        else:
+            loss = f_loss
         self.log("loss/val", loss, prog_bar=True)
-        self.loss_time_domain_val(x_pred_t, x_target_t)
+        self.log("loss/f_val", f_loss, prog_bar=True)
         self.log("loss/time_domain_val", self.loss_time_domain_val, prog_bar=True)
         # Variance metrics
         self.log("val/time_pred_batch_variance", batch_variance(x_pred_t), prog_bar=True)
@@ -296,26 +304,35 @@ class ComplexNet(L.LightningModule):
             prog_bar=True
         )
 
-        return dict(loss=loss, outputs=x_pred_t)
+        return dict(loss=f_loss, outputs=x_pred_t)
 
     test_step = validation_step
 
     def evaluate(self, batch):
-        """Return losses and target and prediction outputs, as used by the model, for a batch."""
+        """Return losses and target and prediction outputs, as used by the model, for a batch.
+
+        This is called outside of lightnings managed training loop.
+        """
         self.eval()
         with torch.inference_mode():
             input_xc_freq, x_target_freq, x_target_t = self.split_and_prep_batch(batch)
             x_pred_freq = self(input_xc_freq)  # call model forward
-            loss = self.loss(x_pred_freq, x_target_freq)
+            f_loss = self.f_loss(x_pred_freq, x_target_freq)
             if self.use_polar_pre_split:
                 x_pred_freq = self.reverse_pre_split_to_complex(x_pred_freq)
                 x_target_freq = self.reverse_pre_split_to_complex(x_target_freq)
             x_pred_t = torch.fft.irfft(x_pred_freq, dim=2)
-            time_domain_loss = self.TIME_DOMAIN_LOSS().to(self.device)(x_pred_t, x_target_t)
+            t_loss = self.TIME_DOMAIN_LOSS().to(self.device)(x_pred_t, x_target_t)
+
+            if self.time_loss_component:
+                loss = f_loss + t_loss
+            else:
+                loss = f_loss
 
             losses = dict(
                 loss=loss,
-                time_domain_loss=time_domain_loss,
+                f_loss=f_loss,
+                time_domain_loss=t_loss,
                 time_pred_batch_variance=batch_variance(x_pred_t),
                 time_pred_batch_var_mean_adjusted=batch_variance(x_pred_t, mean_adjusted=True),
                 freq_pred_batch_variance=batch_variance(x_pred_freq),

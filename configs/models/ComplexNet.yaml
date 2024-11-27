@@ -1,5 +1,6 @@
 tags:
   - multisine
+  - dual loss
 
 gradient_clip_val: 5
 
