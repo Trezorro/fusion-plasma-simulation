@@ -141,7 +141,7 @@ class DummyDataSet(data.Dataset):
             frequencies = [frequency_x * (i + 1) for i in range(self.n_frequencies)]
             amplitudes = np.random.rand(self.n_frequencies)
             phases = np.random.rand(self.n_frequencies) if self.random_start else np.zeros(self.n_frequencies)
-            y_offsets = np.random.rand(self.n_frequencies)
+            y_offsets = (np.random.rand(self.n_frequencies) / self.n_frequencies) / 10
             X = np.array(
                 [
                     self.get_multi_sine_wave(self.time_points, frequencies, amplitudes, phases, y_offsets)
