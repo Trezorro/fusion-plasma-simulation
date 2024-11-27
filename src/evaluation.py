@@ -13,7 +13,6 @@ import lightning as L
 import lightning.pytorch as pl
 
 import wandb
-from src.fourier import spectogram_plot, FourierMSLE, signal_fourier_comparison_plot
 from src.config import get_current_config
 
 #%%
@@ -63,8 +62,7 @@ def build_plotting_df_time(
         time_seq = np.arange(seq_length)[:, np.newaxis]
 
     df = pd.DataFrame(
-        index=np.repeat(shot_numbers.cpu().numpy().astype(int),
-                        seq_length),  # ShotNum, each repeated seq_length times
+        index=np.repeat(shot_numbers.cpu().numpy(), seq_length),  # ShotNum, each repeated seq_length times
         columns=["t"] + output_cols + C.data.cols.x,  # + C.data.cols.c,
         dtype=np.float32
     )
@@ -74,7 +72,7 @@ def build_plotting_df_time(
         controls,
         observables,
     ):
-        df.loc[int(shot)] = np.concatenate(
+        df.loc[(shot.item())] = np.concatenate(
             [
                 time_seq.copy(),  # t
                 output,
