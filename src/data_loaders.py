@@ -16,6 +16,7 @@ class ShotWindowDataset(data.Dataset):
         crop_margin=1000,
         random_start=True,
         time_last=False,
+        force_mean_zero=False,
         **kwargs
     ):
         super().__init__()
@@ -26,6 +27,7 @@ class ShotWindowDataset(data.Dataset):
         self.crop_margin = crop_margin
         self.random_start = random_start
         self.time_last = time_last
+        self.force_mean_zero = force_mean_zero
 
         self.data = pd.read_parquet(self.file_path)
         self.data['ShotNum'] = self.data['ShotNum'].astype(
@@ -53,9 +55,13 @@ class ShotWindowDataset(data.Dataset):
         end = start + self.seq_length
         C = shot_data[self.columns_C].iloc[start:end].values
         X = shot_data[self.columns_X].iloc[start:end].values
+        if self.force_mean_zero:
+            C = C - C.mean(axis=0)
+            X = X - X.mean(axis=0)
         if self.time_last:
             C = C.transpose()
             X = X.transpose()
+
         return shot_number, C, X  # C and X shapes: (seq_length, variables)
 
 

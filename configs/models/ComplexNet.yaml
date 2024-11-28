@@ -44,7 +44,7 @@ data:
   file: 2024_05_01-NaNsFiltered.parquet
   time_last: true  # Sets the time dim as the last dim
   crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
-  
+  force_mean_zero: true  # Forces the mean of the input to be zero: Does it learn better when not distracted by large DC components?
   cols:
     meta:
     - ShotNum
