@@ -21,7 +21,7 @@ model:
     output_activation: none
     train_rollout: ${ model.params.forecast_window }
     validation_rollout: ${ model.params.forecast_window }
-    loss: FrequencyPhaseAmpMSE # L1Loss
+    loss: FrequencyPhaseLogAmpMSE # FrequencyPhaseAmpMSE # L1Loss
     time_loss_component: true
     optimizer_params:
       lr: 0.001 # Default 0.001

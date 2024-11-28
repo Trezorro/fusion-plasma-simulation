@@ -9,7 +9,7 @@ import wandb
 from omegaconf import DictConfig
 
 from src.evaluation import batch_variance, output_variance_per_input_variance
-from src.fourier import FourierMSLE, FrequencySpectrumMSESimple, FrequencyPhaseAmpMSE, FrequencyAmpMSE
+from src.fourier import FourierMSLE, FrequencySpectrumMSESimple, FrequencyPhaseLogAmpMSE, FrequencyPhaseAmpMSE, FrequencyAmpMSE
 
 
 class MLP(nn.Sequential):
@@ -119,6 +119,7 @@ class ComplexNet(L.LightningModule):
         L1Loss=torch.nn.L1Loss,
         FrequencySpectrumMSESimple=FrequencySpectrumMSESimple,
         FrequencyPhaseAmpMSE=FrequencyPhaseAmpMSE,
+        FrequencyPhaseLogAmpMSE=FrequencyPhaseLogAmpMSE,
         FrequencyAmpMSE=FrequencyAmpMSE,
     )
     MODEL_OPTIONS = dict(

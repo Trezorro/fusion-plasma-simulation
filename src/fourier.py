@@ -8,6 +8,8 @@ import torchmetrics
 
 from src.config import get_current_config
 
+EPS = torch.finfo(torch.float32).eps
+
 
 class FourierMSLE(torchmetrics.MeanSquaredLogError):
 
@@ -29,6 +31,13 @@ class FrequencyPhaseAmpMSE(torchmetrics.MeanSquaredError):
 
     def update(self, preds: torch.Tensor, target: torch.Tensor):
         super().update(preds.abs(), target.abs())
+        super().update(preds.angle(), target.angle())
+
+
+class FrequencyPhaseLogAmpMSE(torchmetrics.MeanSquaredError):
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor):
+        super().update(torch.log(preds.abs() + EPS), torch.log(target.abs() + EPS))
         super().update(preds.angle(), target.angle())
 
 
