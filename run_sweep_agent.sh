@@ -39,7 +39,7 @@ pipenv sync
 pipenv shell
 # print the current environment
 echo "Current pipenv environment:"
-echo pipenv --venv
+echo $(pipenv --venv)
 
 # Export wandb env variable
 export WANDB_DIR="~/fusion-plasma-simulation/output"
@@ -47,7 +47,9 @@ export WANDB_NOTES=$(git log -n 5 --pretty=format:"%B (%h - %ar) %N")
 
 # Run the Python script
 echo "---------------- JOB START ----------------"
-srun wandb agent deep-learning-course-team/plasma/96sckgvi
+srun python run.py run_name=$1
+
+# srun wandb agent deep-learning-course-team/plasma/96sckgvi
 # Deactivate the conda environment
 # echo "Deactivating conda environment..."
 # conda deactivate
