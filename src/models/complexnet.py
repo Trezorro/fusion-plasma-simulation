@@ -68,6 +68,7 @@ class FakeComplexMLP(nn.Sequential):
         ReLU=nn.ReLU,
         SiLU=nn.SiLU,
         ELU=nn.ELU,
+        LeakyReLU=nn.LeakyReLU,
         Softplus=nn.Softplus,
         Identity=nn.Identity,
         Tanh=nn.Tanh,
