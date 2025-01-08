@@ -68,20 +68,20 @@ if C.preview_data:
 
 trainer = L.Trainer(
     default_root_dir="output/",
-    enable_progress_bar=False,
+    enable_progress_bar=True,
     max_epochs=C["epochs"],
     logger=wandb_logger,
-    num_sanity_val_steps=2,
+    # num_sanity_val_steps=2,
     log_every_n_steps=1,
     check_val_every_n_epoch=1,  # May validate less often
     gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
     callbacks=[
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
-        PlotPredictionsCallback(num_samples=5, every_n_epochs=5, train_every_n_epochs=20),
+        # PlotPredictionsCallback(num_samples=5, every_n_epochs=5, train_every_n_epochs=20),
     ]
 )
 print("Starting training with first validation...")
-trainer.validate(model=model, dataloaders=val_loader)
+# trainer.validate(model=model, dataloaders=val_loader)
 print("Starting model fit...")
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 print("Starting final validation...")

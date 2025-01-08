@@ -6,10 +6,17 @@ preview_data: true
 
 # model: model.yaml # To be replaced by respective yaml file content
 model: 
-  Class: DummyModel
+  Class: FlowModule
   params:
-    foo: 1
-    bar: 2
+    model: VelocityNet
+    model_params:
+      input_dim: 2
+      h_dim: 64
+    loss: MSELoss
+    optimizer_params:
+      lr: 0.001
+      weight_decay: 0  # Default 0
+      amsgrad: false  # Default false
     
 data:
   Class: SourceTargetDS
