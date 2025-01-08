@@ -9,8 +9,9 @@ from src.config import get_current_config, load_config_from_file
 from src.evaluation import PlotPredictionsCallback
 import src.models
 import src.data_loaders
+import src.flow_plots as fp
 
-conf = load_config_from_file()
+conf = load_config_from_file('fm_toy')
 run = wandb.init(
     name=conf.get("run_name", None),
     tags=conf.get("tags", None),
@@ -56,6 +57,14 @@ train_set, val_set = data.random_split(data_set, [0.9, 0.1], generator=torch.Gen
 train_loader = data.DataLoader(train_set, batch_size=C.batch_size, shuffle=True)
 val_loader = data.DataLoader(val_set, batch_size=C.batch_size, shuffle=False)
 val_loader.dataset.random_start = False  # TODO this doesn't work, wrong dataset attribute.
+
+if C.preview_data:
+    for i, (x, y) in enumerate(val_loader):
+        print(f"Batch {i}:")
+        print(f"  x: {x.shape}")
+        print(f"  y: {y.shape}")
+        fp.plot_distributions(x, y, title1="Input", title2="Target")
+        break
 
 trainer = L.Trainer(
     default_root_dir="output/",

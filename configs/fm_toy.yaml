@@ -1,0 +1,18 @@
+epochs: 6000
+batch_size: 128
+patience: 1000
+gradient_clip_val: 1000
+preview_data: true
+
+# model: model.yaml # To be replaced by respective yaml file content
+model: 
+  Class: DummyModel
+  params:
+    foo: 1
+    bar: 2
+    
+data:
+  Class: SourceTargetDS
+  source_distribution: gaussian
+  target_distribution: heart
+  n: 1000

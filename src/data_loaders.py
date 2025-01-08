@@ -3,6 +3,7 @@ from omegaconf import DictConfig
 import pandas as pd
 from torch.utils import data
 import random
+from src.data_generators import create_gaussian_data, create_square_data, create_spiral_data, create_heart_data, create_two_gaussians_data, create_smiley_data
 
 
 class ShotWindowDataset(data.Dataset):
@@ -171,3 +172,35 @@ class DummyDataSet(data.Dataset):
             X = X.transpose()
 
         return idx, C, X
+
+
+class SourceTargetDS(data.Dataset):
+
+    DISTRIBUTION_OPTIONS = {
+        'gaussian': create_gaussian_data,
+        'two_gaussians': create_two_gaussians_data,
+        'spiral': create_spiral_data,
+        'square': create_square_data,
+        'heart': create_heart_data,
+        'smiley': create_smiley_data
+    }
+
+    def __init__(self, source_distribution: str, target_distribution: str, n=1000, **kwargs):
+        super().__init__()
+        self.source_distribution = source_distribution
+        self.target_distribution = target_distribution
+        self.n = n
+        self.source_gen_fn = self.DISTRIBUTION_OPTIONS[source_distribution]
+        self.target_gen_fn = self.DISTRIBUTION_OPTIONS[target_distribution]
+        self.source_data = self.source_gen_fn(n)
+        self.target_data = self.target_gen_fn(n)
+
+    def regenerate_data(self):
+        self.source_data = self.source_gen_fn(self.n)
+        self.target_data = self.target_gen_fn(self.n)
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, idx):
+        return self.source_data[idx], self.target_data[idx]

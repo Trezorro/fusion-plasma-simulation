@@ -31,9 +31,9 @@ def convert_lists(value, level=0):
             convert_lists(v, level=level + 1)
 
 
-def load_config_from_file(as_omega=False) -> dict | omegaconf.DictConfig:
+def load_config_from_file(name='main', as_omega=False) -> dict | omegaconf.DictConfig:
     """Load configuration from (hierarchical) yaml files and CLI."""
-    main_conf = OmegaConf.load('configs/main.yaml')
+    main_conf = OmegaConf.load(f'configs/{name}.yaml')
     if type(main_conf.model) == str:
         model_conf = OmegaConf.load(main_conf.model)
         main_conf = OmegaConf.merge(main_conf, model_conf)
