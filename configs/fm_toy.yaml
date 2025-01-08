@@ -3,6 +3,12 @@ batch_size: 128
 patience: 1000
 gradient_clip_val: 1000
 preview_data: true
+plot_functions:
+  # - key: spectogram_plot
+  #   n: 5
+  - key: 2d_flow_plot
+    n: 100
+
 
 # model: model.yaml # To be replaced by respective yaml file content
 model: 

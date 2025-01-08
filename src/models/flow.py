@@ -93,13 +93,16 @@ class FlowModule(L.LightningModule):
 
         pred_velocity = self.model(samples_at_t, t)
         loss = self.loss(pred_velocity, delta)
-        losses = {"loss": loss}
+        losses = {
+            "loss": loss
+        }  # TODO: this loss makes no sense, but we could KLlosses for the KL divergence, or
         outputs = {"pred_velocity": pred_velocity, "samples_at_t": samples_at_t}
         self.model.train()  # Reset model to training mode
         return losses, outputs
 
+    @staticmethod
     @torch.no_grad()
-    def fwd_euler_step(self, current_points, current_t, dt):
+    def fwd_euler_step(velocity_model, current_points, current_t, dt):
         """
         Perform a forward Euler step.
 
@@ -112,7 +115,7 @@ class FlowModule(L.LightningModule):
         Returns:
             torch.Tensor: Shape [batch_size, num_features]
         """
-        velocity = self.model(current_points, current_t)
+        velocity = velocity_model(current_points, current_t)
         return current_points + velocity * dt
 
     @torch.no_grad()
@@ -140,7 +143,7 @@ class FlowModule(L.LightningModule):
         if save_trajectories:
             trajectories = [current_points]
         for i in range(len(ts) - 1):
-            current_points = step_fn(current_points, ts[i], ts[i + 1] - ts[i])
+            current_points = self.step_fn(self.model, current_points, ts[i], ts[i + 1] - ts[i])
             if save_trajectories:
                 trajectories.append(current_points)
         if save_trajectories:

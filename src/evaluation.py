@@ -14,6 +14,7 @@ import lightning.pytorch as pl
 
 import wandb
 from src.config import get_current_config
+import src.flow_plots as fp
 
 #%%
 
@@ -162,40 +163,38 @@ def format_losses(losses: dict):
         return " / ".join(str_list[:first_line]) + "<br>" + " / ".join(str_list[first_line:])
 
 
-def get_and_plot_predictions(model, data_set, n=4, title_base=""):
+@torch.inference_mode()
+def get_and_plot_predictions(module, batch, title_base=""):
     """Get and plot predictions for a batch of shots. 
 
     Plots n shots in the signal plot, and one signal from one shot in the spectogram plot.
     """
     C = get_current_config()
-    model.eval()
-    with torch.inference_mode():
-        batch = next(iter(data.DataLoader(data_set, batch_size=n, shuffle=False)))
-        shot_numbers, controls, observables = batch
-        losses, outputs = model.evaluate(batch)
 
-        df = build_plotting_df_time(
-            shot_numbers,
-            controls,
-            observables,
-            outputs['x_pred_t'],
-            time_last=C.data.time_last,
-            isolated_prediction_line=False
-        )
-        df_freq = build_plotting_df_freq(outputs['x_pred_freq'], outputs['x_target_freq'], shot_numbers)
-        # fig_shots = plot_shot_batch(df, title=title, cutoff_t=C.data.seq_length - C.validation_rollout)
-        fig_time_and_freq = plot_signal_and_spectrum(
-            df,
-            df_freq=df_freq,
-            title=title_base,
-            subtitle=format_losses(losses),
-            cutoff_t=C.data.seq_length - C.validation_rollout
-        )
+    shot_numbers, controls, observables = batch  # this should be in plot function
+    losses, outputs = module.evaluate(batch)
 
-        if wandb.run.disabled:
-            # fig_shots.show()
-            fig_time_and_freq.show()
-    model.train()
+    df = build_plotting_df_time(
+        shot_numbers,
+        controls,
+        observables,
+        outputs['x_pred_t'],
+        time_last=C.data.time_last,
+        isolated_prediction_line=False
+    )
+    df_freq = build_plotting_df_freq(outputs['x_pred_freq'], outputs['x_target_freq'], shot_numbers)
+    # fig_shots = plot_shot_batch(df, title=title, cutoff_t=C.data.seq_length - C.validation_rollout)
+    fig_time_and_freq = plot_signal_and_spectrum(
+        df,
+        df_freq=df_freq,
+        title=title_base,
+        subtitle=format_losses(losses),
+        cutoff_t=C.data.seq_length - C.validation_rollout
+    )
+
+    if wandb.run.disabled:
+        # fig_shots.show()
+        fig_time_and_freq.show()
     return fig_time_and_freq
 
 
@@ -375,10 +374,24 @@ def output_variance_per_input_variance(output_batch, input_batch, mean_adjusted=
     return output_var / input_var
 
 
-class PlotPredictionsCallback(L.Callback):
+class PlotsCallback(L.Callback):
+    """Calls a specified function, with the model and batch as arguments.
 
-    def __init__(self, num_samples=8, every_n_epochs=5, train_every_n_epochs=20):
+    Model is always put in eval mode, and the batch may be tensor or tuple, on some device.
+    Plot function should take care of accepting any device.
+    """
+
+    # these functions should each accept model, batch, title_base
+    PLOT_FN_OPTIONS = {
+        'spectogram_plot': get_and_plot_predictions,
+        '2d_flow_plot': fp.plot_flow,
+    }
+
+    def __init__(self, plot_fn_key: str, num_samples=8, every_n_epochs=5, train_every_n_epochs=20):
         super().__init__()
+        self.plot_fn = self.PLOT_FN_OPTIONS[plot_fn_key]
+        # Function to generate images # TODO: add support for multiple to loop through and log seperately > can do with multiple callbacks
+        self.plot_key = plot_fn_key  # Name of the plot, used as wandb logging key
         self.num_samples = num_samples  # Number of samples to log
         # Only save those images every N epochs (otherwise tensorboard gets quite large)
         self.every_n_epochs = every_n_epochs
@@ -388,36 +401,36 @@ class PlotPredictionsCallback(L.Callback):
         # Skip for all other epochs
         if trainer.current_epoch % self.every_n_epochs == 0:
             # Generate images
-            fig_spec = get_and_plot_predictions(
-                model=pl_module,
-                data_set=trainer.val_dataloaders.dataset,  # type: ignore
-                n=self.num_samples,
-                title_base=f"{wandb.run.name} | Epoch {trainer.current_epoch}"
+            data_set = trainer.val_dataloaders.dataset
+            batch = next(
+                iter(data.DataLoader(data_set, batch_size=self.num_samples, shuffle=False))
+            )  # this can be in general function
+            fig = self.plot_fn(
+                module=pl_module,
+                batch=batch,  # type: ignore
+                title_base=f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
             )
-            wandb.log(
-                {
-                    "val/spectogram_plot": fig_spec,
-                    "trainer/global_step": trainer.global_step
-                }, commit=False
-            )
+            wandb.log({f"val/{self.plot_key}": fig, "trainer/global_step": trainer.global_step}, commit=False)
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
         if self.train_every_n_epochs:
             # Skip for all other epochs
             if trainer.current_epoch % self.train_every_n_epochs == 0:
                 # Generate images
-                fig_spec = get_and_plot_predictions(
-                    model=pl_module,
-                    data_set=trainer.train_dataloader.dataset,  # type: ignore
-                    n=self.num_samples,
+                data_set = trainer.train_dataloader.dataset
+                batch = next(
+                    iter(data.DataLoader(data_set, batch_size=self.num_samples, shuffle=False))
+                )  # this can be in general function
+                fig = self.plot_fn(
+                    module=pl_module,
+                    batch=batch,  # type: ignore
                     title_base=f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
                 )
                 wandb.log(
                     {
-                        "train/spectogram_plot": fig_spec,
+                        f"train/{self.plot_key}": fig,
                         "trainer/global_step": trainer.global_step
-                    },
-                    commit=False
+                    }, commit=False
                 )
 
 

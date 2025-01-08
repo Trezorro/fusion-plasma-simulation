@@ -1,4 +1,3 @@
-import time
 from typing import Optional
 import lightning as L
 import torch

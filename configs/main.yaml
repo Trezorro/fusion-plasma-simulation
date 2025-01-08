@@ -8,6 +8,12 @@ model: configs/models/ComplexNet.yaml
 train_rollout: ${ model.params.train_rollout }
 validation_rollout: ${ model.params.validation_rollout }
 
+plot_functions:
+  - key: spectogram_plot
+    n: 5
+  # - key: 2d_flow_plot
+    # n: 100
+
 data:
   Class: ShotWindowDataset
   dir: ./data/

@@ -6,7 +6,7 @@ from lightning.pytorch.loggers import WandbLogger
 import lightning.pytorch.callbacks as pl_callbacks
 
 from src.config import get_current_config, load_config_from_file
-from src.evaluation import PlotPredictionsCallback
+from src.evaluation import PlotsCallback
 import src.models
 import src.data_loaders
 import src.flow_plots as fp
@@ -66,6 +66,11 @@ if C.preview_data:
         fp.plot_distributions(x, y, title1="Input", title2="Target")
         break
 
+plot_callbacks = [
+    PlotsCallback(plotter['key'], num_samples=plotter['n'], every_n_epochs=5, train_every_n_epochs=20)
+    for plotter in C.plot_functions
+]
+
 trainer = L.Trainer(
     default_root_dir="output/",
     enable_progress_bar=True,
@@ -77,8 +82,7 @@ trainer = L.Trainer(
     gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
     callbacks=[
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
-        # PlotPredictionsCallback(num_samples=5, every_n_epochs=5, train_every_n_epochs=20),
-    ]
+    ] + plot_callbacks  # type: ignore
 )
 print("Starting training with first validation...")
 # trainer.validate(model=model, dataloaders=val_loader)
