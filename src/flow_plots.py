@@ -3,6 +3,7 @@ import numpy as np
 # %matplotlib inline
 import matplotlib.pyplot as plt
 import torch
+import wandb
 
 from src.config import get_current_config
 
@@ -28,7 +29,7 @@ else:
     plt.rcdefaults()
 
 
-def plot_distributions(dist1, dist2, title1="Distribution 1", title2="Distribution 2", alpha=0.8):
+def plot_distributions(dist1, dist2, title1="Distribution 1", title2="Distribution 2", alpha=0.8, show=True):
     """Plot two distributions side by side
 
     By https://drscotthawley.github.io/blog/posts/FlowModels.html 
@@ -52,8 +53,10 @@ def plot_distributions(dist1, dist2, title1="Distribution 1", title2="Distributi
         ax.set_aspect('equal')
 
     plt.tight_layout()
-    plt.show(block=True)  # Explicitly show the plot
-    plt.close()
+    if show:
+        plt.show(block=False)
+        plt.pause(1.0)
+    return wandb.Image(fig)
 
 
 def plot_flow(
@@ -89,9 +92,9 @@ def plot_flow(
     )
 
     n_viz = min(30, len(trajectories[0]))  # Number of trajectories to visualize
-
-    fig, ax = plt.subplots(1, 4, figsize=(13, 3))
-    plt.suptitle(title_base, fontsize=16, y=1.05)
+    plt.close('all')
+    fig, ax = plt.subplots(1, 4, figsize=(13, 4))
+    plt.suptitle(title_base, fontsize=16)
     data_list = [source_samples.cpu(), generated_samples.cpu(), target_samples.cpu()]
     label_list = ['Initial Points', 'Generated Samples', 'Target Data', 'Trajectories']
     color_list = [source_color, pred_color, target_color]
@@ -138,7 +141,8 @@ def plot_flow(
                 label='Current Endpoints'
             )
             ax[3].legend()
-
-    plt.show()
-    plt.close()
-    return fig
+    plt.tight_layout()
+    if wandb.run.disabled:
+        plt.show(block=False)
+        plt.pause(1.0)
+    return wandb.Image(fig)

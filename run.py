@@ -1,3 +1,4 @@
+from matplotlib import pyplot as plt
 import wandb
 import torch
 from torch.utils import data
@@ -15,7 +16,7 @@ conf = load_config_from_file('fm_toy')
 run = wandb.init(
     name=conf.get("run_name", None),
     tags=conf.get("tags", None),
-    project="plasma",
+    project="flowtoy",
     config=conf,
     dir="./output/wandb"
 )
@@ -63,7 +64,8 @@ if C.preview_data:
         print(f"Batch {i}:")
         print(f"  x: {x.shape}")
         print(f"  y: {y.shape}")
-        fp.plot_distributions(x, y, title1="Input", title2="Target")
+        fig = fp.plot_distributions(x, y, title1="Input", title2="Target", show=wandb.run.disabled)
+        wandb.log({"data/preview": fig}, commit=False)
         break
 
 plot_callbacks = [
@@ -76,9 +78,9 @@ trainer = L.Trainer(
     enable_progress_bar=True,
     max_epochs=C["epochs"],
     logger=wandb_logger,
-    # num_sanity_val_steps=2,
+    num_sanity_val_steps=2,
     log_every_n_steps=1,
-    check_val_every_n_epoch=1,  # May validate less often
+    check_val_every_n_epoch=2,  # May validate less often
     gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
     callbacks=[
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),

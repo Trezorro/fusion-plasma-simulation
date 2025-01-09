@@ -1,7 +1,7 @@
 epochs: 6000
 batch_size: 128
-patience: 1000
-gradient_clip_val: 1000
+patience: 50
+gradient_clip_val: null
 preview_data: true
 plot_functions:
   # - key: spectogram_plot
@@ -28,4 +28,4 @@ data:
   Class: SourceTargetDS
   source_distribution: gaussian
   target_distribution: heart
-  n: 1000
+  n: 100000
