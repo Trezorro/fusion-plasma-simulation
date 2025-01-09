@@ -1,9 +1,11 @@
 import numpy as np
 from omegaconf import DictConfig
 import pandas as pd
+import torch
 from torch.utils import data
 import random
 from src.data_generators import create_gaussian_data, create_square_data, create_spiral_data, create_heart_data, create_two_gaussians_data, create_smiley_data
+import logging
 
 
 class ShotWindowDataset(data.Dataset):
@@ -204,3 +206,63 @@ class SourceTargetDS(data.Dataset):
 
     def __getitem__(self, idx):
         return self.source_data[idx], self.target_data[idx]
+
+
+class ShotFlowDS(data.Dataset):
+
+    def __init__(
+        self,
+        dir: str,
+        file: str,
+        cols: DictConfig,
+        seq_length=2000,
+        crop_margin=1000,
+        random_start=True,
+        time_last=False,
+        force_mean_zero=False,
+        **kwargs
+    ):
+        super().__init__()
+        self.file_path = dir + file
+        self.columns_C = list(cols.get('c', []))
+        if self.columns_C:
+            logging.warning("Warning: columns_C will not be used right now.")
+        self.columns_X = list(cols.x)
+        if len(self.columns_X) > 1:
+            logging.warning("Only one column_X is supported right now. Will use the first one.")
+        self.seq_length = seq_length
+        self.crop_margin = crop_margin
+        self.random_start = random_start
+        self.time_last = time_last
+        self.force_mean_zero = force_mean_zero
+
+        self.data = pd.read_parquet(self.file_path)
+        self.data['ShotNum'] = self.data['ShotNum'].astype(
+            np.int32
+        )  # Reduce memory usage and quicker indexing
+        self.shot_numbers = self.data['ShotNum'].unique()
+        self.min = self.data[self.columns_X].min()
+        self.max = self.data[self.columns_X].max()
+        self.data[self.columns_X] = (self.data[self.columns_X] - self.min) / (self.max - self.min)
+
+    def __len__(self):
+        return len(self.shot_numbers)
+
+    def __getitem__(self, idx):
+        shot_number = self.shot_numbers[idx]
+        shot_data = self.data[self.data['ShotNum'] == shot_number]  # indexed by time
+        shot_len = len(shot_data)  # Should be at minumum 5000 based on preprocessing
+        viable_start_max = shot_len - self.crop_margin - self.seq_length
+        assert viable_start_max > self.crop_margin, (
+            f"Shot {shot_number} is too short (T{shot_len}) for desired "
+            f"seq_length {self.seq_length} and crop_margin {self.crop_margin}"
+        )
+        start = random.randint(self.crop_margin, viable_start_max) if self.random_start else self.crop_margin
+        end = start + self.seq_length
+        X = shot_data[self.columns_X[0]].iloc[start:end].values.T  # force use the first column
+        if self.force_mean_zero:
+            X = X - X.mean(axis=1)
+
+        source_sample = torch.randn(self.seq_length)
+
+        return source_sample, X  # C and X shapes: (seq_length, variables)

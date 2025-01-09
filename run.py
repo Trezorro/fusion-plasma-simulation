@@ -59,12 +59,17 @@ train_loader = data.DataLoader(train_set, batch_size=C.batch_size, shuffle=True)
 val_loader = data.DataLoader(val_set, batch_size=C.batch_size, shuffle=False)
 val_loader.dataset.random_start = False  # TODO this doesn't work, wrong dataset attribute.
 
+# TODO: perhaps attach this to the DataSetClass because it's a property of the data
 if C.preview_data:
-    for i, (x, y) in enumerate(val_loader):
+    for i, batch in enumerate(val_loader):
+        if len(batch) == 2:
+            s, t = batch
+        elif len(batch) == 3:
+            shotnum, s, t = batch
         print(f"Batch {i}:")
-        print(f"  x: {x.shape}")
-        print(f"  y: {y.shape}")
-        fig = fp.plot_distributions(x, y, title1="Input", title2="Target", show=wandb.run.disabled)
+        print(f"  s: {s.shape}")
+        print(f"  t: {t.shape}")
+        fig = fp.plot_distributions(s, t, title1="Input", title2="Target", show=wandb.run.disabled)
         wandb.log({"data/preview": fig}, commit=False)
         break
 

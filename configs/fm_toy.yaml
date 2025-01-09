@@ -16,7 +16,7 @@ model:
   params:
     model: VelocityNet
     model_params:
-      input_dim: 2
+      input_dim: 100
       h_dim: 64
     loss: MSELoss
     optimizer_params:
@@ -25,7 +25,26 @@ model:
       amsgrad: false  # Default false
     
 data:
-  Class: SourceTargetDS
+  Class: ShotFlowDS
   source_distribution: gaussian
   target_distribution: heart
   n: 100000
+  dir: ./data/
+  file: 2024_05_01-NaNsFiltered.parquet
+  seq_length: 100  # 
+  crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
+  random_start: true
+  time_last: true  # Sets the time dim as the last dim
+  sample_rate: 10000
+  cols:
+    meta:
+    - ShotNum
+    - time
+    x: [
+            # "FIR",  # density lijn Interferometer
+            # "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
+            # "PD",  # photodiode lijn op de divertor
+            "DML",  # Magnetische respons  correleert met de energie in het plasma
+            "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
+            # "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
+        ]
