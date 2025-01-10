@@ -183,13 +183,11 @@ def plot_flow_and_lines(
     generated_samples, trajectories = module.integrate_path(
         source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
     )  # trajectories shape: [n_steps, batch_size, num_features]
+    source_samples, generated_samples, target_samples = source_samples.cpu(), generated_samples.cpu(
+    ), target_samples.cpu()
     n_steps, num_samples, num_features = trajectories.size()
     num_samples = min(30, num_samples)  # Number of trajectories to visualize
-    plt.close('all')
-    fig = plt.figure(figsize=(13, 8))  # Adjusted figsize to accommodate 2 rows
-    gs = gridspec.GridSpec(2, 4, height_ratios=[1, 2])
-    plt.suptitle(title_base, fontsize=16)
-    data_list = [source_samples.cpu(), generated_samples.cpu(), target_samples.cpu()]
+    data_list = [source_samples, generated_samples, target_samples]
     FACET_LIST = [
         'Initial Points',
         'Generated Samples',
@@ -201,6 +199,10 @@ def plot_flow_and_lines(
         torch.max(torch.abs(torch.cat(data_list)), 0)[0][0],
         torch.max(torch.abs(torch.cat(data_list)), 0)[0][1]
     )
+    plt.close('all')
+    fig = plt.figure(figsize=(13, 8))  # Adjusted figsize to accommodate 2 rows
+    gs = gridspec.GridSpec(2, 4, height_ratios=[1, 2])
+    plt.suptitle(title_base, fontsize=16)
     for facet_i in range(len(FACET_LIST)):
         ax = fig.add_subplot(gs[0, facet_i])
         ax.set_title(FACET_LIST[facet_i])
