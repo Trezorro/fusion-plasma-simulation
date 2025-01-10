@@ -8,6 +8,8 @@ plot_functions:
   #   n: 5
   - key: 2d_flow_plot
     n: 100
+  - key: line_flow_plot
+    n: 5
 
 
 # model: model.yaml # To be replaced by respective yaml file content
@@ -17,7 +19,7 @@ model:
     model: VelocityNet
     model_params:
       input_dim: 100
-      h_dim: 64
+      h_dim: 128
     loss: MSELoss
     optimizer_params:
       lr: 0.001

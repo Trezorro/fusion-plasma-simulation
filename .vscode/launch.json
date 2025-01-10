@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Run Training Offline",
+            "name": "Offline Run",
             "type": "debugpy",
             "request": "launch",
             "module": "run",
@@ -20,7 +20,7 @@
             
         },
         {
-            "name": "Run Training With Wandb",
+            "name": "Run on Wandb",
             "type": "debugpy",
             "request": "launch",
             "module": "run",
