@@ -262,6 +262,6 @@ def plot_flow_and_lines(
 
     plt.tight_layout()
     if wandb.run.disabled:
-        plt.show(block=False)
+        plt.show(block=True)
         plt.pause(1.0)
     return wandb.Image(fig)

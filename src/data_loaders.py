@@ -229,8 +229,8 @@ class ShotFlowDS(data.Dataset):
         self.columns_C = list(cols.get('c', []))
         if self.columns_C:
             logging.warning("Warning: columns_C will not be used right now.")
-        self.columns_X = list(cols.x)
-        if len(self.columns_X) > 1:
+        self.columns_X = list(cols.x)[:1]
+        if len(cols.x) > 1:
             logging.warning("Only one column_X is supported right now. Will use the first one.")
         self.seq_length = seq_length
         self.crop_margin = crop_margin
@@ -244,6 +244,7 @@ class ShotFlowDS(data.Dataset):
             np.int32
         )  # Reduce memory usage and quicker indexing
         self.shot_numbers = self.data['ShotNum'].unique()
+        # Normalize within 0-1:
         self.min = self.data[self.columns_X].min()
         self.max = self.data[self.columns_X].max()
         self.data[self.columns_X] = (self.data[self.columns_X] - self.min) / (self.max - self.min)
