@@ -2,7 +2,7 @@ epochs: 6000
 batch_size: 128
 patience: 50
 gradient_clip_val: null
-preview_data: true
+preview_data: false
 plot_functions:
   # - key: spectogram_plot
   #   n: 5
@@ -34,9 +34,10 @@ data:
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
   seq_length: 10  # 
-  crop_margin: 1000  # Determines the unused period at start and end of each shot for preprocessing
+  crop_margin: 2000  # Determines the unused period at start and end of each shot for preprocessing
   random_start: false
   force_fixed_shot: 1 # int if you want to overfit on one data point or null
+  force_mean_zero: true
   time_last: true  # Sets the time dim as the last dim
   sample_rate: 10000
   cols:

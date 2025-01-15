@@ -267,7 +267,8 @@ class ShotFlowDS(data.Dataset):
         end = start + self.seq_length
         X = shot_data[self.columns_X[0]].iloc[start:end].values.T  # force use the first column
         if self.force_mean_zero:
-            X = X - X.mean(axis=1)
+            X = X - X.mean(axis=0)
+            X = X / X.std(axis=0)
 
         source_sample = torch.randn(self.seq_length)
 
