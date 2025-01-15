@@ -18,7 +18,8 @@ run = wandb.init(
     tags=conf.get("tags", None),
     project="flowtoy",
     config=conf,
-    dir="./output/wandb"
+    dir="./output/wandb",
+    # mode="offline",
 )
 C = get_current_config()
 wandb.define_metric("loss/train", summary="min")

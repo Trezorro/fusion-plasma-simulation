@@ -1,3 +1,4 @@
+from typing import Optional
 import numpy as np
 from omegaconf import DictConfig
 import pandas as pd
@@ -220,6 +221,7 @@ class ShotFlowDS(data.Dataset):
         random_start=True,
         time_last=False,
         force_mean_zero=False,
+        force_fixed_shot: Optional[int] = None,
         **kwargs
     ):
         super().__init__()
@@ -235,6 +237,7 @@ class ShotFlowDS(data.Dataset):
         self.random_start = random_start
         self.time_last = time_last
         self.force_mean_zero = force_mean_zero
+        self.force_fixed_shot = force_fixed_shot
 
         self.data = pd.read_parquet(self.file_path)
         self.data['ShotNum'] = self.data['ShotNum'].astype(
@@ -249,6 +252,8 @@ class ShotFlowDS(data.Dataset):
         return len(self.shot_numbers)
 
     def __getitem__(self, idx):
+        if self.force_fixed_shot is not None and self.force_fixed_shot < len(self.shot_numbers):
+            idx = self.force_fixed_shot
         shot_number = self.shot_numbers[idx]
         shot_data = self.data[self.data['ShotNum'] == shot_number]  # indexed by time
         shot_len = len(shot_data)  # Should be at minumum 5000 based on preprocessing

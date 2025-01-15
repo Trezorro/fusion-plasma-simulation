@@ -13,7 +13,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-SHOT_N = 1
+SHOT_N = 3
 # %%
 # data_dir = 'shots/'
 data_dir = '../data/LHD_labeled_TCV/'

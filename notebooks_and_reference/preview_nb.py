@@ -1,3 +1,4 @@
+"""Old janky notebook"""
 # %%
 import pandas as pd
 from pathlib import Path
@@ -8,8 +9,6 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 from plotly.tools import mpl_to_plotly
 import datapane as dp
-
-
 
 # %%
 # data_dir = 'shots/'
@@ -46,32 +45,23 @@ def get_shot_index(data_dir: str) -> tuple[dict[int, str], dict[int, str]]:
     sig_all = {int(re.findall(r'\d+', x)[0]): x for x in sig_all_names}
     shot_no_list = list(sig_all.keys())
     label_all = glob.glob(data_dir + 'TCV_*_apau_labeled.csv')
-    label_all = {
-        int(x.split("TCV_")[1].split("_apau_labeled.csv")[0]): x
-        for x in label_all
-    }
+    label_all = {int(x.split("TCV_")[1].split("_apau_labeled.csv")[0]): x for x in label_all}
     label_no_list = list(label_all.keys())
-    assert set(shot_no_list) <= set(
-        label_no_list
-    ), f"Not all shots have labels: {set(shot_no_list) - set(label_no_list)}"
+    assert set(shot_no_list
+              ) <= set(label_no_list), f"Not all shots have labels: {set(shot_no_list) - set(label_no_list)}"
     print(f"All shots: {shot_no_list}")
     print("Amount of shots: ", len(shot_no_list))
     print(f"Labels: {len(label_all)}")
-    return sig_all, label_all
+    return shot_no_list, sig_all, label_all
 
 
-sig_all, label_all = get_shot_index(data_dir)
-
-
+shot_no_list, sig_all, label_all = get_shot_index(data_dir)
 
 #%%
 
-assert all([x in sig.columns for x in ALL_SIG_COLLS
-            ]), f"Missing columns {set(ALL_SIG_COLLS) - set(sig.columns)}"
-
 # %%
 # example
-shotno = 60275  # shot_no_list[21]
+shotno = 61009  # shot_no_list[21]
 
 sig = pd.read_parquet(sig_all[shotno])
 label = pd.read_csv(label_all[shotno])
@@ -81,6 +71,10 @@ shot_out = sig[ALL_SIG_COLLS].reset_index(names='time_step').set_index("time")
 shot_out
 
 # %%
+
+assert all(
+    [x in sig.columns for x in ALL_SIG_COLLS]
+), f"Missing columns {set(ALL_SIG_COLLS) - set(sig.columns)}"
 'FIR_core' in sig.columns.tolist()
 
 # %%
@@ -91,8 +85,7 @@ sig['time'].describe()
 time_diff = sig['time'].diff()
 frequency = 1 / time_diff.mean()
 is_consistent = time_diff.std() < 1e-7
-inconsistent_steps = ~np.isclose(
-    time_diff, time_diff.mean(), atol=1e-7, equal_nan=True)
+inconsistent_steps = ~np.isclose(time_diff, time_diff.mean(), atol=1e-7, equal_nan=True)
 print(f"Frequency: {frequency}, is broadly consistent: {is_consistent}")
 
 print(
@@ -120,12 +113,10 @@ def check_time_consistency(signal_df):
     length = len(signal_df)
     frequency = 1 / time_diff.mean()
     is_consistent = time_diff.std() < 1e-7
-    inconsistent_steps = ~np.isclose(
-        time_diff, time_diff.mean(), atol=1e-7, equal_nan=True)
+    inconsistent_steps = ~np.isclose(time_diff, time_diff.mean(), atol=1e-7, equal_nan=True)
     # print(f"Frequency: {frequency}, is broadly consistent: {is_consistent}")
     # print(f"{inconsistent_steps.sum()} steps out of {len(inconsistent_steps)} were not exaclty the same as the mean step size.")
-    return is_consistent, inconsistent_steps.sum(
-    ), frequency, time_start, time_end, length
+    return is_consistent, inconsistent_steps.sum(), frequency, time_start, time_end, length
 
 
 # %%
@@ -136,8 +127,7 @@ starts = []
 for i, shotno in enumerate(shot_keys[0:100]):
     sig = pd.read_parquet(sig_all[shotno])
     label = pd.read_csv(label_all[shotno])
-    is_consistent, inconsistent_steps, frequency, time_start, time_end, length = check_time_consistency(
-        sig)
+    is_consistent, inconsistent_steps, frequency, time_start, time_end, length = check_time_consistency(sig)
     print(
         f"Shot: {shotno}, consistent: {is_consistent}, inconsistent steps: {inconsistent_steps}, frequency: {frequency}, time_start: {time_start}, time_end: {time_end}, length: {length}"
     )
@@ -186,8 +176,7 @@ sig
 # %%
 # normalize data
 raw_sig = sig.copy()
-sig[ALL_SIG_COLLS] = (sig[ALL_SIG_COLLS] -
-                      sig[ALL_SIG_COLLS].mean()) / sig[ALL_SIG_COLLS].std()
+sig[ALL_SIG_COLLS] = (sig[ALL_SIG_COLLS] - sig[ALL_SIG_COLLS].mean()) / sig[ALL_SIG_COLLS].std()
 
 # %%
 label
@@ -209,8 +198,7 @@ ax2 = ax.twinx()
 # interpolate missing labels (label==0) to previous
 labelvals = np.array(label["LHD_label"])
 mask = labelvals == 0
-labelvals[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask),
-                            labelvals[~mask])
+labelvals[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), labelvals[~mask])
 # plot filled area:
 # ax2.fill_between(label["time"], labelvals, color='red', alpha=.2, )
 # ax2.plot(label["time"], labelvals, color='red', alpha=.3, )
@@ -223,8 +211,8 @@ ax2.set_yticks([1, 2, 3])
 # Change y-axis tick labels
 ax2.set_yticklabels(['L', 'D', 'H'])
 legend = ax.legend(cols_data, loc='upper left')
+plt.show()
 p_fig = mpl_to_plotly(fig)
-# plt.show()
 # p_fig.write_html('plots/first_figure.html', auto_open=True)
 report = dp.Blocks(
         # title="Plots",
