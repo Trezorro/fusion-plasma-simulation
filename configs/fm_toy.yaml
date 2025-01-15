@@ -18,7 +18,7 @@ model:
   params:
     model: VelocityNet
     model_params:
-      input_dim: 10
+      input_dim: 50
       h_dim: 128
     loss: MSELoss
     optimizer_params:
@@ -33,7 +33,7 @@ data:
   n: 100000
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
-  seq_length: 10  # 
+  seq_length: ${ model.params.model_params.input_dim }  # 
   crop_margin: 2000  # Determines the unused period at start and end of each shot for preprocessing
   random_start: false
   force_fixed_shot: 1 # int if you want to overfit on one data point or null

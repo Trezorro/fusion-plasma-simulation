@@ -32,7 +32,7 @@ class PlotsCallback(L.Callback):
     PLOT_FN_OPTIONS = {
         'spectogram_plot': get_and_plot_predictions,
         '2d_flow_plot': fp.plot_flow,
-        'line_flow_plot': fp.plot_flow_and_lines,
+        'line_flow_plot': fp.plot_flow_and_lines_plotly,
     }
 
     def __init__(self, plot_fn_key: str, num_samples=8, every_n_epochs=5, train_every_n_epochs=20):

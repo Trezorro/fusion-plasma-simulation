@@ -2,9 +2,14 @@
 from matplotlib import gridspec
 import numpy as np
 # %matplotlib inline
+from matplotlib import colors
+
 import matplotlib.pyplot as plt
 import torch
 import wandb
+import plotly.graph_objects as go
+from plotly import colors as plt_colors
+from plotly.subplots import make_subplots as plotly_make_subplots
 
 from src.config import get_current_config
 
@@ -265,3 +270,182 @@ def plot_flow_and_lines(
         plt.show(block=True)
         plt.pause(1.0)
     return wandb.Image(fig)
+
+
+def plot_flow_and_lines_plotly(
+    module,  # Trained lightning module to generate new samples
+    batch,  # Initial points, shape: 2x[batch_size, num_features]
+    title_base="",
+    size=5,  # Size of scatter plot points
+    alpha=0.9,  # Transparency of scatter plot points
+    n_steps=50,  # Number of integration steps
+    warp_fn=None,  # Optional function to warp time steps
+):
+    """Call the integrator to calculate the motion (probability path) given v field, generate new samples
+       and visualize the results using Plotly.
+
+    Args:
+        val_points (torch.Tensor): Initial points, shape: [batch_size, num_features].
+        target_samples (torch.Tensor): Target samples, shape: [batch_size, num_features].
+        trained_model (torch.nn.Module): Trained model to generate new samples.
+        size (int, optional): Size of scatter plot points. Defaults to 20.
+        alpha (float, optional): Transparency of scatter plot points. Defaults to 0.5.
+        n_steps (int, optional): Number of integration steps. Defaults to 100.
+        warp_fn (callable, optional): Optional function to warp time steps. Defaults to None.
+
+    Returns:
+        None
+    """
+    # Generate and visualize new samples
+    device = module.device
+    source_samples, target_samples = batch
+
+    generated_samples, trajectories = module.integrate_path(
+        source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
+    )  # paths shape: [n_steps, batch_size, num_features]
+    source_samples, generated_samples, target_samples = source_samples.cpu(), generated_samples.cpu(
+    ), target_samples.cpu()
+    n_steps, num_samples, num_features = trajectories.size()
+    num_samples = min(30, num_samples)  # Number of trajectories to visualize
+    data_list = [source_samples, generated_samples, target_samples]
+    FACET_LIST = ['Initial Points', 'Generated Samples', 'Target Data', 'Paths']
+    color_list = [SOURCE_COLOR, PRED_COLOR, TARGET_COLOR]
+    global_max = max(
+        torch.max(torch.abs(torch.cat(data_list)), 0)[0][0],
+        torch.max(torch.abs(torch.cat(data_list)), 0)[0][1]
+    ) * 1.1  # Add some padding
+    color_scale = plt_colors.qualitative.Plotly
+
+    fig = plotly_make_subplots(
+        rows=2,
+        cols=4,
+        subplot_titles=FACET_LIST,
+        specs=[[{}, {}, {}, {}], [{
+            "colspan": 4
+        }, None, None, None]],
+        row_heights=[0.4, 0.6],
+        vertical_spacing=0.05,
+        shared_xaxes=True,
+        shared_yaxes=True,
+    )
+
+    # Set same x and y axis range for the first 4 subplots
+    for i in range(1, 5):
+        fig.update_xaxes(range=[-global_max, global_max], row=1, col=i)
+        fig.update_yaxes(range=[-global_max, global_max], row=1, col=i)
+
+    for facet_i in range(len(FACET_LIST)):
+        if facet_i < 3:  # non-trajectory plots
+            fig.add_trace(
+                go.Scatter(
+                    x=data_list[facet_i][:, 0],
+                    y=data_list[facet_i][:, 1],
+                    mode='markers',
+                    marker=dict(
+                        size=size,
+                        opacity=alpha,  #color=color_list[facet_i]
+                    ),
+                    name=FACET_LIST[facet_i],
+                    yaxis='y1',
+                    xaxis='x1',
+                ),
+                row=1,
+                col=facet_i + 1
+            )
+        else:
+            # Plot trajectory paths first
+            for j in range(num_samples):
+                path = trajectories[:, j]  # Shape: [n_steps, num_features] (one sample)
+                fig.add_trace(
+                    go.Scatter(
+                        x=path[:, 0],
+                        y=path[:, 1],
+                        mode='lines',
+                        line=dict(color=colors.rgb2hex(LINE_COLOR), width=1),
+                        opacity=1,
+                        showlegend=False,
+                        yaxis='y1',
+                        xaxis='x1',
+                    ),
+                    row=1,
+                    col=facet_i + 1
+                )
+
+            # Then plot start and end points for the SAME trajectories
+            start_points = trajectories[0, :num_samples]  # Shape: [n_viz, num_features]
+            end_points = trajectories[-1, :num_samples]  # Shape: [n_viz, num_features]
+            fig.add_trace(
+                go.Scatter(
+                    x=start_points[:, 0],
+                    y=start_points[:, 1],
+                    mode='markers',
+                    # marker=dict(size=size, opacity=1, color=SOURCE_COLOR),
+                    name='Source Points',
+                    yaxis='y1',
+                    xaxis='x1',
+                ),
+                row=1,
+                col=facet_i + 1
+            )
+        fig.update_xaxes(dtick=0.5, row=1, col=facet_i + 1)
+        fig.update_yaxes(dtick=0.5, row=1, col=facet_i + 1)
+
+    # Plot each sample from generated_samples in a line plot against their corresponding target_samples
+    for sample_i in range(len(generated_samples)):
+        # Predicted rollouts:
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(num_features)),
+                y=generated_samples[sample_i, :],
+                mode='lines',
+                line=dict(dash='dot', color=color_scale[sample_i]),
+                opacity=alpha,
+                name=f'Generated {sample_i+1}',
+                yaxis='y2',
+                xaxis='x2',
+            ),
+            row=2,
+            col=1
+        )
+
+        # Plot current endpoints with the same color as the generated sample
+        fig.add_trace(
+            go.Scatter(
+                x=[end_points[sample_i, 0]],
+                y=[end_points[sample_i, 1]],
+                mode='markers',
+                marker=dict(size=size, opacity=1, color=color_scale[sample_i]),
+                name=f'Current Endpoint {sample_i+1}',
+                showlegend=False,
+                yaxis='y1',
+                xaxis='x1',
+            ),
+            row=1,
+            col=4
+        )
+
+        # Ground truth rollouts:
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(num_features)),
+                y=target_samples[sample_i, :],
+                mode='lines',
+                line=dict(color=colors.rgb2hex(TARGET_COLOR), width=2),
+                opacity=alpha * 0.5,
+                name=f'Target {sample_i+1}',
+                yaxis='y2',
+                xaxis='x2',
+            ),
+            row=2,
+            col=1
+        )
+
+    fig.update_layout(
+        title=title_base,
+        # height=800,
+        template='plotly_dark' if BG_THEME in ['black', 'dark'] else 'plotly_white'
+    )
+    if wandb.run.disabled:
+        fig.show()
+
+    return fig
