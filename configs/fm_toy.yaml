@@ -1,5 +1,5 @@
 epochs: 6000
-batch_size: 5
+batch_size: 32
 patience: 50
 gradient_clip_val: null
 preview_data: false
@@ -51,8 +51,8 @@ data:
   file: 2024_05_01-NaNsFiltered.parquet
   seq_length: 50
   crop_margin: 2000  # Determines the unused period at start and end of each shot for preprocessing
-  random_start: false
-  force_fixed_shot: 1 # int if you want to overfit on one data point or null
+  random_start: true
+  force_fixed_shot: null # int if you want to overfit on one data point or null
   force_mean_zero: true
   time_last: true  # Sets the time dim as the last dim
   sample_rate: 10000
@@ -65,6 +65,6 @@ data:
             # "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
             # "PD",  # photodiode lijn op de divertor
             "DML",  # Magnetische respons  correleert met de energie in het plasma
-            "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
+            # "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
             # "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
         ]
