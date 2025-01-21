@@ -1,4 +1,4 @@
-from matplotlib import pyplot as plt
+print("Starting run.py")
 import wandb
 import torch
 from torch.utils import data

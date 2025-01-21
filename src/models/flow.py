@@ -1,14 +1,13 @@
 from typing import Any, Optional
 import lightning as L
-from numpy import source
 import torch
-import torch.nn as nn
 import torchinfo
 import torchmetrics
 import wandb
 from omegaconf import DictConfig
 
 from src.models.flow_nets import VelocityNet
+from src.models.unet_conditional import ConditionalUNet
 
 
 class FlowModule(L.LightningModule):
@@ -23,7 +22,11 @@ class FlowModule(L.LightningModule):
         # FrequencyPhaseLogAmpMSE=FrequencyPhaseLogAmpMSE,
         # FrequencyAmpMSE=FrequencyAmpMSE,
     )
-    MODEL_OPTIONS = dict(VelocityNet=VelocityNet,)
+    MODEL_OPTIONS = dict(
+        VelocityNet=VelocityNet,
+        # UNetModern=UNetModern,
+        ConditionalUNet=ConditionalUNet,
+    )
 
     def __init__(
         self,
@@ -46,53 +49,41 @@ class FlowModule(L.LightningModule):
         return self.model(x, t)
 
     def training_step(self, batch, batch_idx):
-        source_samples, target_samples = batch
-        t = torch.rand(source_samples.size(0), 1, device=self.device)
-        # if self.warp_fn is not None: # TODO warp option
-        #     t = self.warp_fn(t)
-
-        # interpolate the probability path at t (making the example path)
-        samples_at_t = source_samples * (1 - t) + target_samples * t
-        delta = target_samples - source_samples
-
+        t, samples_at_t, velocity = self.interpolate_samples(batch)
         pred_velocity = self.model(samples_at_t, t)
-        loss = self.loss(pred_velocity, delta)
+        loss = self.loss(pred_velocity, velocity)
         self.log("loss/train", loss, prog_bar=True)
 
         return loss
 
     def validation_step(self, batch, batch_idx):
+        t, samples_at_t, velocity = self.interpolate_samples(batch)
+        pred_velocity = self.model(samples_at_t, t)
+        loss = self.loss(pred_velocity, velocity)
+        self.log("loss/val", loss, prog_bar=True)
+
+        return loss
+
+    def interpolate_samples(self, batch):
         source_samples, target_samples = batch
-        t = torch.rand(source_samples.size(0), 1, device=self.device)
+        t = torch.rand(source_samples.size(0), device=self.device)
         # if self.warp_fn is not None: # TODO warp option
         #     t = self.warp_fn(t)
 
         # interpolate the probability path at t (making the example path)
-        samples_at_t = source_samples * (1 - t) + target_samples * t
+        t_broadcast = t.view(-1, 1, 1)
+        samples_at_t = source_samples * (1 - t_broadcast) + target_samples * t_broadcast
         delta = target_samples - source_samples
-
-        pred_velocity = self.model(samples_at_t, t)
-        loss = self.loss(pred_velocity, delta)
-        self.log("loss/val", loss, prog_bar=True)
-
-        return loss
+        return t, samples_at_t, delta
 
     test_step = validation_step
 
     @torch.inference_mode()
     def evaluate(self, batch):
         self.model.eval()
-        source_samples, target_samples = batch
-        t = torch.rand(source_samples.size(0), 1, device=self.device)
-        # if self.warp_fn is not None: # TODO warp option
-        #     t = self.warp_fn(t)
-
-        # interpolate the probability path at t (making the example path)
-        samples_at_t = source_samples * (1 - t) + target_samples * t
-        delta = target_samples - source_samples
-
+        t, samples_at_t, velocity = self.interpolate_samples(batch)
         pred_velocity = self.model(samples_at_t, t)
-        loss = self.loss(pred_velocity, delta)
+        loss = self.loss(pred_velocity, velocity)
         losses = {
             "loss": loss
         }  # TODO: this loss makes no sense, but we could KLlosses for the KL divergence, or
@@ -115,6 +106,7 @@ class FlowModule(L.LightningModule):
         Returns:
             torch.Tensor: Shape [batch_size, num_features]
         """
+        # TODO change to self(x, t) for the model
         velocity = velocity_model(current_points, current_t)
         return current_points + velocity * dt
 
@@ -159,13 +151,19 @@ class FlowModule(L.LightningModule):
     def log_summary(self, config: DictConfig):
         """
         Log a summary of the model.
+        
+        * `x` has shape `[batch_size, in_channels, *input_dims]`
+        * `t` has shape `[batch_size]`
 
         Args:
-            config (DictConfig): The configuration for the model.
+            config (DictConfig): The global configuration object, mirroring the <config>.yaml file.
         """
         summary = torchinfo.summary(
             self.model,
-            input_size=((2, self.model.input_dim), (2, 1)),
+            input_size=(
+                (config.batch_size, config.model.params.model_params.input_channels, config.data.seq_length),
+                (config.batch_size,)
+            ),
             # batch_dim=0,
             col_names=[
                 "input_size",

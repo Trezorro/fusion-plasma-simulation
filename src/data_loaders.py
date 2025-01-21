@@ -265,11 +265,12 @@ class ShotFlowDS(data.Dataset):
         )
         start = random.randint(self.crop_margin, viable_start_max) if self.random_start else self.crop_margin
         end = start + self.seq_length
-        X = shot_data[self.columns_X[0]].iloc[start:end].values.T  # force use the first column
+        X = shot_data[self.columns_X].iloc[start:end].values.T
+
         if self.force_mean_zero:
-            X = X - X.mean(axis=0)
-            X = X / X.std(axis=0)
+            X = X - X.mean(axis=1, keepdims=True)
+            X = X / X.std(axis=1, keepdims=True)
 
-        source_sample = torch.randn(self.seq_length)
+        prior_distribution_sample = torch.randn(len(self.columns_X), self.seq_length)
 
-        return source_sample, X  # C and X shapes: (seq_length, variables)
+        return prior_distribution_sample, X  # prior and X shapes: (variables, seq_length)

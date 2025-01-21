@@ -99,6 +99,11 @@ def plot_flow(
     generated_samples, trajectories = module.integrate_path(
         source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
     )
+    # select the first channel for everything
+    source_samples = source_samples[:, 0, :]
+    generated_samples = generated_samples[:, 0, :]
+    target_samples = target_samples[:, 0, :]
+    trajectories = trajectories[:, :, 0, :]  # Shape: [n_steps, n_samples, num_timepoints]
 
     n_viz = min(30, len(trajectories[0]))  # Number of trajectories to visualize
     plt.close('all')
@@ -107,14 +112,12 @@ def plot_flow(
     data_list = [source_samples.cpu(), generated_samples.cpu(), target_samples.cpu()]
     label_list = ['Initial Points', 'Generated Samples', 'Target Data', 'Trajectories']
     color_list = [SOURCE_COLOR, PRED_COLOR, TARGET_COLOR]
-    global_max = max(
-        torch.max(torch.abs(torch.cat(data_list)), 0)[0][0],
-        torch.max(torch.abs(torch.cat(data_list)), 0)[0][1]
-    )
+    max_abs_value = torch.max(torch.abs(torch.cat(data_list)), 0)[0]
+    global_max_2d = max(max_abs_value[0], max_abs_value[1])
     for i in range(len(label_list)):
         ax[i].set_title(label_list[i])
-        ax[i].set_xlim([-global_max, global_max])
-        ax[i].set_ylim([-global_max, global_max])
+        ax[i].set_xlim([-global_max_2d, global_max_2d])
+        ax[i].set_ylim([-global_max_2d, global_max_2d])
         if i < 3:  # non-trajectory plots
             ax[i].scatter(
                 data_list[i][:, 0],
@@ -187,7 +190,12 @@ def plot_flow_and_lines(
 
     generated_samples, trajectories = module.integrate_path(
         source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
-    )  # trajectories shape: [n_steps, batch_size, num_features]
+    )  # trajectories shape: [n_steps, batch_size, channels, num_time_points]
+    # select the first channel for everything
+    source_samples = source_samples[:, 0, :]
+    generated_samples = generated_samples[:, 0, :]
+    target_samples = target_samples[:, 0, :]
+    trajectories = trajectories[:, :, 0, :]  # Shape: [n_steps, n_samples, num_timepoints]
     source_samples, generated_samples, target_samples = source_samples.cpu(), generated_samples.cpu(
     ), target_samples.cpu()
     n_steps, num_samples, num_features = trajectories.size()
@@ -200,10 +208,9 @@ def plot_flow_and_lines(
         'Trajectories',
     ]
     color_list = [SOURCE_COLOR, PRED_COLOR, TARGET_COLOR]
-    global_max = max(
-        torch.max(torch.abs(torch.cat(data_list)), 0)[0][0],
-        torch.max(torch.abs(torch.cat(data_list)), 0)[0][1]
-    )
+    max_abs_value = torch.max(torch.abs(torch.cat(data_list)), 0)[0]
+    global_max = max(max_abs_value[0], max_abs_value[1])
+
     plt.close('all')
     fig = plt.figure(figsize=(13, 8))  # Adjusted figsize to accommodate 2 rows
     gs = gridspec.GridSpec(2, 4, height_ratios=[1, 2])
@@ -305,15 +312,18 @@ def plot_flow_and_lines_plotly(
     )  # paths shape: [n_steps, batch_size, num_features]
     source_samples, generated_samples, target_samples = source_samples.cpu(), generated_samples.cpu(
     ), target_samples.cpu()
+    # select the first channel for everything
+    source_samples = source_samples[:, 0, :]
+    generated_samples = generated_samples[:, 0, :]
+    target_samples = target_samples[:, 0, :]
+    trajectories = trajectories[:, :, 0, :]  # Shape: [n_steps, n_samples, num_timepoints]
     n_steps, num_samples, num_features = trajectories.size()
     num_samples = min(30, num_samples)  # Number of trajectories to visualize
     data_list = [source_samples, generated_samples, target_samples]
     FACET_LIST = ['Initial Points', 'Generated Samples', 'Target Data', 'Paths']
     color_list = [SOURCE_COLOR, PRED_COLOR, TARGET_COLOR]
-    global_max = max(
-        torch.max(torch.abs(torch.cat(data_list)), 0)[0][0],
-        torch.max(torch.abs(torch.cat(data_list)), 0)[0][1]
-    ) * 1.1  # Add some padding
+    max_abs_value = torch.max(torch.abs(torch.cat(data_list)), 0)[0]
+    global_max = max(max_abs_value[0], max_abs_value[1]) * 1.1  # Add some padding
     color_scale = plt_colors.qualitative.Plotly
 
     fig = plotly_make_subplots(

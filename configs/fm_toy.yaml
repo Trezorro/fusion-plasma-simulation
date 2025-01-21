@@ -1,5 +1,5 @@
 epochs: 6000
-batch_size: 128
+batch_size: 5
 patience: 50
 gradient_clip_val: null
 preview_data: false
@@ -13,13 +13,29 @@ plot_functions:
 
 
 # model: model.yaml # To be replaced by respective yaml file content
+# hidden_features: int = 128,
+#         activation: nn.Module = nn.GELU(),
+#         norm: bool = False,
+#         ch_mults=(2, 2, 2, 2),
+#         is_attn=(False, False, False, False),
+#         mid_attn: bool = False,
+#         n_blocks: int = 2,
+#         use1x1: bool = False,
 model: 
   Class: FlowModule
   params:
-    model: VelocityNet
+    model: ConditionalUNet  # Must accept x, t inputs
     model_params:
-      input_dim: 50
-      h_dim: 128
+      spatial_dim: 1
+      input_channels: 1 # Default 3
+      apex_hidden_channels: 32  # Default 128
+      # activation: GELU  # Default GELU # TODO implement configurable activation
+      ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
+      is_attn: [false, false, false, false] # Default [false, false, false, false]
+      mid_attn: false # Default false
+      n_blocks: 2 # Default 2. Number of residual blocks
+      norm_groups: 0 # Default false
+      use1x1: false # Default false
     loss: MSELoss
     optimizer_params:
       lr: 0.001
@@ -33,7 +49,7 @@ data:
   n: 100000
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
-  seq_length: ${ model.params.model_params.input_dim }  # 
+  seq_length: 50
   crop_margin: 2000  # Determines the unused period at start and end of each shot for preprocessing
   random_start: false
   force_fixed_shot: 1 # int if you want to overfit on one data point or null
