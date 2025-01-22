@@ -49,7 +49,7 @@ data:
   n: 100000
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
-  seq_length: 300
+  seq_length: 500
   crop_margin: 2000  # Determines the unused period at start and end of each shot for preprocessing
   force_start: 11000
   random_start: [0, 100, 200, 300, 400]
@@ -64,8 +64,8 @@ data:
     x: [
             # "FIR",  # density lijn Interferometer
             # "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
-            "PD",  # photodiode lijn op de divertor
-            # "DML",  # Magnetische respons  correleert met de energie in het plasma
+            # "PD",  # photodiode lijn op de divertor
+            "DML",  # Magnetische respons  correleert met de energie in het plasma
             # "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
             # "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
         ]
