@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Sequence
 import numpy as np
 from omegaconf import DictConfig
 import pandas as pd
@@ -210,18 +210,34 @@ class SourceTargetDS(data.Dataset):
 
 
 class ShotFlowDS(data.Dataset):
+    """
+
+    Args:
+        dir: Directory where the data file is located.
+        file: Name of the data file.
+        cols: OmegaConf DictConfig with keys 'c' and 'x' containing lists of column names.
+        seq_length: Length of the sequence to extract from each shot.
+        crop_margin: Minimum distance from the start and end of the shot to the start and end of the sequence.
+        random_start: If True, the sequence will start at a random point within the shot.
+        time_last: If True, the time dimension will be the last dimension of the output.
+        force_mean_zero: If True, the mean of the sequence will be zero.
+        force_fixed_shot: If not None, the dataset will always return the same shot. Useful for debugging by overfitting.
+        force_start: If not None, the dataset will always return the same start timestep index. May be modified by random_start.
+        **kwargs: Additional arguments that are not used.
+    """
 
     def __init__(
         self,
         dir: str,
         file: str,
         cols: DictConfig,
-        seq_length=2000,
+        seq_length=200,
         crop_margin=1000,
-        random_start=True,
+        random_start: bool | list[int] = True,
         time_last=False,
         force_mean_zero=False,
         force_fixed_shot: Optional[int] = None,
+        force_start: Optional[int] = None,
         **kwargs
     ):
         super().__init__()
@@ -238,6 +254,8 @@ class ShotFlowDS(data.Dataset):
         self.time_last = time_last
         self.force_mean_zero = force_mean_zero
         self.force_fixed_shot = force_fixed_shot
+        self.force_start = force_start
+        assert random_start is not True or force_start is None, "Cannot have random_start and force_start at the same time, unless random_start is a list of int options."
 
         self.data = pd.read_parquet(self.file_path)
         self.data['ShotNum'] = self.data['ShotNum'].astype(
@@ -255,6 +273,7 @@ class ShotFlowDS(data.Dataset):
     def __getitem__(self, idx):
         if self.force_fixed_shot is not None and self.force_fixed_shot < len(self.shot_numbers):
             idx = self.force_fixed_shot
+
         shot_number = self.shot_numbers[idx]
         shot_data = self.data[self.data['ShotNum'] == shot_number]  # indexed by time
         shot_len = len(shot_data)  # Should be at minumum 5000 based on preprocessing
@@ -263,7 +282,17 @@ class ShotFlowDS(data.Dataset):
             f"Shot {shot_number} is too short (T{shot_len}) for desired "
             f"seq_length {self.seq_length} and crop_margin {self.crop_margin}"
         )
-        start = random.randint(self.crop_margin, viable_start_max) if self.random_start else self.crop_margin
+        if self.force_start is not None:
+            start = self.force_start
+            if isinstance(self.random_start, Sequence):
+                start += random.choice(self.random_start)
+        elif self.random_start:
+            if isinstance(self.random_start, Sequence):
+                start = self.crop_margin + random.choice(self.random_start)
+            else:
+                start = random.randint(self.crop_margin, viable_start_max)
+        else:
+            start = self.crop_margin
         end = start + self.seq_length
         X = shot_data[self.columns_X].iloc[start:end].values.T
 

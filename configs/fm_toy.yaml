@@ -49,10 +49,11 @@ data:
   n: 100000
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
-  seq_length: 50
+  seq_length: 300
   crop_margin: 2000  # Determines the unused period at start and end of each shot for preprocessing
-  random_start: true
-  force_fixed_shot: null # int if you want to overfit on one data point or null
+  force_start: 11000
+  random_start: [0, 100, 200]
+  force_fixed_shot: 1 # int if you want to overfit on one data point or null
   force_mean_zero: true
   time_last: true  # Sets the time dim as the last dim
   sample_rate: 10000

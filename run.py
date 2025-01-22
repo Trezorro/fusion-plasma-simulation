@@ -81,7 +81,7 @@ plot_callbacks = [
 
 trainer = L.Trainer(
     default_root_dir="output/",
-    enable_progress_bar=True,
+    enable_progress_bar=False,
     max_epochs=C["epochs"],
     logger=wandb_logger,
     num_sanity_val_steps=2,
