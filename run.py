@@ -75,7 +75,7 @@ if C.preview_data:
         break
 
 plot_callbacks = [
-    PlotsCallback(plotter['key'], num_samples=plotter['n'], every_n_epochs=5, train_every_n_epochs=20)
+    PlotsCallback(plotter['key'], num_samples=plotter['n'], every_n_epochs=4, train_every_n_epochs=20)
     for plotter in C.plot_functions
 ]
 
