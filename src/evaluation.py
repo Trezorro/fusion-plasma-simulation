@@ -55,7 +55,7 @@ class PlotsCallback(L.Callback):
             fig = self.plot_fn(
                 module=pl_module,
                 batch=batch,  # type: ignore
-                title_base=f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
+                title_base=f"{wandb.run.name} | Epoch {trainer.current_epoch}"
             )
             wandb.log({f"val/{self.plot_key}": fig, "trainer/global_step": trainer.global_step}, commit=False)
 
