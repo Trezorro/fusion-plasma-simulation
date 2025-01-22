@@ -14,7 +14,7 @@
                 "WANDB_NOTES": "debugging",
             },
             "args": [
-                "epochs=2"
+                "epochs=4"
             ],
             "justMyCode": false
             

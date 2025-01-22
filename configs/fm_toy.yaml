@@ -64,8 +64,8 @@ data:
     x: [
             # "FIR",  # density lijn Interferometer
             # "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
-            # "PD",  # photodiode lijn op de divertor
-            "DML",  # Magnetische respons  correleert met de energie in het plasma
+            "PD",  # photodiode lijn op de divertor
+            # "DML",  # Magnetische respons  correleert met de energie in het plasma
             # "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
             # "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
         ]
