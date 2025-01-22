@@ -261,6 +261,16 @@ class ShotFlowDS(data.Dataset):
         self.data['ShotNum'] = self.data['ShotNum'].astype(
             np.int32
         )  # Reduce memory usage and quicker indexing
+
+        # Filter out shots that are too short, i.e. less than seq_length + 2 * crop_margin or less than seq_length + force_start
+        if self.force_fixed_shot is None:
+            if self.force_start is not None:
+                self.data = self.data.groupby('ShotNum'
+                                             ).filter(lambda x: len(x) > self.seq_length + self.force_start)
+            else:
+                self.data = self.data.groupby('ShotNum').filter(
+                    lambda x: len(x) > self.seq_length + 2 * self.crop_margin
+                )
         self.shot_numbers = self.data['ShotNum'].unique()
         # Normalize within 0-1:
         self.min = self.data[self.columns_X].min()
