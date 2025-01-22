@@ -250,8 +250,8 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t, subtitle
     return fig
 
 
-plot_signal_and_spectrum(x_plot_df, None, f"Shot #{shotno}", 0.6, "Observables",
-                         buttons=False).write_html('output/first_figure.html', auto_open=True)
+plot_signal_and_spectrum(x_plot_df, None, f"Shot #{shotno}", 0.6, "Observables", buttons=False
+                        ).write_html(f'output/Shot{shotno}_plotly_preview.html', auto_open=True)
 
 # %%
 plot_signal_and_spectrum(x_plot_df, c_plot_df, f"Shot #{shotno}", 0.6, "Observables and Controls").show()
