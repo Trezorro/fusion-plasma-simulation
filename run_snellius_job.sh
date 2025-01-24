@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=snelliustest
+#SBATCH --job-name=snelliustestcpu
 #SBATCH --output=output/slurms/agent-%j.out
 #SBATCH --error=output/slurms/agent-%j.out
-#SBATCH --partition=gpu_mig
-#SBATCH --time=10:00
+#SBATCH --partition=staging
+#SBATCH --time=60:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --gpus=1
+#SBATCH --gpus=0
 
 
 echo "==============================="

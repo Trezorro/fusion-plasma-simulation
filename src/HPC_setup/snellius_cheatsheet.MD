@@ -182,10 +182,17 @@ Make sure:
 
 Then run the sbatch script with
 ```bash
-sbatch run_snellius_job.sh experimentname
+sbatch run_snellius_job.sh snelliusexperimenttest
+
+squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P"  # to see the jobs in prettier format
+
+cat output/slurms/* # to see the output
+
 ```
 
 # Appendix
+From https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial1/Lisa_Cluster.html#Job-Arrays
+
 ## Interactive sessions
 As alternative to running jobs via sbatch, you can request an interactive job session. In this format, you gain access to the node via the terminal/command line, and can interact with it as you would have connected via ssh directly to this compute node. Hence, you can debug your script much easier and have faster respond time. However, please keep in mind the following two disadvantages: 1. If you happen to disconnect from Snellius because of an instable connection or your computer going in stand-by mode, the job will be canceled. 2. Your job is not automatically terminated when your script has finished running, but you have to manually kill the job once you are done. If you forget it, you block the compute node for other students and waste credits that UvA payed for Hence, only use interactive sessions for short jobs/scripts, for example, if you want to debug whether your script starts running and train the model. Do not use interactive session to train a model for a long time.
 
