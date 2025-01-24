@@ -3,7 +3,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import torch
-import torchaudio.transforms as audio_transforms
 import torchmetrics
 
 from src.config import get_current_config
@@ -66,7 +65,16 @@ def test_specogram_plot():
 
 
 def spectogram_plot(signal: np.ndarray, title="", hop_length=10, win_length=50):
-    """Plot the spectogram of the data. Df should be a single shot."""
+    """Plot the spectogram of the data. Df should be a single shot.
+
+    Not supported on snellius by me. To keep out the torchaudio dependency.
+    """
+    try:
+        import torchaudio.transforms as audio_transforms
+    except ImportError:
+        raise ImportError("Please install torchaudio to use this function. Run 'pip install torchaudio'")
+
+
     C = get_current_config()
     signal = signal.squeeze()
     if len(signal) < win_length * 2:

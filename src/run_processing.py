@@ -1,3 +1,4 @@
+"""To be run on local machine. Preferably in vscode with correct cell execution."""
 # %%
 from math import ceil
 import pandas as pd
