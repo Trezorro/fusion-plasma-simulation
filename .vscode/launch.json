@@ -33,6 +33,22 @@
             ],
             "justMyCode": false
             
+        },
+        {
+            "name": "Run sweep agent",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "wandb",
+            "env": {
+                // "WANDB_MODE":"disabled",
+                "WANDB_NOTES": "debugging",
+            },
+            "args": [
+                "agent",
+        "deep-learning-course-team/plasma/cll26e4t"
+            ],
+            "justMyCode": false
+            
         }
     ]
 }

@@ -5,6 +5,7 @@
 
 wandb/
 output/*
+!output/.gitkeep
 
 # Python specific
 __pycache__/
