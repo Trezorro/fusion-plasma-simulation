@@ -11,6 +11,10 @@ from src.evaluation import PlotsCallback
 import src.models
 import src.data_loaders
 import src.flow_plots as fp
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 conf = load_config_from_file('fm_toy')
 run = wandb.init(
@@ -67,9 +71,9 @@ if C.preview_data:
             s, t = batch
         elif len(batch) == 3:
             shotnum, s, t = batch
-        print(f"Batch {i}:")
-        print(f"  s: {s.shape}")
-        print(f"  t: {t.shape}")
+        logger.info(f"Batch {i}:")
+        logger.info(f"  s: {s.shape}")
+        logger.info(f"  t: {t.shape}")
         fig = fp.plot_distributions(s, t, title1="Input", title2="Target", show=wandb.run.disabled)
         wandb.log({"data/preview": fig}, commit=False)
         break
@@ -92,10 +96,10 @@ trainer = L.Trainer(
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
     ] + plot_callbacks  # type: ignore
 )
-print("Starting training with first validation...")
+logger.info("Starting training with first validation...")
 # trainer.validate(model=model, dataloaders=val_loader)
-print("Starting model fit...")
+logger.info("Starting model fit...")
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-print("Starting final validation...")
+logger.info("Starting final validation...")
 trainer.test(model=model, dataloaders=val_loader)
-print("Finished training.")
+logger.info("Finished training.")

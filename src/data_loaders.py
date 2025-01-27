@@ -8,6 +8,8 @@ import random
 from src.data_generators import create_gaussian_data, create_square_data, create_spiral_data, create_heart_data, create_two_gaussians_data, create_smiley_data
 import logging
 
+logger = logging.getLogger(__name__)
+
 
 class ShotWindowDataset(data.Dataset):
 
@@ -244,10 +246,10 @@ class ShotFlowDS(data.Dataset):
         self.file_path = dir + file
         self.columns_C = list(cols.get('c', []))
         if self.columns_C:
-            logging.warning("Warning: columns_C will not be used right now.")
+            logger.warning("Warning: columns_C will not be used right now.")
         self.columns_X = list(cols.x)[:1]
         if len(cols.x) > 1:
-            logging.warning("Only one column_X is supported right now. Will use the first one.")
+            logger.warning("Only one column_X is supported right now. Will use the first one.")
         self.seq_length = seq_length
         self.crop_margin = crop_margin
         self.random_start = random_start
@@ -265,6 +267,7 @@ class ShotFlowDS(data.Dataset):
         # Filter out shots that are too short, i.e. less than seq_length + 2 * crop_margin or less than seq_length + force_start
         if self.force_fixed_shot is None:
             if self.force_start is not None:
+                # filter out shots that won't fit the forced start point
                 self.data = self.data.groupby('ShotNum'
                                              ).filter(lambda x: len(x) > self.seq_length + self.force_start)
             else:
@@ -272,6 +275,7 @@ class ShotFlowDS(data.Dataset):
                     lambda x: len(x) > self.seq_length + 2 * self.crop_margin
                 )
         self.shot_numbers = self.data['ShotNum'].unique()
+        logger.info(f"Using {len(self.shot_numbers)} shots from {self.file_path}")
         # Normalize within 0-1:
         self.min = self.data[self.columns_X].min()
         self.max = self.data[self.columns_X].max()
