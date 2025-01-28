@@ -65,7 +65,7 @@ class FlowModule(L.LightningModule):
         return loss
 
     def interpolate_samples(self, batch):
-        source_samples, target_samples = batch
+        _meta, source_samples, target_samples = batch
         t = torch.rand(source_samples.size(0), device=self.device)
         # if self.warp_fn is not None: # TODO warp option
         #     t = self.warp_fn(t)

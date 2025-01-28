@@ -315,5 +315,10 @@ class ShotFlowDS(data.Dataset):
             X = X / X.std(axis=1, keepdims=True)
 
         prior_distribution_sample = torch.randn(len(self.columns_X), self.seq_length)
+        meta = {
+            'shot_number': shot_number,
+            'start': start,
+            'end': end,
+        }
 
-        return prior_distribution_sample, X  # prior and X shapes: (variables, seq_length)
+        return meta, prior_distribution_sample, X  # prior and X shapes: (variables, seq_length)

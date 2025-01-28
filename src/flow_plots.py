@@ -94,7 +94,7 @@ def plot_flow(
     """
     # Generate and visualize new samples
     device = module.device
-    source_samples, target_samples = batch
+    meta, source_samples, target_samples = batch
 
     generated_samples, trajectories = module.integrate_path(
         source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
@@ -186,7 +186,7 @@ def plot_flow_and_lines(
     """
     # Generate and visualize new samples
     device = module.device
-    source_samples, target_samples = batch
+    meta, source_samples, target_samples = batch
 
     generated_samples, trajectories = module.integrate_path(
         source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
@@ -303,10 +303,10 @@ def plot_flow_and_lines_plotly(
     Returns:
         None
     """
-    # Generate and visualize new samples
     device = module.device
-    source_samples, target_samples = batch
+    meta, source_samples, target_samples = batch
 
+    # Generate new samples
     generated_samples, trajectories = module.integrate_path(
         source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
     )  # paths shape: [n_steps, batch_size, num_features]
