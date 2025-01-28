@@ -46,7 +46,7 @@ class TimeEmbedding(nn.Module):
         """
         # If `t` is scalar,
         # Frequency scales (channels) is broadcasted across the batch size
-        phase = t.view(-1, 1) * self.FREQUENCY_SCALES.to(t.device)  # [batch_size, half_dim]
+        phase = t.view(-1, 1) * 10_000 * self.FREQUENCY_SCALES.to(t.device)  # [batch_size, half_dim]
         emb = torch.cat((phase.sin(), phase.cos()), dim=1)
 
         # Transform with the MLP

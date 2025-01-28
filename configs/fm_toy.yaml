@@ -30,8 +30,8 @@ model:
       input_channels: 1 # Default 3
       apex_hidden_channels: 32  # Default 128
       # activation: GELU  # Default GELU # TODO implement configurable activation
-      time_embedding_channels: 2  # Default apex_hidden_channels * 4
-      time_embedding: dummy  # default: sinusoidal
+      time_embedding_channels: 128  # Default apex_hidden_channels * 4
+      time_embedding: sinusoidal  # default: sinusoidal, other: dummy
       ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
       is_attn: [false, false, false, false] # Default [false, false, false, false]
       mid_attn: false # Default false
