@@ -157,6 +157,14 @@ git clone git@github.com:Trezorro/fusion-plasma-simulation.git
 git fetch
 git pull
 ```
+## Troubleshooting
+If this doesn't work because you gave the key non-default names, 
+run:
+```bash
+echo -e "Host github.com\n    HostName github.com\n    User git\n    IdentityFile ~/.ssh/<key_name>" >> ~/.ssh/config
+```
+Then try again.
+
 ## Uploading the data
 We have a couple of options to upload the data to the server.
 - Use the scp command to copy the data from your local machine to the server.

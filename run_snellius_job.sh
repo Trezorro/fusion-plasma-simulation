@@ -3,7 +3,7 @@
 #SBATCH --output=output/slurms/agent-%j.out
 #SBATCH --error=output/slurms/agent-%j.out
 #SBATCH --partition=staging
-#SBATCH --time=60:00
+#SBATCH --time=180:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
