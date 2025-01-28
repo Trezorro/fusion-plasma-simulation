@@ -48,10 +48,9 @@ data:
   Class: ShotFlowDS
   source_distribution: gaussian
   target_distribution: heart
-  n: 100000
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
-  seq_length: 500
+  seq_length: 1000
   crop_margin: 2000  # Determines the unused period at start and end of each shot for preprocessing
   force_start: 11000
   random_start: false
