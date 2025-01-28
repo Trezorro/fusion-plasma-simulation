@@ -10,6 +10,8 @@ plot_functions:
     n: 100
   - key: line_flow_plot
     n: 5
+  - key: multi_channel_lines
+    n: 5
 
 
 # model: model.yaml # To be replaced by respective yaml file content
@@ -27,7 +29,7 @@ model:
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       spatial_dim: 1
-      input_channels: 1 # Default 3
+      input_channels: 2 # Default 3
       apex_hidden_channels: 32  # Default 128
       # activation: GELU  # Default GELU # TODO implement configurable activation
       time_embedding_channels: 128  # Default apex_hidden_channels * 4
@@ -65,7 +67,7 @@ data:
     x: [
             # "FIR",  # density lijn Interferometer
             # "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
-            # "PD",  # photodiode lijn op de divertor
+            "PD",  # photodiode lijn op de divertor
             "DML",  # Magnetische respons  correleert met de energie in het plasma
             # "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
             # "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.

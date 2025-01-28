@@ -1,4 +1,5 @@
 # @title Utility code: styles, functions, generators, visualization
+from venv import logger
 from matplotlib import gridspec
 import numpy as np
 # %matplotlib inline
@@ -12,6 +13,10 @@ from plotly import colors as plt_colors
 from plotly.subplots import make_subplots as plotly_make_subplots
 
 from src.config import get_current_config
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 # for accessibility: Wong's color pallette: cf. https://davidmathlogic.com/colorblind
 #WONG_black = [0/255, 0/255, 0/255]          # #000000
@@ -68,6 +73,7 @@ def plot_distributions(dist1, dist2, title1="Distribution 1", title2="Distributi
     return wandb.Image(fig)
 
 
+@torch.inference_mode()
 def plot_flow(
     module,  # Trained lignting module to generate new samples
     batch,  # Initial points, shape: 2x[batch_size, num_features]
@@ -279,6 +285,7 @@ def plot_flow_and_lines(
     return wandb.Image(fig)
 
 
+@torch.inference_mode()
 def plot_flow_and_lines_plotly(
     module,  # Trained lightning module to generate new samples
     batch,  # Initial points, shape: 2x[batch_size, num_features]
@@ -458,4 +465,91 @@ def plot_flow_and_lines_plotly(
     if wandb.run.disabled:
         fig.show()
 
+    return fig
+
+
+def multi_channel_lines_plotly(
+    module,  # Trained lightning module to generate new samples
+    batch,  # Initial points, shape: 2x[batch_size, num_features]
+    title_base="",
+    subtitle="",  # Subtitle for the plot
+    alpha=0.9,  # Transparency of scatter plot points
+    n_steps=50,  # Number of integration steps
+    warp_fn=None,  # Optional function to warp time steps
+):
+    """Create a simple line plot where each channel is a separate color, shots are overlaid, and predictions are show in dotted lines.
+
+    The legend is grouped by shot.
+    Legend format is: 
+        Shot 1 - Target:
+            Target, Shot 2: Target, Shot 2: Predicted, ..."
+    """
+    C = get_current_config()
+    CHANNEL_NAMES = C.data.cols.x
+    # Generate and visualize new samples
+    device = module.device
+    meta, source_samples, target_samples = batch
+    shot_numbers = meta.get('shot_number')
+    start_times = meta.get('start')
+    end_times = meta.get('end')
+    num_samples, n_channels, num_timepoints = source_samples.size()
+
+    generated_samples = module.integrate_path(
+        source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=False
+    )  # paths shape: [batch_size, num_features]
+    source_samples, generated_samples, target_samples = source_samples.cpu(), generated_samples.cpu(
+    ), target_samples.cpu()  # Shape: [n_samples, n_channels, num_timepoints]
+    num_samples = min(30, num_samples)  # Number of traces to visualize
+    COLOR_SCALE = plt_colors.qualitative.Plotly
+
+    fig = go.Figure()
+    fig.update_layout(
+        title=title_base + f"<br><sub>{subtitle}</sub>",
+        title_automargin=True,
+        template='plotly_dark' if BG_THEME in ['black', 'dark'] else 'plotly_white',
+    )
+    for sample_i in range(num_samples):
+        if shot_numbers is not None:
+            shot_number = shot_numbers[sample_i]
+            start_time = start_times[sample_i]
+            end_time = end_times[sample_i]
+            sample_description = f"#{shot_number} (timespan: {start_time}s-{end_time}s)"
+        # Plot target samples
+        for channel_i in range(n_channels):
+            # Plot target samples
+            channel_color = COLOR_SCALE[((n_channels * sample_i) + channel_i) % len(COLOR_SCALE)]
+            channel_label = CHANNEL_NAMES[channel_i]
+            fig.add_trace(
+                go.Scatter(
+                    x=np.arange(num_timepoints),
+                    y=target_samples[sample_i, channel_i, :],
+                    mode='lines',
+                    line=dict(color=channel_color, width=3),
+                    opacity=0.6,
+                    name=f'{channel_label} (target)',
+                    text=sample_description,
+                    legendgroup=f'Shot {shot_number} - Target',
+                    legendgrouptitle_text=f'Shot {shot_number} - Target',
+                    hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
+                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time}s-{end_time}s"
+                )
+            )
+            # Plot generated samples
+            fig.add_trace(
+                go.Scatter(
+                    x=np.arange(num_timepoints),
+                    y=generated_samples[sample_i, channel_i, :],
+                    mode='lines',
+                    line=dict(dash='dot', color=channel_color),
+                    opacity=0.9,
+                    name=f'{channel_label} (predicted)',
+                    legendgroup=f'Shot {shot_number} - Predicted',
+                    legendgrouptitle_text=f'Shot {shot_number} - Predicted',
+                    text=sample_description,
+                    hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
+                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time}s-{end_time}s"
+                )
+            )
+    if wandb.run.disabled:
+        fig.show()
     return fig

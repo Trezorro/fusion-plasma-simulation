@@ -247,9 +247,7 @@ class ShotFlowDS(data.Dataset):
         self.columns_C = list(cols.get('c', []))
         if self.columns_C:
             logger.warning("Warning: columns_C will not be used right now.")
-        self.columns_X = list(cols.x)[:1]
-        if len(cols.x) > 1:
-            logger.warning("Only one column_X is supported right now. Will use the first one.")
+        self.columns_X = list(cols.x)
         self.seq_length = seq_length
         self.crop_margin = crop_margin
         self.random_start = random_start
@@ -317,8 +315,8 @@ class ShotFlowDS(data.Dataset):
         prior_distribution_sample = torch.randn(len(self.columns_X), self.seq_length)
         meta = {
             'shot_number': shot_number,
-            'start': start,
-            'end': end,
+            'start': shot_data.index[start],
+            'end': shot_data.index[end],
         }
 
         return meta, prior_distribution_sample, X  # prior and X shapes: (variables, seq_length)
