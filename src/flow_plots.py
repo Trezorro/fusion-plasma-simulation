@@ -13,7 +13,6 @@ from plotly import colors as plt_colors
 from plotly.subplots import make_subplots as plotly_make_subplots
 
 from src.config import get_current_config
-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -75,7 +74,7 @@ def plot_distributions(dist1, dist2, title1="Distribution 1", title2="Distributi
 
 @torch.inference_mode()
 def plot_flow(
-    module,  # Trained lignting module to generate new samples
+    module: "FlowModule",  # Trained lignting module to generate new samples
     batch,  # Initial points, shape: 2x[batch_size, num_features]
     title_base="",
     size=20,  # Size of scatter plot points
@@ -100,13 +99,13 @@ def plot_flow(
     """
     # Generate and visualize new samples
     device = module.device
-    meta, source_samples, target_samples = batch
-
+    meta, conditioning_inputs, target_samples = batch
+    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples)
     generated_samples, trajectories = module.integrate_path(
-        source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
+        prior_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
     )
     # select the first channel for everything
-    source_samples = source_samples[:, 0, :]
+    prior_samples = prior_samples[:, 0, :]
     generated_samples = generated_samples[:, 0, :]
     target_samples = target_samples[:, 0, :]
     trajectories = trajectories[:, :, 0, :]  # Shape: [n_steps, n_samples, num_timepoints]
@@ -115,7 +114,7 @@ def plot_flow(
     plt.close('all')
     fig, ax = plt.subplots(1, 4, figsize=(13, 4))
     plt.suptitle(title_base, fontsize=16)
-    data_list = [source_samples.cpu(), generated_samples.cpu(), target_samples.cpu()]
+    data_list = [prior_samples.cpu(), generated_samples.cpu(), target_samples.cpu()]
     label_list = ['Initial Points', 'Generated Samples', 'Target Data', 'Trajectories']
     color_list = [SOURCE_COLOR, PRED_COLOR, TARGET_COLOR]
     max_abs_value = torch.max(torch.abs(torch.cat(data_list)), 0)[0]
@@ -192,21 +191,22 @@ def plot_flow_and_lines(
     """
     # Generate and visualize new samples
     device = module.device
-    meta, source_samples, target_samples = batch
-
+    meta, conditioning_inputs, target_samples = batch
+    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples)
     generated_samples, trajectories = module.integrate_path(
-        source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
-    )  # trajectories shape: [n_steps, batch_size, channels, num_time_points]
+        prior_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
+    )
+    # trajectories shape: [n_steps, batch_size, channels, num_time_points]
     # select the first channel for everything
-    source_samples = source_samples[:, 0, :]
+    prior_samples = prior_samples[:, 0, :]
     generated_samples = generated_samples[:, 0, :]
     target_samples = target_samples[:, 0, :]
     trajectories = trajectories[:, :, 0, :]  # Shape: [n_steps, n_samples, num_timepoints]
-    source_samples, generated_samples, target_samples = source_samples.cpu(), generated_samples.cpu(
+    prior_samples, generated_samples, target_samples = prior_samples.cpu(), generated_samples.cpu(
     ), target_samples.cpu()
     n_steps, num_samples, num_features = trajectories.size()
     num_samples = min(30, num_samples)  # Number of trajectories to visualize
-    data_list = [source_samples, generated_samples, target_samples]
+    data_list = [prior_samples, generated_samples, target_samples]
     FACET_LIST = [
         'Initial Points',
         'Generated Samples',
@@ -311,22 +311,21 @@ def plot_flow_and_lines_plotly(
         None
     """
     device = module.device
-    meta, source_samples, target_samples = batch
-
-    # Generate new samples
+    meta, conditioning_inputs, target_samples = batch
+    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples)
     generated_samples, trajectories = module.integrate_path(
-        source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
+        prior_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
     )  # paths shape: [n_steps, batch_size, num_features]
-    source_samples, generated_samples, target_samples = source_samples.cpu(), generated_samples.cpu(
+    prior_samples, generated_samples, target_samples = prior_samples.cpu(), generated_samples.cpu(
     ), target_samples.cpu()
     # select the first channel for everything
-    source_samples = source_samples[:, 0, :]
+    prior_samples = prior_samples[:, 0, :]
     generated_samples = generated_samples[:, 0, :]
     target_samples = target_samples[:, 0, :]
     trajectories = trajectories[:, :, 0, :]  # Shape: [n_steps, n_samples, num_timepoints]
     n_steps, num_samples, num_features = trajectories.size()
     num_samples = min(30, num_samples)  # Number of trajectories to visualize
-    data_list = [source_samples, generated_samples, target_samples]
+    data_list = [prior_samples, generated_samples, target_samples]
     FACET_LIST = ['Initial Points', 'Generated Samples', 'Target Data', 'Paths']
     color_list = [SOURCE_COLOR, PRED_COLOR, TARGET_COLOR]
     max_abs_value = torch.max(torch.abs(torch.cat(data_list)), 0)[0]
@@ -488,16 +487,20 @@ def multi_channel_lines_plotly(
     CHANNEL_NAMES = C.data.cols.x
     # Generate and visualize new samples
     device = module.device
-    meta, source_samples, target_samples = batch
+    meta, conditioning_inputs, target_samples = batch
+    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples)
+    generated_samples, trajectories = module.integrate_path(
+        prior_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
+    )  # paths shape: [n_steps, batch_size, num_features]
     shot_numbers = meta.get('shot_number')
     start_times = meta.get('start')
     end_times = meta.get('end')
-    num_samples, n_channels, num_timepoints = source_samples.size()
+    num_samples, n_channels, num_timepoints = prior_samples.size()
 
     generated_samples = module.integrate_path(
-        source_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=False
+        prior_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=False
     )  # paths shape: [batch_size, num_features]
-    source_samples, generated_samples, target_samples = source_samples.cpu(), generated_samples.cpu(
+    prior_samples, generated_samples, target_samples = prior_samples.cpu(), generated_samples.cpu(
     ), target_samples.cpu()  # Shape: [n_samples, n_channels, num_timepoints]
     num_samples = min(30, num_samples)  # Number of traces to visualize
     COLOR_SCALE = plt_colors.qualitative.Plotly

@@ -23,7 +23,7 @@ class FlowModule(L.LightningModule):
         # FrequencyAmpMSE=FrequencyAmpMSE,
     )
     MODEL_OPTIONS = dict(
-        VelocityNet=VelocityNet,
+        # VelocityNet=VelocityNet,  # TODO needs to support channels, t, and conditioning
         # UNetModern=UNetModern,
         ConditionalUNet=ConditionalUNet,
     )
@@ -34,6 +34,7 @@ class FlowModule(L.LightningModule):
         model_params: Optional[DictConfig | dict] = None,
         loss: str = "MSELoss",
         optimizer_params: Optional[DictConfig | dict] = None,
+        prior: str = "normal",
         **kwargs: Any
     ):
         super().__init__()
@@ -43,46 +44,60 @@ class FlowModule(L.LightningModule):
             model_params = dict()
         self.model = self.MODEL_OPTIONS[model](**model_params)  # type: ignore
         self.loss = self.LOSS_OPTIONS[loss]()
+        self.prior = prior
         self.step_fn = self.fwd_euler_step
 
-    def forward(self, x, t):
-        return self.model(x, t)
+    def forward(self, x, t, conditioning=None):
+        return self.model(x, t, conditioning=conditioning)
 
     def training_step(self, batch, batch_idx):
-        t, samples_at_t, velocity = self.interpolate_samples(batch)
-        pred_velocity = self.model(samples_at_t, t)
+        t, samples_at_t, velocity, conditioning = self.interpolate_samples(batch)
+        pred_velocity = self.model(samples_at_t, t, conditioning)
         loss = self.loss(pred_velocity, velocity)
         self.log("loss/train", loss, prog_bar=True)
-
         return loss
 
     def validation_step(self, batch, batch_idx):
-        t, samples_at_t, velocity = self.interpolate_samples(batch)
-        pred_velocity = self.model(samples_at_t, t)
+        t, samples_at_t, velocity, conditioning = self.interpolate_samples(batch)
+        pred_velocity = self.model(samples_at_t, t, conditioning)
         loss = self.loss(pred_velocity, velocity)
         self.log("loss/val", loss, prog_bar=True)
-
         return loss
 
     def interpolate_samples(self, batch):
-        _meta, source_samples, target_samples = batch
-        t = torch.rand(source_samples.size(0), device=self.device)
-        # if self.warp_fn is not None: # TODO warp option
-        #     t = self.warp_fn(t)
+        _meta, conditioning_inputs, target_samples = batch
+        prior_samples = self.get_prior_samples(conditioning_inputs, target_samples)
 
         # interpolate the probability path at t (making the example path)
+        t = torch.rand(target_samples.size(0), device=self.device)
+        # if self.warp_fn is not None: # TODO warp option
+        #     t = self.warp_fn(t)
         t_broadcast = t.view(-1, 1, 1)
-        samples_at_t = source_samples * (1 - t_broadcast) + target_samples * t_broadcast
-        delta = target_samples - source_samples
-        return t, samples_at_t, delta
+        samples_at_t = prior_samples * (1 - t_broadcast) + target_samples * t_broadcast
+        target_velocity = target_samples - prior_samples
+        return t, samples_at_t, target_velocity, conditioning_inputs
+
+    def get_prior_samples(self, conditioning_inputs, target_samples):
+        match self.prior:
+            case "normal":
+                prior_samples = torch.randn_like(target_samples)
+            case "copy":
+                assert 'x_history' in conditioning_inputs, "x_history must be in conditioning for prior='copy'"
+                # in case the x_history is longer than the target_samples, crop to seq_length
+                seq_length = target_samples.size(2)
+                prior_samples = conditioning_inputs['x_history'][:, :, -seq_length:]
+            case _:
+                raise ValueError(f"Invalid prior: {self.prior}")
+        return prior_samples
 
     test_step = validation_step
 
     @torch.inference_mode()
     def evaluate(self, batch):
+        """Meant for testing with rich intermediate outputs."""
         self.model.eval()
-        t, samples_at_t, velocity = self.interpolate_samples(batch)
-        pred_velocity = self.model(samples_at_t, t)
+        t, samples_at_t, velocity, conditioning = self.interpolate_samples(batch)
+        pred_velocity = self.model(samples_at_t, t, conditioning)
         loss = self.loss(pred_velocity, velocity)
         losses = {
             "loss": loss

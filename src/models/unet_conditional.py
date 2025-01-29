@@ -73,8 +73,9 @@ class ConditionalUNet(nn.Module):
         mid_attn: bool = False,
         n_blocks: int = 2,
         activation: str = "GELU",
-        use1x1: bool = False,  # TODO
+        use1x1: bool = False,  # TODO implement 1x1 convolution
         norm_groups: int = 8,  # If 0, no group normalization
+        conditioning: list[str] = [],
         **kwargs
     ):
         """
@@ -86,6 +87,7 @@ class ConditionalUNet(nn.Module):
         """
         super().__init__()
         self.spatial_dim = spatial_dim
+        self.conditioning = conditioning
 
         # Number of resolutions
         n_resolutions = len(ch_mults)
@@ -185,7 +187,12 @@ class ConditionalUNet(nn.Module):
             in_channels, input_channels, kernel_size=3, padding=1
         )  # TODO: Option for 1x1 convolution
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor):
+    def forward(
+        self,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        conditioning: Optional[dict[str, torch.Tensor]] = None
+    ) -> torch.Tensor:
         """
         * `x` has shape `[batch_size, in_channels, height, width]`
         * `t` has shape `[batch_size]` or scalar

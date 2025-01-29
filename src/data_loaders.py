@@ -2,7 +2,6 @@ from typing import Optional, Sequence
 import numpy as np
 from omegaconf import DictConfig
 import pandas as pd
-import torch
 from torch.utils import data
 import random
 from src.data_generators import create_gaussian_data, create_square_data, create_spiral_data, create_heart_data, create_two_gaussians_data, create_smiley_data
@@ -213,7 +212,13 @@ class SourceTargetDS(data.Dataset):
 
 class ShotFlowDS(data.Dataset):
     """
-
+    
+    Returns:
+        meta, conditioning and x window for a single shot.
+            meta: Dictionary with keys 'shot_number', 'start', 'end'.
+            conditioning: Dictionary with optional keys 'x_history' containing the history data.
+            x: Selected window of observables from the shot.
+        
     Args:
         dir: Directory where the data file is located.
         file: Name of the data file.
@@ -235,8 +240,9 @@ class ShotFlowDS(data.Dataset):
         cols: DictConfig,
         seq_length=200,
         crop_margin=1000,
+        history_length: Optional[int] = 0,
+        time_last=True,
         random_start: bool | list[int] = True,
-        time_last=False,
         force_mean_zero=False,
         force_fixed_shot: Optional[int] = None,
         force_start: Optional[int] = None,
@@ -249,32 +255,39 @@ class ShotFlowDS(data.Dataset):
             logger.warning("Warning: columns_C will not be used right now.")
         self.columns_X = list(cols.x)
         self.seq_length = seq_length
+        self.history_length = history_length if history_length is not None else 0
         self.crop_margin = crop_margin
+        assert self.crop_margin >= self.history_length, "crop_margin must be greater than or equal to history_length to provide enough context."
         self.random_start = random_start
-        self.time_last = time_last
         self.force_mean_zero = force_mean_zero
         self.force_fixed_shot = force_fixed_shot
         self.force_start = force_start
         assert random_start is not True or force_start is None, "Cannot have random_start and force_start at the same time, unless random_start is a list of int options."
 
+        self.load_and_filter_data()
+        self.normalize_columns()
+
+    def load_and_filter_data(self):
         self.data = pd.read_parquet(self.file_path)
-        self.data['ShotNum'] = self.data['ShotNum'].astype(
-            np.int32
-        )  # Reduce memory usage and quicker indexing
+        # Reduce memory usage and quicker indexing:
+        self.data['ShotNum'] = self.data['ShotNum'].astype(np.int32)
 
         # Filter out shots that are too short, i.e. less than seq_length + 2 * crop_margin or less than seq_length + force_start
-        if self.force_fixed_shot is None:
-            if self.force_start is not None:
+        if not self.force_fixed_shot:
+            if self.force_start:
                 # filter out shots that won't fit the forced start point
-                self.data = self.data.groupby('ShotNum'
-                                             ).filter(lambda x: len(x) > self.seq_length + self.force_start)
+                self.data = self.data.groupby('ShotNum').filter(
+                    lambda x: len(x) > self.seq_length + self.force_start  # type: ignore
+                )
             else:
                 self.data = self.data.groupby('ShotNum').filter(
                     lambda x: len(x) > self.seq_length + 2 * self.crop_margin
                 )
         self.shot_numbers = self.data['ShotNum'].unique()
         logger.info(f"Using {len(self.shot_numbers)} shots from {self.file_path}")
-        # Normalize within 0-1:
+
+    def normalize_columns(self):
+        """Normalize within 0-1"""
         self.min = self.data[self.columns_X].min()
         self.max = self.data[self.columns_X].max()
         self.data[self.columns_X] = (self.data[self.columns_X] - self.min) / (self.max - self.min)
@@ -283,7 +296,7 @@ class ShotFlowDS(data.Dataset):
         return len(self.shot_numbers)
 
     def __getitem__(self, idx):
-        if self.force_fixed_shot is not None and self.force_fixed_shot < len(self.shot_numbers):
+        if self.force_fixed_shot and self.force_fixed_shot < len(self.shot_numbers):
             idx = self.force_fixed_shot
 
         shot_number = self.shot_numbers[idx]
@@ -306,17 +319,31 @@ class ShotFlowDS(data.Dataset):
         else:
             start = self.crop_margin
         end = start + self.seq_length
-        X = shot_data[self.columns_X].iloc[start:end].values.T
+        x = shot_data[self.columns_X].iloc[start:end].values.T
 
-        if self.force_mean_zero:
-            X = X - X.mean(axis=1, keepdims=True)
-            X = X / X.std(axis=1, keepdims=True)
-
-        prior_distribution_sample = torch.randn(len(self.columns_X), self.seq_length)
         meta = {
             'shot_number': shot_number,
             'start': shot_data.index[start],
             'end': shot_data.index[end],
         }
+        conditioning_inputs = {}
+        if self.history_length:
+            history_start = start - self.history_length
+            history_end = start
+            assert history_start >= 0, "Not enough history data available."
+            x_history = shot_data[self.columns_X].iloc[history_start:history_end].values.T
 
-        return meta, prior_distribution_sample, X  # prior and X shapes: (variables, seq_length)
+            # When theres history context, normalize the window based on the history window
+            window_mean = x_history.mean(axis=1, keepdims=True)
+            window_std = x_history.std(axis=1, keepdims=True)
+            if self.force_mean_zero:
+                x_history = x_history - window_mean
+                x_history = x_history / window_std
+            conditioning_inputs['x_history'] = x_history
+        else:
+            window_mean = x.mean(axis=1, keepdims=True)
+            window_std = x.std(axis=1, keepdims=True)
+        if self.force_mean_zero:
+            x = x - window_mean  # either the history mean (if available) or the target window mean
+            x = x / window_std
+        return meta, conditioning_inputs, x  # prior, conditioning and X shapes: (variables, seq_length)
