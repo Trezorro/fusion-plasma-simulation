@@ -1,3 +1,7 @@
+"""My own unet components, used in unet.py and UNet_fourier.py.
+
+    Based on https://github.com/milesial/Pytorch-UNet
+"""
 import torch
 import torch.nn as nn
 
