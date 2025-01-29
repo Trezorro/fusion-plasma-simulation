@@ -507,8 +507,7 @@ def multi_channel_lines_plotly(
 
     fig = go.Figure()
     fig.update_layout(
-        title=title_base + f"<br><sub>{subtitle}</sub>",
-        title_automargin=True,
+        title=title_base + (f"<br><sub>{subtitle}</sub>" if subtitle else ""),
         template='plotly_dark' if BG_THEME in ['black', 'dark'] else 'plotly_white',
     )
     for sample_i in range(num_samples):
