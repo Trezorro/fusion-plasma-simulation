@@ -1,7 +1,7 @@
 epochs: 6000
 batch_size: 64
 patience: 400
-gradient_clip_val: 10
+gradient_clip_val: 1
 preview_data: false
 plot_functions:
   # - key: spectogram_plot
