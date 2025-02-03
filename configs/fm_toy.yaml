@@ -27,6 +27,7 @@ model:
   Class: FlowModule
   params:
     prior: 'normal'  # normal, copy
+    use_ot: true
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history'] # will affect architecture

@@ -70,7 +70,7 @@ if C.preview_data:
         if len(batch) == 2:
             s, t = batch
         elif len(batch) == 3:
-            shotnum, s, t = batch
+            shotnum, s, t = batch  # TODO: update to match new data format
         logger.info(f"Batch {i}:")
         logger.info(f"  s: {s.shape}")
         logger.info(f"  t: {t.shape}")

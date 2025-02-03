@@ -8,6 +8,11 @@ from omegaconf import DictConfig
 
 from src.models.flow_nets import VelocityNet
 from src.models.unet_conditional import ConditionalUNet
+from torchcfm.optimal_transport import OTPlanSampler
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class FlowModule(L.LightningModule):
@@ -35,6 +40,7 @@ class FlowModule(L.LightningModule):
         loss: str = "MSELoss",
         optimizer_params: Optional[DictConfig | dict] = None,
         prior: str = "normal",
+        use_ot: bool = False,
         **kwargs: Any
     ):
         super().__init__()
@@ -46,6 +52,8 @@ class FlowModule(L.LightningModule):
         self.loss = self.LOSS_OPTIONS[loss]()
         self.prior = prior
         self.step_fn = self.fwd_euler_step
+        self.use_ot = use_ot
+        self.ot_sampler = OTPlanSampler(method='exact')
 
     def forward(self, x, t, conditioning=None):
         return self.model(x, t, conditioning=conditioning)
@@ -67,6 +75,13 @@ class FlowModule(L.LightningModule):
     def interpolate_samples(self, batch):
         _meta, conditioning_inputs, target_samples = batch
         prior_samples = self.get_prior_samples(conditioning_inputs, target_samples.size())
+
+        if self.use_ot:
+            # sample from optimal transport plan based on prior and target samples in minibatch
+            prior_samples, target_samples = self.ot_sampler.sample_plan(prior_samples, target_samples)
+            # put back on correct device, because OT sampler may have moved them to cpu
+            prior_samples = prior_samples.to(self.device)
+            target_samples = target_samples.to(self.device)
 
         # interpolate the probability path at t (making the example path)
         t = torch.rand(target_samples.size(0), device=self.device)
