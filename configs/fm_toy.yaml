@@ -32,8 +32,8 @@ model:
     model_params:
       conditioning: ['x_history'] # will affect architecture
       spatial_dim: 1
-      input_channels: 2 # Default 3
-      apex_hidden_channels: 32  # Default 128
+      input_channels: 5 # Default 3
+      apex_hidden_channels: 64  # Default 128
       # activation: GELU  # Default GELU # TODO implement configurable activation
       time_embedding_channels: 128  # Default apex_hidden_channels * 4
       time_embedding: sinusoidal  # default: sinusoidal, other: dummy
@@ -67,10 +67,10 @@ data:
     - ShotNum
     - time
     x: [
-            # "FIR",  # density lijn Interferometer
-            # "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
+            # "FIR",  # density lijn Interferometer (not in my dataset)
+            "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
             "PD",  # photodiode lijn op de divertor
             "DML",  # Magnetische respons  correleert met de energie in het plasma
-            # "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
-            # "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
+            "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
+            "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
         ]
