@@ -79,7 +79,7 @@ def plot_flow(
     title_base="",
     size=20,  # Size of scatter plot points
     alpha=0.5,  # Transparency of scatter plot points
-    n_steps=100,  # Number of integration steps
+    n_steps=50,  # Number of integration steps
     warp_fn=None,  # Optional function to warp time steps
 ):
     """Call the integrator to calculate the motion (probability path) given v field, generate new samples
