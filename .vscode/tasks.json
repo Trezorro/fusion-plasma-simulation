@@ -12,7 +12,7 @@
           {
             "label": "Run Cluster Experiment",
             "type": "shell",
-            "command": "bash src/HPC_setup/submit_remote_job.sh '${input:run_name}'"
+            "command": "bash src/HPC_setup/submit_remote_job_snellius.sh '${input:run_name}'"
           }
     ],
   "inputs": [
