@@ -24,3 +24,8 @@ This is data for full shots (shot = pulse = experiment). We do not want to model
     *NOTE: You need the full canonicalized path to the data directory on the server, starting from the home directory.*
 4. Sync output files back to local machine
     ```rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output output/hpc/```
+
+
+# TODO
+ - [ ] Dont install torchCFM but just copy the required OT file. Then update the servers.
+   - [ ] This retains better versions of lightning, numpy, pandas and plotly. So if I run into issues with the current versions, I can just use the newer versions.

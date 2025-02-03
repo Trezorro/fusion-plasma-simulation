@@ -78,7 +78,9 @@ class FlowModule(L.LightningModule):
 
         if self.use_ot:
             # sample from optimal transport plan based on prior and target samples in minibatch
-            prior_samples, target_samples = self.ot_sampler.sample_plan(prior_samples, target_samples)
+            prior_samples, target_samples = self.ot_sampler.sample_plan(
+                prior_samples, target_samples, replace=False
+            )
             # put back on correct device, because OT sampler may have moved them to cpu
             prior_samples = prior_samples.to(self.device)
             target_samples = target_samples.to(self.device)
