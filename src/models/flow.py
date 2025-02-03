@@ -66,7 +66,7 @@ class FlowModule(L.LightningModule):
 
     def interpolate_samples(self, batch):
         _meta, conditioning_inputs, target_samples = batch
-        prior_samples = self.get_prior_samples(conditioning_inputs, target_samples)
+        prior_samples = self.get_prior_samples(conditioning_inputs, target_samples.size())
 
         # interpolate the probability path at t (making the example path)
         t = torch.rand(target_samples.size(0), device=self.device)
@@ -77,14 +77,17 @@ class FlowModule(L.LightningModule):
         target_velocity = target_samples - prior_samples
         return t, samples_at_t, target_velocity, conditioning_inputs
 
-    def get_prior_samples(self, conditioning_inputs, target_samples):
+    def get_prior_samples(self, conditioning_inputs, target_size: torch.Size):
+        assert type(target_size) == torch.Size and 2 <= len(
+            target_size
+        ) <= 5, "target_size must be a torch.Size with 2-5 dimensions"
         match self.prior:
             case "normal":
-                prior_samples = torch.randn_like(target_samples)
+                prior_samples = torch.randn(target_size, device=self.device)
             case "copy":
                 assert 'x_history' in conditioning_inputs, "x_history must be in conditioning for prior='copy'"
                 # in case the x_history is longer than the target_samples, crop to seq_length
-                seq_length = target_samples.size(2)
+                seq_length = target_size[2]
                 prior_samples = conditioning_inputs['x_history'][:, :, -seq_length:]
             case _:
                 raise ValueError(f"Invalid prior: {self.prior}")

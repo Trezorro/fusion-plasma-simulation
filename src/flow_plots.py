@@ -100,7 +100,7 @@ def plot_flow(
     # Generate and visualize new samples
     device = module.device
     meta, conditioning_inputs, target_samples = batch
-    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples)
+    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples.size())
     generated_samples, trajectories = module.integrate_path(
         prior_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
     )
@@ -192,7 +192,7 @@ def plot_flow_and_lines(
     # Generate and visualize new samples
     device = module.device
     meta, conditioning_inputs, target_samples = batch
-    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples)
+    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples.size())
     generated_samples, trajectories = module.integrate_path(
         prior_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
     )
@@ -312,7 +312,7 @@ def plot_flow_and_lines_plotly(
     """
     device = module.device
     meta, conditioning_inputs, target_samples = batch
-    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples)
+    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples.size())
     generated_samples, trajectories = module.integrate_path(
         prior_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
     )  # paths shape: [n_steps, batch_size, num_features]
@@ -488,7 +488,7 @@ def multi_channel_lines_plotly(
     # Generate and visualize new samples
     device = module.device
     meta, conditioning_inputs, target_samples = batch
-    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples)
+    prior_samples = module.get_prior_samples(conditioning_inputs, target_samples.size())
     generated_samples, trajectories = module.integrate_path(
         prior_samples.to(device), n_steps=n_steps, warp_fn=warp_fn, save_trajectories=True
     )  # paths shape: [n_steps, batch_size, num_features]
