@@ -110,7 +110,7 @@ def plot_flow(
     target_samples = target_samples[:, 0, :]
     trajectories = trajectories[:, :, 0, :]  # Shape: [n_steps, n_samples, num_timepoints]
 
-    n_viz = min(30, len(trajectories[0]))  # Number of trajectories to visualize
+    n_viz = min(100, len(trajectories[0]))  # Number of trajectories to visualize
     plt.close('all')
     fig, ax = plt.subplots(1, 4, figsize=(13, 4))
     plt.suptitle(title_base, fontsize=16)

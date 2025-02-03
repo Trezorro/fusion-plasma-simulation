@@ -79,7 +79,7 @@ if C.preview_data:
         break
 
 plot_callbacks = [
-    PlotsCallback(plotter['key'], num_samples=plotter['n'], every_n_epochs=5, train_every_n_epochs=20)
+    PlotsCallback(plotter['key'], num_samples=plotter['n'], every_n_epochs=5, train_every_n_epochs=10)
     for plotter in C.plot_functions
 ]
 
@@ -88,7 +88,7 @@ trainer = L.Trainer(
     enable_progress_bar=False,
     max_epochs=C["epochs"],
     logger=wandb_logger,
-    num_sanity_val_steps=2,
+    num_sanity_val_steps=1,
     log_every_n_steps=1,
     check_val_every_n_epoch=1,  # May validate less often
     gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
