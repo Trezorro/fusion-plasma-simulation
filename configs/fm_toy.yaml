@@ -27,7 +27,7 @@ model:
   Class: FlowModule
   params:
     prior: 'normal'  # normal, copy
-    ot_method: 'sinkhorn'  # null to disable
+    ot_method: 'exact'  # null to disable
     ot_replace: false  # Default false
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:

@@ -54,7 +54,7 @@ class FlowModule(L.LightningModule):
         self.prior = prior
         self.step_fn = self.fwd_euler_step
         self.ot_method = ot_method
-        self.ot_sampler = OTPlanSampler(method=ot_method) if ot_method else None
+        self.ot_sampler = OTPlanSampler(method=ot_method, reg=0.05) if ot_method else None
         self.ot_replace = ot_replace
 
     def forward(self, x, t, conditioning=None):
@@ -83,9 +83,9 @@ class FlowModule(L.LightningModule):
             prior_samples, target_samples = self.ot_sampler.sample_plan(
                 prior_samples, target_samples, replace=self.ot_replace
             )
-            # put back on correct device, because OT sampler may have moved them to cpu
-            prior_samples = prior_samples.to(self.device)
-            target_samples = target_samples.to(self.device)
+            # put back on correct device, because OT sampler may have moved them to cpu. TODO: verify on a gpu
+            # prior_samples = prior_samples.to(self.device)
+            # target_samples = target_samples.to(self.device)
 
         # interpolate the probability path at t (making the example path)
         t = torch.rand(target_samples.size(0), device=self.device)
