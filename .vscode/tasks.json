@@ -3,17 +3,24 @@
     // for the documentation about the tasks.json format
     "version": "2.0.0",
     "tasks": [
-        {
-            "label": "Run Local Experiment",
-            "type": "shell",
-            "command": "git diff-index --quiet HEAD -- && pipenv run python run.py run_name='${input:run_name}' || echo 'Git status is not clean. Commit, then run.'"
-            
-        },
-          {
-            "label": "Run Cluster Experiment",
-            "type": "shell",
-            "command": "bash src/HPC_setup/submit_remote_job_snellius.sh '${input:run_name}'"
-          }
+      {
+        "label": "Run Local Experiment",
+        "type": "shell",
+        "command": "git diff-index --quiet HEAD -- && pipenv run python run.py run_name='${input:run_name}' || echo 'Git status is not clean. Commit, then run.'"
+      },
+      {
+        "label": "Run Snellius  Experiment",
+        "type": "shell",
+        "command": "bash src/HPC_setup/submit_remote_job_snellius.sh '${input:run_name}'"
+      },
+      {
+        "label": "Run HPC Cluster Experiment",
+        "type": "shell",
+        "command": "bash src/HPC_setup/submit_remote_job.sh '${input:run_name}'",
+        "problemMatcher": [
+          "$python"
+        ]
+      }
     ],
   "inputs": [
     {
