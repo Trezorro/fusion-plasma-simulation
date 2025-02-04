@@ -28,7 +28,7 @@ model:
   params:
     prior: 'normal'  # normal, copy
     ot_method: 'exact'  # null to disable
-    ot_replace: false  # Default false
+    ot_replace: true  # Default false
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history'] # will affect architecture
