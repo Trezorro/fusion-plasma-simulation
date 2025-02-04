@@ -40,7 +40,8 @@ class FlowModule(L.LightningModule):
         loss: str = "MSELoss",
         optimizer_params: Optional[DictConfig | dict] = None,
         prior: str = "normal",
-        use_ot: bool = False,
+        ot_method: Optional[str] = None,
+        ot_replace: bool = False,
         **kwargs: Any
     ):
         super().__init__()
@@ -52,8 +53,9 @@ class FlowModule(L.LightningModule):
         self.loss = self.LOSS_OPTIONS[loss]()
         self.prior = prior
         self.step_fn = self.fwd_euler_step
-        self.use_ot = use_ot
-        self.ot_sampler = OTPlanSampler(method='exact')
+        self.ot_method = ot_method
+        self.ot_sampler = OTPlanSampler(method=ot_method) if ot_method else None
+        self.ot_replace = ot_replace
 
     def forward(self, x, t, conditioning=None):
         return self.model(x, t, conditioning=conditioning)
@@ -76,10 +78,10 @@ class FlowModule(L.LightningModule):
         _meta, conditioning_inputs, target_samples = batch
         prior_samples = self.get_prior_samples(conditioning_inputs, target_samples.size())
 
-        if self.use_ot:
+        if self.ot_sampler is not None:
             # sample from optimal transport plan based on prior and target samples in minibatch
             prior_samples, target_samples = self.ot_sampler.sample_plan(
-                prior_samples, target_samples, replace=False
+                prior_samples, target_samples, replace=self.ot_replace
             )
             # put back on correct device, because OT sampler may have moved them to cpu
             prior_samples = prior_samples.to(self.device)
