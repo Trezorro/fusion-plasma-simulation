@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Any, Optional
 import lightning as L
 import torch
@@ -61,15 +62,15 @@ class FlowModule(L.LightningModule):
         return self.model(x, t, conditioning=conditioning)
 
     def training_step(self, batch, batch_idx):
-        t, samples_at_t, velocity, conditioning = self.interpolate_samples(batch)
-        pred_velocity = self.model(samples_at_t, t, conditioning)
+        t, samples_at_t, velocity, conditioning_input = self.interpolate_samples(batch)
+        pred_velocity = self.model(samples_at_t, t, conditioning_input)
         loss = self.loss(pred_velocity, velocity)
         self.log("loss/train", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        t, samples_at_t, velocity, conditioning = self.interpolate_samples(batch)
-        pred_velocity = self.model(samples_at_t, t, conditioning)
+        t, samples_at_t, velocity, conditioning_input = self.interpolate_samples(batch)
+        pred_velocity = self.model(samples_at_t, t, conditioning_input)
         loss = self.loss(pred_velocity, velocity)
         self.log("loss/val", loss, prog_bar=True)
         return loss
@@ -118,8 +119,8 @@ class FlowModule(L.LightningModule):
     def evaluate(self, batch):
         """Meant for testing with rich intermediate outputs."""
         self.model.eval()
-        t, samples_at_t, velocity, conditioning = self.interpolate_samples(batch)
-        pred_velocity = self.model(samples_at_t, t, conditioning)
+        t, samples_at_t, velocity, conditioning_input = self.interpolate_samples(batch)
+        pred_velocity = self.model(samples_at_t, t, conditioning_input)
         loss = self.loss(pred_velocity, velocity)
         losses = {
             "loss": loss
@@ -147,9 +148,15 @@ class FlowModule(L.LightningModule):
         velocity = velocity_model(current_points, current_t)
         return current_points + velocity * dt
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def integrate_path(
-        self, initial_points, step_fn=fwd_euler_step, n_steps=100, save_trajectories=False, warp_fn=None
+        self,
+        initial_points,
+        conditioning_input=None,
+        step_fn=fwd_euler_step,
+        n_steps=100,
+        save_trajectories=False,
+        warp_fn=None
     ):
         """
         Integrate a path using the given step function.
@@ -166,13 +173,17 @@ class FlowModule(L.LightningModule):
             torch.Tensor (optional): Shape [n_steps, batch_size, num_features] if save_trajectories is True
         """
         current_points = initial_points.clone()
-        ts = torch.linspace(0, 1, n_steps).to(self.device)
+        if conditioning_input is not None and self.model.conditioning:
+            velocity_model = partial(self.model, conditioning_input=conditioning_input)
+        else:
+            velocity_model = self.model
+        ts = torch.linspace(0, 1, n_steps, device=self.device)
         if warp_fn:
             ts = warp_fn(ts)
         if save_trajectories:
             trajectories = [current_points]
         for i in range(len(ts) - 1):
-            current_points = self.step_fn(self.model, current_points, ts[i], ts[i + 1] - ts[i])
+            current_points = self.step_fn(velocity_model, current_points, ts[i], ts[i + 1] - ts[i])
             if save_trajectories:
                 trajectories.append(current_points)
         if save_trajectories:
@@ -195,12 +206,21 @@ class FlowModule(L.LightningModule):
         Args:
             config (DictConfig): The global configuration object, mirroring the <config>.yaml file.
         """
+        dummy_data = self.get_dummy_input_tensor(
+            (
+                (config.batch_size, config.model.params.model_params.input_channels, config.data.seq_length),
+                (config.batch_size,), {
+                    'x_history':
+                        (
+                            config.batch_size, config.model.params.model_params.input_channels,
+                            config.data.seq_length
+                        )
+                }
+            ), torch.float32, self.device
+        )
         summary = torchinfo.summary(
             self.model,
-            input_size=(
-                (config.batch_size, config.model.params.model_params.input_channels, config.data.seq_length),
-                (config.batch_size,)
-            ),
+            input_data=dummy_data,
             # batch_dim=0,
             col_names=[
                 "input_size",
@@ -211,6 +231,7 @@ class FlowModule(L.LightningModule):
                 "mult_adds",
                 # "trainable"
             ],
+            row_settings=("depth", "var_names"),
             verbose=1
         )  # (batch_size, seq_length, input_size)
 
@@ -224,3 +245,19 @@ class FlowModule(L.LightningModule):
             },
             step=0
         )
+
+    def get_dummy_input_tensor(
+        self,
+        input_sizes: list[tuple[int, ...] | dict[str, tuple[int, ...]]],
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> list[torch.Tensor]:
+        """Get input_tensor with batch size 1 for use in model.forward()"""
+        x = []
+        for size_entry in input_sizes:
+            if isinstance(size_entry, dict):
+                input_tensor = {k: torch.rand(v, device=device, dtype=dtype) for k, v in size_entry.items()}
+            else:
+                input_tensor = torch.rand(size_entry, device=device, dtype=dtype)
+            x.append(input_tensor)
+        return x

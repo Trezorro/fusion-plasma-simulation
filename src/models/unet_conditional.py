@@ -64,12 +64,12 @@ class ConditionalUNet(nn.Module):
     def __init__(
         self,
         input_channels: int = 3,
-        spatial_dim: int = 2,  # 2 for images, 1 for time series
+        spatial_dim: int = 1,  # 2 for images, 1 for time series
         apex_hidden_channels: int = 64,
         time_embedding_channels: Optional[int] = None,
         time_embedding: str = "sinusoidal",
         ch_mults: Union[Tuple[int, ...], List[int]] = (1, 2, 2, 4),
-        is_attn: Tuple[bool, ...] = (False, False, True, True),
+        is_attn: Tuple[bool, ...] = (False, False, False, False),
         mid_attn: bool = False,
         n_blocks: int = 2,
         activation: str = "GELU",
@@ -88,6 +88,7 @@ class ConditionalUNet(nn.Module):
         super().__init__()
         self.spatial_dim = spatial_dim
         self.conditioning = conditioning
+        self.use_x_history = "x_history" in conditioning
 
         # Number of resolutions
         n_resolutions = len(ch_mults)
@@ -95,6 +96,7 @@ class ConditionalUNet(nn.Module):
         if time_embedding_channels is None:
             time_embedding_channels = apex_hidden_channels * 4
         self.time_emb = self.TIME_EMBEDDING_CLASSES[time_embedding](time_embedding_channels)
+        self.t1_emb = self.time_emb(torch.tensor(1.0, device=self.device)).detach()
 
         self.act = ACTIVATION_OPTIONS[activation]()
         self.ConvLayer = CONV_LAYERS[spatial_dim]
@@ -187,11 +189,15 @@ class ConditionalUNet(nn.Module):
             in_channels, input_channels, kernel_size=3, padding=1
         )  # TODO: Option for 1x1 convolution
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
     def forward(
         self,
         x: torch.Tensor,
         t: torch.Tensor,
-        conditioning: Optional[dict[str, torch.Tensor]] = None
+        conditioning_input: Optional[dict[str, torch.Tensor]] = None
     ) -> torch.Tensor:
         """
         * `x` has shape `[batch_size, in_channels, height, width]`
@@ -213,17 +219,22 @@ class ConditionalUNet(nn.Module):
             x = down_layer(x, t)
             hid_features.append(x)
 
+        if conditioning_input and self.use_x_history:
+            # Add x_history as a condition
+            x_history = conditioning_input["x_history"]
+            x_history = self.image_proj(x_history)
+            for down_layer in self.down:
+                x_history = down_layer(x_history, self.t1_emb)
+            x = torch.cat((x_history, x), dim=-1)
+
         # Middle (bottom)
         x = self.middle(x, t)
-        # for feat in hid_features:
-        #     print(feat.shape)
         # Second half of U-Net
-        i = len(hid_features) - 1
-        for _, up_layer in enumerate(self.up):
+
+        for i, up_layer in enumerate(self.up):
             if isinstance(up_layer, Upsample):
-                # print(i, x.shape, repr(up_layer), sep=">>>", end=">>>")
+                # print('--' * i, i, x.shape, type(up_layer).__name__, end=">")
                 x = up_layer(x, t)
-                # print(x.shape)
             else:
                 # Get the skip connection from first half of U-Net and concatenate
                 s = hid_features.pop(
@@ -231,12 +242,12 @@ class ConditionalUNet(nn.Module):
                 # print(
                 # i, repr(self.down[i - 1]), f"{x.shape=},{s.shape=}", repr(up_layer), sep=">>>", end=">>>"
                 # )
-                s = self._crop_Nd(s, x)  # crop spatial dim to match features
+                s_crop = self._crop_Nd(s, x)  # crop spatial dim to match features
+                # print('--' * i, i, x.shape, s.shape, '>crop>', s_crop.shape, type(up_layer).__name__, end=">")
 
-                x = torch.cat((x, s), dim=1)
+                x = torch.cat((x, s_crop), dim=1)
                 x = up_layer(x, t)
-                # print(x.shape)
-                i -= 1
+            # print(x.shape)
 
         # Final normalization and convolution
         x = self.final(self.act(self.norm(x)))
@@ -388,7 +399,11 @@ class AttentionBlock(nn.Module):
         # Calculate scaled dot-product $\frac{Q K^\top}{\sqrt{d_k}}$
         attn = torch.einsum('bihd,bjhd->bijh', q, k) * self.scale
         # Softmax along the sequence dimension $\underset{seq}{softmax}\Bigg(\frac{Q K^\top}{\sqrt{d_k}}\Bigg)$
-        attn = attn.softmax(dim=2)
+        attn = attn.softmax(
+            dim=2
+        )  # TODO: check if this is the correct dimension, should be the sequence dimension. maybe it doesn't matter.
+        # dim 1: voor bepaalde key, sommen alle query posities naar 1.
+        # dim 2: voor een bepaalde query, sommen alle key posities naar 1.
         # Multiply by values
         res = torch.einsum('bijh,bjhd->bihd', attn, v)
         # Reshape to `[batch_size, seq, n_heads * d_k]`
@@ -506,14 +521,17 @@ class MiddleBlock(nn.Module):
         self,
         n_channels: int,
         time_channels: int,
+        in_channels: Optional[int] = None,
         has_attn: bool = False,
         act: nn.Module | Callable[[torch.Tensor], torch.Tensor] = nn.SELU(),
         norm_groups: int = 32,
         spatial_dim: int = 2,
     ):
         super().__init__()
+        if in_channels is None:
+            in_channels = n_channels
         self.res1 = ResidualBlock(
-            n_channels,
+            in_channels,
             n_channels,
             time_channels,
             act=act,

@@ -3,11 +3,12 @@ batch_size: 64
 patience: 400
 gradient_clip_val: 1
 preview_data: false
+n_steps: 25
 plot_functions:
   # - key: spectogram_plot
   #   n: 5
   - key: 2d_flow_plot
-    n: 64
+    n: 30
   - key: line_flow_plot
     n: 5
   - key: multi_channel_lines

@@ -326,7 +326,7 @@ class ShotFlowDS(data.Dataset):
             'start': shot_data.index[start],
             'end': shot_data.index[end],
         }
-        conditioning_inputs = {}
+        conditioning_input = {}
         if self.history_length:
             history_start = start - self.history_length
             history_end = start
@@ -339,11 +339,11 @@ class ShotFlowDS(data.Dataset):
             if self.force_mean_zero:
                 x_history = x_history - window_mean
                 x_history = x_history / window_std
-            conditioning_inputs['x_history'] = x_history
+            conditioning_input['x_history'] = x_history
         else:
             window_mean = x.mean(axis=1, keepdims=True)
             window_std = x.std(axis=1, keepdims=True)
         if self.force_mean_zero:
             x = x - window_mean  # either the history mean (if available) or the target window mean
             x = x / window_std
-        return meta, conditioning_inputs, x  # prior, conditioning and X shapes: (variables, seq_length)
+        return meta, conditioning_input, x  # prior, conditioning and X shapes: (variables, seq_length)

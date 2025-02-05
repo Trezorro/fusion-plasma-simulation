@@ -85,10 +85,10 @@ plot_callbacks = [
 
 trainer = L.Trainer(
     default_root_dir="output/",
-    enable_progress_bar=False,
+    enable_progress_bar=wandb.run.disabled,
     max_epochs=C["epochs"],
     logger=wandb_logger,
-    num_sanity_val_steps=1,
+    # num_sanity_val_steps=1,
     log_every_n_steps=1,
     check_val_every_n_epoch=1,  # May validate less often
     gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
