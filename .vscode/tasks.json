@@ -9,7 +9,7 @@
         "command": "git diff-index --quiet HEAD -- && pipenv run python run.py run_name='${input:run_name}' || echo 'Git status is not clean. Commit, then run.'"
       },
       {
-        "label": "Run Snellius  Experiment",
+        "label": "Run Snellius Experiment",
         "type": "shell",
         "command": "bash src/HPC_setup/submit_remote_job_snellius.sh '${input:run_name}'"
       },

@@ -7,6 +7,7 @@ from torch.nn import functional as F
 ########################################### modern UNet code: ##################################
 """
 Modern UNet implementation
+From https://github.com/kminartz/EPNS/blob/1f03be43b84e09828013616a9fdd759e4383f28b/modules/engine/Grid_modules.py 
 Largely based on / extended from
 https://github.com/microsoft/pdearena/blob/db7664bb8ba1fe6ec3217e4079979a5e4f800151/pdearena/modules/conditioned/twod_unet.py
 which is largely based on
