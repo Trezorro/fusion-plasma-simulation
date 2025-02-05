@@ -96,7 +96,6 @@ class ConditionalUNet(nn.Module):
         if time_embedding_channels is None:
             time_embedding_channels = apex_hidden_channels * 4
         self.time_emb = self.TIME_EMBEDDING_CLASSES[time_embedding](time_embedding_channels)
-        self.t1_emb = self.time_emb(torch.tensor(1.0, device=self.device)).detach()
 
         self.act = ACTIVATION_OPTIONS[activation]()
         self.ConvLayer = CONV_LAYERS[spatial_dim]
@@ -208,6 +207,7 @@ class ConditionalUNet(nn.Module):
         ) == 2 + self.spatial_dim, f"Expected batch, channel plus configured spacial dims, but got {x.dim()}"  # [b, c, *spatial_dims]
         # Get time-step embeddings
         t = self.time_emb(t)
+        t1_emb = self.time_emb(torch.tensor(1.0, device=self.device))
 
         # Get image projection
         x = self.image_proj(x)
@@ -224,7 +224,7 @@ class ConditionalUNet(nn.Module):
             x_history = conditioning_input["x_history"]
             x_history = self.image_proj(x_history)
             for down_layer in self.down:
-                x_history = down_layer(x_history, self.t1_emb)
+                x_history = down_layer(x_history, t1_emb)
             x = torch.cat((x_history, x), dim=-1)
 
         # Middle (bottom)
