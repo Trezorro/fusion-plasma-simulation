@@ -1,3 +1,6 @@
+tags:
+  - pass_t_to_conditioning_input
+
 epochs: 6000
 batch_size: 64
 patience: 400

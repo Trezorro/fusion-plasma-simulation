@@ -224,7 +224,9 @@ class ConditionalUNet(nn.Module):
             x_history = conditioning_input["x_history"]
             x_history = self.image_proj(x_history)
             for down_layer in self.down:
-                x_history = down_layer(x_history, t1_emb)
+                x_history = down_layer(
+                    x_history, t
+                )  # used to be t1_emb, but this allows less information about flow progress
             x = torch.cat((x_history, x), dim=-1)
 
         # Middle (bottom)
