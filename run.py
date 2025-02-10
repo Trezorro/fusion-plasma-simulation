@@ -54,7 +54,7 @@ wandb_logger = WandbLogger(
 logger.info("Config and wandb initialized, loading model and data.")
 ModelClass = getattr(src.models, C.model.Class)
 model = ModelClass(**C.model.params)
-if not C.skip_log_summary:
+if "skip_log_summary" not in C or not C["skip_log_summary"]:
     model.log_summary(C)
 # log weights for analysis in W&B
 wandb_logger.watch(model, log="all", log_freq=50)
