@@ -132,10 +132,10 @@ class FlowModule(L.LightningModule):
         self.model.train()  # Reset model to training mode
         # trajectories shape: [n_steps, batch_size, channels, num_time_points]
         if to_cpu:
-            prior_samples, generated_samples, target_samples = prior_samples.cpu(), generated_samples.cpu(
-            ), target_samples.cpu()
-            trajectories = trajectories.cpu()
-
+            meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
+                (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
+                device='cpu'
+            )
         return dict(
             meta=meta,
             conditioning_input=conditioning_input,
