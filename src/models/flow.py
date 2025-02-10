@@ -109,7 +109,7 @@ class FlowModule(L.LightningModule):
                 assert 'x_history' in conditioning_inputs, "x_history must be in conditioning for prior='copy'"
                 # in case the x_history is longer than the target_samples, crop to seq_length
                 seq_length = target_size[2]
-                prior_samples = conditioning_inputs['x_history'][:, :, -seq_length:]
+                prior_samples = conditioning_inputs['x_history'][:, :, -seq_length:].to(self.device)
             case _:
                 raise ValueError(f"Invalid prior: {self.prior}")
         return prior_samples
@@ -120,10 +120,10 @@ class FlowModule(L.LightningModule):
     def evaluate(self, batch: tuple[dict, dict, torch.Tensor], n_steps=50, warp_fn=None, to_cpu=True):
         # TODO: may add matching, and (pred) velocity to the output  to debug and plot a training step.
         self.model.eval()
-        meta, conditioning_input, target_samples = batch
+        meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch)
         prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
         generated_samples, trajectories = self.integrate_path(
-            prior_samples.to(self.device),
+            prior_samples,
             conditioning_input=conditioning_input,
             n_steps=n_steps,
             warp_fn=warp_fn,
@@ -198,6 +198,13 @@ class FlowModule(L.LightningModule):
             ts = warp_fn(ts)
         if save_trajectories:
             trajectories = [current_points]
+        logger.debug(f"Integrating path with {n_steps} steps")
+        logger.debug(
+            "Devices: timesteps: %s, current_points: %s, conditioning_input: %s", ts.device,
+            current_points.device, {
+                k: v.device for k, v in conditioning_input.items()
+            } if conditioning_input is not None else None
+        )
         for i in range(len(ts) - 1):
             current_points = self.step_fn(velocity_model, current_points, ts[i], ts[i + 1] - ts[i])
             if save_trajectories:

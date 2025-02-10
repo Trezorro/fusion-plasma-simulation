@@ -4,6 +4,7 @@ from src.logging_util import handler
 logging.basicConfig(level=logging.INFO, handlers=[handler])
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+logging.getLogger('src').setLevel(logging.DEBUG)
 logger.info("Starting run.py with imports")
 import wandb
 import torch
