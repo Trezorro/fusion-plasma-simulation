@@ -10,6 +10,7 @@ SLURM_PARTITION="staging"  # Adjust as needed
 GIT_BRANCH="main"  # Branch to pull from
 REMOTE_SLURM_DIR="$REMOTE_USER@$REMOTE_HOST:/home/$REMOTE_USER/fusion-plasma-simulation/output/slurms"
 LOCAL_HPC_PATH="output/snellius/"
+QUEUE_FORMAT="--format=\"%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.17R\""
 
 # Check if a job name argument is provided
 if [ "$#" -ne 1 ] || [ -z "$1" ]; then
@@ -46,7 +47,7 @@ ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     git pull origin $GIT_BRANCH
     sbatch --job-name=$JOB_NAME $JOB_SCRIPT $JOB_NAME
     echo "Submitted job '$JOB_NAME'. Checking queue status:"
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 
 echo "Code updated, SLURM job '$JOB_NAME' submitted, and Git tag '$JOB_NAME' created. :D"
@@ -63,16 +64,24 @@ sleep 1
 echo "Syncing results from HPC in 10 seconds..."
 sleep 10
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 echo "-----------------------------------------------------------"
 sync_slurms
 echo "-----------------------------------------------------------"
 
-echo "Syncing results from HPC in 10 seconds..."
-sleep 10
+echo "Syncing results from HPC in 5 seconds..."
+sleep 5
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
+EOF
+echo "-----------------------------------------------------------"
+sync_slurms
+echo "-----------------------------------------------------------"
+echo "Syncing results from HPC in 5 seconds..."
+sleep 5
+ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
+    squeue $QUEUE_FORMAT
 EOF
 echo "-----------------------------------------------------------"
 sync_slurms
@@ -80,7 +89,7 @@ echo "-----------------------------------------------------------"
 echo "Syncing results from HPC in 10 seconds..."
 sleep 10
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 echo "-----------------------------------------------------------"
 sync_slurms
@@ -88,7 +97,7 @@ echo "-----------------------------------------------------------"
 echo "Syncing results from HPC in 30 seconds..."
 sleep 30
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 echo "-----------------------------------------------------------"
 sync_slurms
@@ -97,17 +106,7 @@ echo "-----------------------------------------------------------"
 echo "Syncing results from HPC in 1 minute..."
 sleep 60
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
-EOF
-echo "-----------------------------------------------------------"
-sync_slurms
-echo "-----------------------------------------------------------"
-
-
-echo "Syncing results from HPC in 2 minutes..."
-sleep 120
-ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 echo "-----------------------------------------------------------"
 sync_slurms
