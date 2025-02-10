@@ -1,8 +1,6 @@
 # @title Utility code: styles, functions, generators, visualization
-from venv import logger
 from matplotlib import gridspec
 import numpy as np
-# %matplotlib inline
 from matplotlib import colors
 
 import matplotlib.pyplot as plt
@@ -274,10 +272,10 @@ def plot_flow_and_lines(
 
 @torch.inference_mode()
 def plot_flow_and_lines_plotly(
-    target_samples,
-    prior_samples,
-    generated_samples,
-    trajectories,
+    target_samples: torch.Tensor,
+    prior_samples: torch.Tensor,
+    generated_samples: torch.Tensor,
+    trajectories: torch.Tensor,
     n=30,
     title_base="",
     size=5,  # Size of scatter plot points
@@ -441,16 +439,17 @@ def plot_flow_and_lines_plotly(
         # height=800,
         template='plotly_dark' if BG_THEME in ['black', 'dark'] else 'plotly_white'
     )
-    if wandb.run.disabled:
+    if wandb.run.disabled:  # type: ignore
         fig.show()
 
     return fig
 
 
 def multi_channel_lines_plotly(
-    meta,
-    target_samples,
-    generated_samples,
+    meta: dict[str, torch.Tensor],
+    target_samples: torch.Tensor,
+    generated_samples: torch.Tensor,
+    conditioning_input: dict[str, torch.Tensor],
     n=5,
     title_base="",
     subtitle="",  # Subtitle for the plot
@@ -466,18 +465,26 @@ def multi_channel_lines_plotly(
     C = get_current_config()
     CHANNEL_NAMES = C.data.cols.x
     # Generate and visualize new samples
+    show_conditioning = "x_history" in conditioning_input
     shot_numbers = meta.get('shot_number')
     start_times = meta.get('start')
     end_times = meta.get('end')
     num_samples, n_channels, num_timepoints = target_samples.size()
     num_samples = min(n, num_samples)  # Number of traces to visualize
     COLOR_SCALE = plt_colors.qualitative.Plotly
-
+    mse = ((target_samples[:num_samples] - generated_samples[:num_samples])**2).mean().item()
+    subtitle = f"MSE: {mse:.4f}" + (f" | {subtitle}" if subtitle else "")
     fig = go.Figure()
     fig.update_layout(
         title=title_base + (f"<br><sub>{subtitle}</sub>" if subtitle else ""),
         template='plotly_dark' if BG_THEME in ['black', 'dark'] else 'plotly_white',
     )
+    if show_conditioning:
+        # draw a vertical line around x = 0 to separate conditioning from prediction
+        fig.add_vline(x=-0.5, line_width=3, line_dash="solid", line_color="yellow", opacity=0.5)
+        fig.add_vrect(x0=-1, x1=0, line_width=0, opacity=0.3, fillcolor="yellow")
+        x_history = conditioning_input['x_history']
+
     for sample_i in range(num_samples):
         if shot_numbers is not None:
             shot_number = shot_numbers[sample_i]
@@ -489,6 +496,23 @@ def multi_channel_lines_plotly(
             # Plot target samples
             channel_color = COLOR_SCALE[((n_channels * sample_i) + channel_i) % len(COLOR_SCALE)]
             channel_label = CHANNEL_NAMES[channel_i]
+            if show_conditioning:
+                history_start_time = meta['history_start'][sample_i]
+                fig.add_trace(
+                    go.Scatter(
+                        x=np.arange(-num_timepoints, 0),
+                        y=x_history[sample_i, channel_i, :],
+                        mode='lines',
+                        line=dict(color=channel_color, width=3),
+                        opacity=0.8,
+                        name=f'{channel_label} (history)',
+                        text=sample_description,
+                        legendgroup=f'Shot {shot_number} - History',
+                        legendgrouptitle_text=f'Shot {shot_number} - History',
+                        hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
+                        f"<em>Shot #{shot_number}</em><br>History time span: {history_start_time:.4f}s-{start_time:.4f}s"
+                    )
+                )
             fig.add_trace(
                 go.Scatter(
                     x=np.arange(num_timepoints),
@@ -501,7 +525,7 @@ def multi_channel_lines_plotly(
                     legendgroup=f'Shot {shot_number} - Target',
                     legendgrouptitle_text=f'Shot {shot_number} - Target',
                     hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
-                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time}s-{end_time}s"
+                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
                 )
             )
             # Plot generated samples
@@ -517,9 +541,10 @@ def multi_channel_lines_plotly(
                     legendgrouptitle_text=f'Shot {shot_number} - Predicted',
                     text=sample_description,
                     hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
-                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time}s-{end_time}s"
+                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
                 )
             )
-    if wandb.run.disabled:
+
+    if wandb.run.disabled:  # type: ignore
         fig.show()
     return fig

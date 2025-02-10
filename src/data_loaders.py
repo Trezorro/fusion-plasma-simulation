@@ -340,6 +340,7 @@ class ShotFlowDS(data.Dataset):
                 x_history = x_history - window_mean
                 x_history = x_history / window_std
             conditioning_input['x_history'] = x_history
+            meta['history_start'] = shot_data.index[history_start]
         else:
             window_mean = x.mean(axis=1, keepdims=True)
             window_std = x.std(axis=1, keepdims=True)
