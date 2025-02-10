@@ -15,6 +15,7 @@
             },
             "args": [
                 "epochs=6"
+                "skip_log_summary=True"
             ],
             "justMyCode": false
             

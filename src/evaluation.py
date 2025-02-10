@@ -1,6 +1,8 @@
 """Functions for evaluating and visualizing model performance."""
 #%%
-from typing import Callable, Sequence
+from typing import Any, Callable, Mapping
+import logging
+from venv import logger
 from matplotlib import pyplot as plt
 import plotly.graph_objects as go
 from torch.utils import data
@@ -12,7 +14,10 @@ import wandb
 from src.plotting import get_and_plot_predictions
 import src.flow_plots as fp
 
-PlotFunction = Callable[[L.LightningModule, Sequence, str], plt.Figure | go.Figure | wandb.Image]
+PlotFunction = Callable[[Any], plt.Figure | go.Figure | wandb.Image]
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class PlotsCallback(L.Callback):
@@ -28,56 +33,69 @@ class PlotsCallback(L.Callback):
         train_every_n_epochs (int): The interval of epochs to plot training data. If 0, don't plot training data.
     """
 
-    # these functions should each accept the args: model, batch, title_base
+    # these functions should each accept the args: n, title_base, and **kwargs
     PLOT_FN_OPTIONS = {
-        'spectogram_plot': get_and_plot_predictions,
+        # 'spectogram_plot': get_and_plot_predictions, # TODO update interface
         '2d_flow_plot': fp.plot_flow,
         'line_flow_plot': fp.plot_flow_and_lines_plotly,
         'multi_channel_lines': fp.multi_channel_lines_plotly,
     }
 
-    def __init__(self, plot_fn_key: str, num_samples=8, every_n_epochs=5, train_every_n_epochs=20):
+    def __init__(self, evaluation_config: Mapping):
         super().__init__()
-        self.plot_fn: PlotFunction = self.PLOT_FN_OPTIONS[plot_fn_key]  # Function to generate images
-        self.plot_key = plot_fn_key  # Name of the plot, used as wandb logging key
-        self.num_samples = num_samples  # Number of samples to log
+        self.config = evaluation_config
+        self.n_steps = evaluation_config.get("n_steps", 50)
         # Only save those images every N epochs (otherwise tensorboard gets quite large)
-        self.every_n_epochs = every_n_epochs
-        self.train_every_n_epochs = train_every_n_epochs
+        self.val_every_n_epochs = self.config.get("val_every_n_epochs", 20)
+        self.train_every_n_epochs = self.config.get("train_every_n_epochs", 20)
+        self.plot_functions = self.config.get("plot_functions", [])
+        if not self.plot_functions:
+            logger.warning("No plot functions specified for evaluation callback.")
+            self.max_n = 0
+        else:
+            self.max_n = max([func_c.get("n", 0) for func_c in self.plot_functions])
+
+    def call_plot_functions(self, evaluation_output: dict, trainval: str, global_step: int, title_base: str):
+
+        for func_c in self.plot_functions:
+            key = func_c["key"]
+            plot_fn: PlotFunction = self.PLOT_FN_OPTIONS[key]  # Function to generate images
+            n = func_c.get("n", self.max_n)
+            fig = plot_fn(**evaluation_output, n=n, title_base=title_base, **func_c.get("params", {}))
+            wandb.log({f"{trainval}/{key}": fig, "trainer/global_step": global_step}, commit=False)
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
+
         # Skip for all other epochs
-        if trainer.current_epoch % self.every_n_epochs == 0:
+        if trainer.current_epoch % self.val_every_n_epochs == 1:
             # Generate images
+            logger.info(f"Generating validation plots for epoch {trainer.current_epoch}")
             data_set = trainer.val_dataloaders.dataset
             batch = next(
-                iter(data.DataLoader(data_set, batch_size=self.num_samples, shuffle=False))
+                iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
             )  # this can be in general function
-            fig = self.plot_fn(
-                module=pl_module,
-                batch=batch,  # type: ignore
-                title_base=f"{wandb.run.name} | Epoch {trainer.current_epoch}"
-            )
-            wandb.log({f"val/{self.plot_key}": fig, "trainer/global_step": trainer.global_step}, commit=False)
+            logger.debug("Calling evaluate for validation data.")
+            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps)
+            logger.debug("Evaluation done. Calling plotters.")
+            title_base = f"{wandb.run.name} |  Epoch {trainer.current_epoch}"
+            self.call_plot_functions(evaluation_output, "val", trainer.global_step, title_base)
+            logger.debug("Plotters done.")
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
         if self.train_every_n_epochs and trainer.current_epoch % self.train_every_n_epochs == 0:
+            logger.info(f"Generating training plots for epoch {trainer.current_epoch}")
             # Generate images
             data_set = trainer.train_dataloader.dataset
             batch = next(
-                iter(data.DataLoader(data_set, batch_size=self.num_samples, shuffle=False))
+                iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
             )  # this can be in general function
-            fig = self.plot_fn(
-                module=pl_module,
-                batch=batch,  # type: ignore
-                title_base=f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
-            )
-            wandb.log(
-                {
-                    f"train/{self.plot_key}": fig,
-                    "trainer/global_step": trainer.global_step
-                }, commit=False
-            )
+            logger.debug("Calling evaluate for train data.")
+            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps)
+            logger.debug("Evaluation done. Calling plotters.")
+            title_base = f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
+            self.call_plot_functions(evaluation_output, "train", trainer.global_step, title_base)
+            logger.debug("Plotters done.")
+
 
 
 # %% Utilities and metrics

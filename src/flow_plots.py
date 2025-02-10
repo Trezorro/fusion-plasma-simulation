@@ -74,13 +74,15 @@ def plot_distributions(dist1, dist2, title1="Distribution 1", title2="Distributi
 
 @torch.inference_mode()
 def plot_flow(
-    module: "FlowModule",  # Trained lignting module to generate new samples
-    batch,  # Initial points, shape: 2x[batch_size, num_features]
+    target_samples,
+    prior_samples,
+    generated_samples,
+    trajectories,
+    n=30,
     title_base="",
     size=20,  # Size of scatter plot points
     alpha=0.5,  # Transparency of scatter plot points
-    n_steps=50,  # Number of integration steps
-    warp_fn=None,  # Optional function to warp time steps
+    **kwargs
 ):
     """Call the integrator to calculate the motion (probability path) given v field, generate new samples
        and visualize the results.
@@ -97,17 +99,13 @@ def plot_flow(
     Returns:
         None
     """
-    # Generate and visualize new samples
-    meta, target_samples, prior_samples, generated_samples, trajectories = evaluate_trajectories(
-        module, batch, n_steps=n_steps
-    )
     # select the first channel for everything
     prior_samples = prior_samples[:, 0, :]
     generated_samples = generated_samples[:, 0, :]
     target_samples = target_samples[:, 0, :]
     trajectories = trajectories[:, :, 0, :]  # Shape: [n_steps, n_samples, num_timepoints]
 
-    n_viz = min(100, len(trajectories[0]))  # Number of trajectories to visualize
+    n_viz = min(n, target_samples.size(0))  # Number of trajectories to visualize
     plt.close('all')
     fig, ax = plt.subplots(1, 4, figsize=(13, 4))
     plt.suptitle(title_base, fontsize=16)
@@ -163,12 +161,15 @@ def plot_flow(
 
 
 def plot_flow_and_lines(
-    module,  # Trained lignting module to generate new samples
-    batch,  # Initial points, shape: 2x[batch_size, num_features]
+    target_samples,
+    prior_samples,
+    generated_samples,
+    trajectories,
+    n=30,
     title_base="",
     size=20,  # Size of scatter plot points
     alpha=0.5,  # Transparency of scatter plot points
-    n_steps=50,  # Number of integration steps
+    **kwargs
 ):
     """Call the integrator to calculate the motion (probability path) given v field, generate new samples
        and visualize the results.
@@ -185,17 +186,13 @@ def plot_flow_and_lines(
     Returns:
         None
     """
-    # Generate and visualize new samples
-    meta, target_samples, prior_samples, generated_samples, trajectories = evaluate_trajectories(
-        module, batch, n_steps=n_steps
-    )
     # select the first channel for everything
     prior_samples = prior_samples[:, 0, :]
     generated_samples = generated_samples[:, 0, :]
     target_samples = target_samples[:, 0, :]
     trajectories = trajectories[:, :, 0, :]  # Shape: [n_steps, n_samples, num_timepoints]
     n_steps, num_samples, num_features = trajectories.size()
-    num_samples = min(30, num_samples)  # Number of trajectories to visualize
+    num_samples = min(n, num_samples)  # Number of trajectories to visualize
     data_list = [prior_samples, generated_samples, target_samples]
     FACET_LIST = [
         'Initial Points',
@@ -270,41 +267,22 @@ def plot_flow_and_lines(
 
     plt.tight_layout()
     if wandb.run.disabled:
-        plt.show(block=True)
+        plt.show(block=False)
         plt.pause(1.0)
     return wandb.Image(fig)
 
 
-def evaluate_trajectories(module, batch, n_steps=50, warp_fn=None):
-    C = get_current_config()
-    if 'n_steps' in C:
-        n_steps = C.n_steps
-    device = module.device
-    meta, conditioning_input, target_samples = batch
-    prior_samples = module.get_prior_samples(conditioning_input, target_samples.size())
-    generated_samples, trajectories = module.integrate_path(
-        prior_samples.to(device),
-        conditioning_input=conditioning_input,
-        n_steps=n_steps,
-        warp_fn=warp_fn,
-        save_trajectories=True
-    )
-    # trajectories shape: [n_steps, batch_size, channels, num_time_points]
-    prior_samples, generated_samples, target_samples = prior_samples.cpu(), generated_samples.cpu(
-    ), target_samples.cpu()
-
-    return meta, target_samples, prior_samples, generated_samples, trajectories
-
-
 @torch.inference_mode()
 def plot_flow_and_lines_plotly(
-    module,  # Trained lightning module to generate new samples
-    batch,  # Initial points, shape: 2x[batch_size, num_features]
+    target_samples,
+    prior_samples,
+    generated_samples,
+    trajectories,
+    n=30,
     title_base="",
     size=5,  # Size of scatter plot points
     alpha=0.9,  # Transparency of scatter plot points
-    n_steps=50,  # Number of integration steps
-    warp_fn=None,  # Optional function to warp time steps
+    **kwargs
 ):
     """Call the integrator to calculate the motion (probability path) given v field, generate new samples
        and visualize the results using Plotly.
@@ -321,19 +299,15 @@ def plot_flow_and_lines_plotly(
     Returns:
         None
     """
-    meta, target_samples, prior_samples, generated_samples, trajectories = evaluate_trajectories(
-        module, batch, n_steps=n_steps
-    )
     # select the first channel for everything
     prior_samples = prior_samples[:, 0, :]
     generated_samples = generated_samples[:, 0, :]
     target_samples = target_samples[:, 0, :]
     trajectories = trajectories[:, :, 0, :]  # Shape: [n_steps, n_samples, num_timepoints]
     n_steps, num_samples, num_features = trajectories.size()
-    num_samples = min(30, num_samples)  # Number of trajectories to visualize
+    num_samples = min(n, num_samples)  # Number of trajectories to visualize
     data_list = [prior_samples, generated_samples, target_samples]
     FACET_LIST = ['Initial Points', 'Generated Samples', 'Target Data', 'Paths']
-    color_list = [SOURCE_COLOR, PRED_COLOR, TARGET_COLOR]
     max_abs_value = torch.max(torch.abs(torch.cat(data_list)), 0)[0]
     global_max = max(max_abs_value[0], max_abs_value[1]) * 1.1  # Add some padding
     color_scale = plt_colors.qualitative.Plotly
@@ -413,7 +387,7 @@ def plot_flow_and_lines_plotly(
         fig.update_yaxes(dtick=0.5, row=1, col=facet_i + 1)
 
     # Plot each sample from generated_samples in a line plot against their corresponding target_samples
-    for sample_i in range(len(generated_samples)):
+    for sample_i in range(num_samples):
         # Predicted rollouts:
         fig.add_trace(
             go.Scatter(
@@ -474,13 +448,13 @@ def plot_flow_and_lines_plotly(
 
 
 def multi_channel_lines_plotly(
-    module,  # Trained lightning module to generate new samples
-    batch,  # Initial points, shape: 2x[batch_size, num_features]
+    meta,
+    target_samples,
+    generated_samples,
+    n=5,
     title_base="",
     subtitle="",  # Subtitle for the plot
-    alpha=0.9,  # Transparency of scatter plot points
-    n_steps=50,  # Number of integration steps
-    warp_fn=None,  # Optional function to warp time steps
+    **kwargs
 ):
     """Create a simple line plot where each channel is a separate color, shots are overlaid, and predictions are show in dotted lines.
 
@@ -492,15 +466,11 @@ def multi_channel_lines_plotly(
     C = get_current_config()
     CHANNEL_NAMES = C.data.cols.x
     # Generate and visualize new samples
-    # Generate and visualize new samples
-    meta, target_samples, prior_samples, generated_samples, trajectories = evaluate_trajectories(
-        module, batch, n_steps=n_steps
-    )
     shot_numbers = meta.get('shot_number')
     start_times = meta.get('start')
     end_times = meta.get('end')
-    num_samples, n_channels, num_timepoints = prior_samples.size()
-    num_samples = min(30, num_samples)  # Number of traces to visualize
+    num_samples, n_channels, num_timepoints = target_samples.size()
+    num_samples = min(n, num_samples)  # Number of traces to visualize
     COLOR_SCALE = plt_colors.qualitative.Plotly
 
     fig = go.Figure()

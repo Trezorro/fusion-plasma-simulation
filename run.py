@@ -1,4 +1,10 @@
-print("Starting run.py")
+import logging
+from src.logging_util import handler
+
+logging.basicConfig(level=logging.INFO, handlers=[handler])
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.info("Starting run.py with imports")
 import wandb
 import torch
 from torch.utils import data
@@ -10,11 +16,8 @@ from src.config import get_current_config, load_config_from_file
 from src.evaluation import PlotsCallback
 import src.models
 import src.data_loaders
-import src.flow_plots as fp
-import logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger.info("Imports complete, Loading config and initializing wandb.")
 
 conf = load_config_from_file('fm_toy')
 run = wandb.init(
@@ -48,13 +51,14 @@ wandb_logger = WandbLogger(
     experiment=run,
     save_dir="output/",
 )
-
+logger.info("Config and wandb initialized, loading model and data.")
 ModelClass = getattr(src.models, C.model.Class)
 model = ModelClass(**C.model.params)
-model.log_summary(C)
+if not C.skip_log_summary:
+    model.log_summary(C)
 # log weights for analysis in W&B
 wandb_logger.watch(model, log="all", log_freq=50)
-
+logger.info("Model loaded, loading data.")
 DataSetClass = getattr(src.data_loaders, C.data.Class)
 data_set = DataSetClass(**C.data)
 
@@ -64,25 +68,7 @@ train_loader = data.DataLoader(train_set, batch_size=C.batch_size, shuffle=True)
 val_loader = data.DataLoader(val_set, batch_size=C.batch_size, shuffle=False)
 val_loader.dataset.random_start = False  # TODO this doesn't work, wrong dataset attribute.
 
-# TODO: perhaps attach this to the DataSetClass because it's a property of the data
-if C.preview_data:
-    for i, batch in enumerate(val_loader):
-        if len(batch) == 2:
-            s, t = batch
-        elif len(batch) == 3:
-            shotnum, s, t = batch  # TODO: update to match new data format
-        logger.info(f"Batch {i}:")
-        logger.info(f"  s: {s.shape}")
-        logger.info(f"  t: {t.shape}")
-        fig = fp.plot_distributions(s, t, title1="Input", title2="Target", show=wandb.run.disabled)
-        wandb.log({"data/preview": fig}, commit=False)
-        break
-
-plot_callbacks = [
-    PlotsCallback(plotter['key'], num_samples=plotter['n'], every_n_epochs=5, train_every_n_epochs=10)
-    for plotter in C.plot_functions
-]
-
+logger.info("Data loaded, initializing trainer.")
 trainer = L.Trainer(
     default_root_dir="output/",
     enable_progress_bar=wandb.run.disabled,
@@ -94,7 +80,8 @@ trainer = L.Trainer(
     gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
     callbacks=[
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
-    ] + plot_callbacks  # type: ignore
+        PlotsCallback(C.evaluation)
+    ]
 )
 logger.info("Starting training with first validation...")
 # trainer.validate(model=model, dataloaders=val_loader)

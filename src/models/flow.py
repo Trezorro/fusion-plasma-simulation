@@ -7,6 +7,7 @@ import torchmetrics
 import wandb
 from omegaconf import DictConfig
 
+from src.config import get_current_config
 from src.models.flow_nets import VelocityNet
 from src.models.unet_conditional import ConditionalUNet
 from torchcfm.optimal_transport import OTPlanSampler
@@ -116,18 +117,33 @@ class FlowModule(L.LightningModule):
     test_step = validation_step
 
     @torch.inference_mode()
-    def evaluate(self, batch):
-        """Meant for testing with rich intermediate outputs."""
+    def evaluate(self, batch: tuple[dict, dict, torch.Tensor], n_steps=50, warp_fn=None, to_cpu=True):
+        # TODO: may add matching, and (pred) velocity to the output  to debug and plot a training step.
         self.model.eval()
-        t, samples_at_t, velocity, conditioning_input = self.interpolate_samples(batch)
-        pred_velocity = self.model(samples_at_t, t, conditioning_input)
-        loss = self.loss(pred_velocity, velocity)
-        losses = {
-            "loss": loss
-        }  # TODO: this loss makes no sense, but we could KLlosses for the KL divergence, or
-        outputs = {"pred_velocity": pred_velocity, "samples_at_t": samples_at_t}
+        meta, conditioning_input, target_samples = batch
+        prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
+        generated_samples, trajectories = self.integrate_path(
+            prior_samples.to(self.device),
+            conditioning_input=conditioning_input,
+            n_steps=n_steps,
+            warp_fn=warp_fn,
+            save_trajectories=True
+        )
         self.model.train()  # Reset model to training mode
-        return losses, outputs
+        # trajectories shape: [n_steps, batch_size, channels, num_time_points]
+        if to_cpu:
+            prior_samples, generated_samples, target_samples = prior_samples.cpu(), generated_samples.cpu(
+            ), target_samples.cpu()
+            trajectories = trajectories.cpu()
+
+        return dict(
+            meta=meta,
+            conditioning_input=conditioning_input,
+            target_samples=target_samples,
+            prior_samples=prior_samples,
+            generated_samples=generated_samples,
+            trajectories=trajectories
+        )
 
     @staticmethod
     @torch.no_grad()
@@ -157,7 +173,7 @@ class FlowModule(L.LightningModule):
         n_steps=100,
         save_trajectories=False,
         warp_fn=None
-    ):
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         Integrate a path using the given step function.
 
@@ -187,7 +203,7 @@ class FlowModule(L.LightningModule):
             if save_trajectories:
                 trajectories.append(current_points)
         if save_trajectories:
-            return current_points, torch.stack(trajectories).cpu()
+            return current_points, torch.stack(trajectories)
         return current_points
 
     def configure_optimizers(self):

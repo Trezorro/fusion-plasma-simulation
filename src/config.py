@@ -2,6 +2,10 @@
 from omegaconf import OmegaConf, ValidationError
 import omegaconf
 import wandb
+from pprint import pformat
+import logging
+
+logger = logging.getLogger(__name__)
 
 # TODO: define generalized includes, instead of just looking for model with string. Include data too.
 # TODO: Need to decide how to specify data and model in the config structure.
@@ -42,6 +46,7 @@ def load_config_from_file(name='main', as_omega=False) -> dict | omegaconf.DictC
     if as_omega:
         return conf
     conf = OmegaConf.to_object(conf)
+    logger.info(f"Configuration:\n{pformat(conf)}")
     if not type(conf) == dict:
         raise ValidationError("Configuration was not in dict style. Got: " + repr(conf))
     return dict(conf)

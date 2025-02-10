@@ -2,17 +2,20 @@ epochs: 6000
 batch_size: 64
 patience: 400
 gradient_clip_val: 1
-preview_data: false
-n_steps: 25
-plot_functions:
-  # - key: spectogram_plot
-  #   n: 5
-  - key: 2d_flow_plot
-    n: 30
-  - key: line_flow_plot
-    n: 5
-  - key: multi_channel_lines
-    n: 5
+evaluation:
+  n_steps: 25
+  val_every_n_epochs: 40
+  train_every_n_epochs: 40
+  plot_functions:
+    # every item has to have a 'key' key.
+    # n are optional through defaults in PlotsCallback
+    # all other keys are passed as kwargs to the plot function
+    - key: 2d_flow_plot
+      n: 30
+    - key: line_flow_plot
+      n: 5
+    - key: multi_channel_lines
+      n: 5
 
 
 # model: model.yaml # To be replaced by respective yaml file content
