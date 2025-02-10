@@ -7,7 +7,7 @@ class CustomFormatter(logging.Formatter):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.last_log_time = None
-        self._style._fmt = '%(asctime)s\033[33m%(elapsed_time)s\033[0m %(name)s[\033[94m%(levelname)s\033[0m]:%(message)s'
+        self._style._fmt = '%(asctime)s%(elapsed_time)s %(name)s[%(levelname)s]:%(message)s'
         self.datefmt = '%H:%M:%S'
 
     def format(self, record):
