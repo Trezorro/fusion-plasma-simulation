@@ -1,7 +1,7 @@
 epochs: 6000
 batch_size: 64
 patience: 400
-gradient_clip_val: 1
+gradient_clip_val: .5
 skip_log_summary: true
 evaluation:
   n_steps: 25
