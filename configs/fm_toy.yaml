@@ -17,6 +17,7 @@ evaluation:
       n: 5
     - key: multi_channel_lines
       n: 5
+      buttons: true
 
 
 # model: model.yaml # To be replaced by respective yaml file content

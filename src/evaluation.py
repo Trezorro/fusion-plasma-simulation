@@ -60,8 +60,9 @@ class PlotsCallback(L.Callback):
         for func_c in self.plot_functions:
             key = func_c["key"]
             plot_fn: PlotFunction = self.PLOT_FN_OPTIONS[key]  # Function to generate images
-            n = func_c.get("n", self.max_n)
-            fig = plot_fn(**evaluation_output, n=n, title_base=title_base, **func_c.get("params", {}))
+            params = func_c.copy()
+            n = params.pop("n", self.max_n)
+            fig = plot_fn(**evaluation_output, n=n, title_base=title_base, **params)
             wandb.log({f"{trainval}/{key}": fig, "trainer/global_step": global_step}, commit=False)
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):

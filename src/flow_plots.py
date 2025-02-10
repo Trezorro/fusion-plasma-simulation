@@ -453,6 +453,7 @@ def multi_channel_lines_plotly(
     n=5,
     title_base="",
     subtitle="",  # Subtitle for the plot
+    buttons=False,
     **kwargs
 ):
     """Create a simple line plot where each channel is a separate color, shots are overlaid, and predictions are show in dotted lines.
@@ -474,6 +475,7 @@ def multi_channel_lines_plotly(
     COLOR_SCALE = plt_colors.qualitative.Plotly
     mse = ((target_samples[:num_samples] - generated_samples[:num_samples])**2).mean().item()
     subtitle = f"MSE: {mse:.4f}" + (f" | {subtitle}" if subtitle else "")
+    button_list = []
     fig = go.Figure()
     fig.update_layout(
         title=title_base + (f"<br><sub>{subtitle}</sub>" if subtitle else ""),
@@ -544,7 +546,45 @@ def multi_channel_lines_plotly(
                     f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
                 )
             )
+    if buttons:
+        # Add a button to focus on every shot individually, and all shots
+        button_list = [
+            dict(
+                label='All Shots',
+                method='update',
+                args=[{
+                    'visible': [True] * len(fig.data)
+                }, {
+                    'title': 'All'
+                }]
+            )
+        ]
+        for sample_i in range(num_samples):
+            shot_num = str(shot_numbers[sample_i].item())
+            button_list.append(
+                dict(
+                    args=[{
+                        "visible": [shot_num in trace.legendgroup for trace in fig.data]
+                    }],
+                    label=shot_num,
+                    method="update"
+                )
+            )
 
+        fig.update_layout(
+            updatemenus=[
+                dict(
+                    active=0,
+                    buttons=button_list,
+                    showactive=True,
+                    direction="down",
+                    x=1.02,
+                    xanchor="left",
+                    y=1.02,
+                    yanchor="bottom"
+                )
+            ]
+        )
     if wandb.run.disabled:  # type: ignore
         fig.show()
     return fig
