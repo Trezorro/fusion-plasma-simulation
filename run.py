@@ -5,20 +5,9 @@ logging.basicConfig(level=logging.INFO, handlers=[handler])
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logging.getLogger('src').setLevel(logging.DEBUG)
-logger.info("Starting run.py with imports")
+logger.info("Starting run.py with wandb init.")
 import wandb
-import torch
-from torch.utils import data
-import lightning as L
-from lightning.pytorch.loggers import WandbLogger
-import lightning.pytorch.callbacks as pl_callbacks
-
 from src.config import get_current_config, load_config_from_file
-from src.evaluation import PlotsCallback
-import src.models
-import src.data_loaders
-
-logger.info("Imports complete, Loading config and initializing wandb.")
 
 conf = load_config_from_file('fm_toy')
 run = wandb.init(
@@ -30,32 +19,30 @@ run = wandb.init(
     # mode="offline",
 )
 C = get_current_config()
-wandb.define_metric("loss/train", summary="min")
-wandb.define_metric("loss/val", summary="min")
-wandb.define_metric("loss/time_domain_train", summary="min")
-wandb.define_metric("loss/time_domain_val", summary="min")
+logger.info("Run initialized, importing torch and lightning.")
 
-wandb.define_metric("val/time_pred_batch_variance", summary="max")
-wandb.define_metric("val/time_pred_batch_var_mean_adjusted", summary="max")
-wandb.define_metric("val/freq_pred_batch_variance", summary="max")
-wandb.define_metric("val/freq_pred_batch_var_mean_adjusted", summary="max")
-wandb.define_metric("val/freq_pred_batch_input_variance_ratio", summary="max")
-
-wandb.define_metric("val/time_target_batch_variance", summary="max")
-wandb.define_metric("val/time_target_batch_var_mean_adjusted", summary="max")
-wandb.define_metric("val/freq_target_batch_variance", summary="max")
-wandb.define_metric("val/freq_target_batch_var_mean_adjusted", summary="max")
-wandb.define_metric("val/freq_target_batch_input_variance_ratio", summary="max")
+import torch
+from torch.utils import data
+import lightning as L
+import lightning.pytorch.callbacks as pl_callbacks
+from lightning.pytorch.loggers import WandbLogger
 
 wandb_logger = WandbLogger(
     log_model=True,
     experiment=run,
     save_dir="output/",
 )
-logger.info("Config and wandb initialized, loading model and data.")
+
+from src.evaluation import PlotsCallback
+import src.models
+import src.data_loaders
+import src.metrics as metrics
+
+logger.info("Imports complete, loading model and data.")
 ModelClass = getattr(src.models, C.model.Class)
 model = ModelClass(**C.model.params)
 if "skip_log_summary" not in C or not C["skip_log_summary"]:
+    logger.info("Model loaded, summary:")
     model.log_summary(C)
 # log weights for analysis in W&B
 wandb_logger.watch(model, log="all", log_freq=50)
@@ -90,4 +77,4 @@ logger.info("Starting model fit...")
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 logger.info("Starting final validation...")
 trainer.test(model=model, dataloaders=val_loader)
-logger.info("Finished training.")
+logger.info("Finished training and testing. Goodbye.")

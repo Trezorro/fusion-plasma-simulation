@@ -16,7 +16,7 @@ evaluation:
     # n are optional through defaults in PlotsCallback
     # all other keys are passed as kwargs to the plot function
     - key: 2d_flow_plot
-      n: 30
+      n: 64
     - key: line_flow_plot
       n: 5
     - key: multi_channel_lines

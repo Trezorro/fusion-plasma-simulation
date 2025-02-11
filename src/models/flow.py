@@ -11,6 +11,7 @@ from src.config import get_current_config
 from src.models.flow_nets import VelocityNet
 from src.models.unet_conditional import ConditionalUNet
 from torchcfm.optimal_transport import OTPlanSampler
+import src.metrics as metrics
 
 import logging
 
@@ -136,8 +137,10 @@ class FlowModule(L.LightningModule):
             warp_fn=warp_fn,
             save_trajectories=True
         )
+        # Metrics
+        error_metrics = metrics.get_moments_errors(generated_samples, target_samples)
         self.model.train()  # Reset model to training mode
-        # trajectories shape: [n_steps, batch_size, channels, num_time_points]
+
         if to_cpu:
             meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
                 (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
@@ -149,7 +152,8 @@ class FlowModule(L.LightningModule):
             target_samples=target_samples,
             prior_samples=prior_samples,
             generated_samples=generated_samples,
-            trajectories=trajectories
+            trajectories=trajectories,
+            metrics=error_metrics
         )
 
     @staticmethod
