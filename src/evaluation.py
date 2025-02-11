@@ -60,7 +60,8 @@ class PlotsCallback(L.Callback):
             logger.warning("No plot functions specified and no max n.")
 
     def call_plot_functions(self, evaluation_output: dict, trainval: str, global_step: int, title_base: str):
-
+        if not self.plot_functions:
+            return
         for func_c in self.plot_functions:
             key = func_c["key"]
             plot_fn: PlotFunction = self.PLOT_FN_OPTIONS[key]  # Function to generate images
