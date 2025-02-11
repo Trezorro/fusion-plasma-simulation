@@ -57,7 +57,7 @@ model:
       use1x1: false # Default false
     loss: MSELoss
     optimizer_params:
-      lr: 0.001
+      lr: 0.0001
       weight_decay: 0  # Default 0
       amsgrad: false  # Default false
     
@@ -65,7 +65,7 @@ data:
   Class: ShotFlowDS
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
-  seq_length: 250
+  seq_length: 500
   history_length: ${ data.seq_length } # default null / 0, if positive int, will include x_history in the conditioning_inputs
   crop_margin: 2000  # Determines the unused period at start and end of each shot for preprocessing
   force_start: 11000
