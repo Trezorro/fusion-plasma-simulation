@@ -249,7 +249,7 @@ class FlowModule(L.LightningModule):
                     # rate after every epoch/step.
                     "frequency": 1,
                     # Metric to to monitor for schedulers like `ReduceLROnPlateau`
-                    "monitor": "val_loss",
+                    "monitor": "loss/train",
                     # If set to `True`, will enforce that the value specified 'monitor'
                     # is available when the scheduler is updated, thus stopping
                     # training if not found. If set to `False`, it will only produce a warning
