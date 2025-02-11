@@ -67,6 +67,13 @@ class FlowModule(L.LightningModule):
         pred_velocity = self.model(samples_at_t, t, conditioning_input)
         loss = self.loss(pred_velocity, velocity)
         self.log("loss/train", loss, prog_bar=True)
+        if loss.isnan().any():
+            raise ValueError(f"Loss is NaN: {loss}")
+        if loss > 1000:
+            logger.warning(f"Loss is very high: {loss}\nfor batch {batch_idx} of size {velocity.size()}")
+            summary_str = lambda x: f"mean: {x.mean().item()}, std: {x.std().item()}, min: {x.min().item()}, max: {x.max().item()}"
+            logger.debug("velocity: %s\n pred_velocity:", summary_str(velocity), summary_str(pred_velocity))
+            logger.debug("Meta: %s", batch[0])
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -134,7 +141,7 @@ class FlowModule(L.LightningModule):
         if to_cpu:
             meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
                 (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
-                device='cpu'
+                device='cpu'  # type: ignore
             )
         return dict(
             meta=meta,

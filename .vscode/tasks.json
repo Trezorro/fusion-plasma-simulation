@@ -20,7 +20,12 @@
         "problemMatcher": [
           "$python"
         ]
-      }
+      },
+      {
+        "label": "Sync slurms",
+        "type": "shell",
+        "command": "rsync -avzv mtresoor@snellius.surf.nl:/home/mtresoor/fusion-plasma-simulation/output/slurms output/snellius/ && rsync -avzv TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms output/hpc/"
+      },
     ],
   "inputs": [
     {
