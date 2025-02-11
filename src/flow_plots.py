@@ -475,7 +475,7 @@ def multi_channel_lines_plotly(
     COLOR_SCALE = plt_colors.qualitative.Plotly
     mse = ((target_samples[:num_samples] - generated_samples[:num_samples])**2).mean().item()
     subtitle = f"MSE: {mse:.4f}" + (f" | {subtitle}" if subtitle else "")
-    button_list = []
+    main_button_list = []
     fig = go.Figure()
     fig.update_layout(
         title=title_base + (f"<br><sub>{subtitle}</sub>" if subtitle else ""),
@@ -548,7 +548,9 @@ def multi_channel_lines_plotly(
             )
     if buttons:
         # Add a button to focus on every shot individually, and all shots
-        button_list = [
+        not_predicted = [not trace.legendgroup.endswith('Predicted') for trace in fig.data]
+        not_target = [not trace.legendgroup.endswith('Target') for trace in fig.data]
+        main_button_list = [
             dict(
                 label='All Shots',
                 method='update',
@@ -557,11 +559,17 @@ def multi_channel_lines_plotly(
                 }, {
                     'title': 'All'
                 }]
-            )
+            ),
+            dict(label='Targets', method='update', args=[{
+                'visible': not_predicted
+            }]),
+            dict(label='Predicted', method='update', args=[{
+                'visible': not_target
+            }])
         ]
         for sample_i in range(num_samples):
             shot_num = str(shot_numbers[sample_i].item())
-            button_list.append(
+            main_button_list.append(
                 dict(
                     args=[{
                         "visible": [shot_num in trace.legendgroup for trace in fig.data]
@@ -570,16 +578,41 @@ def multi_channel_lines_plotly(
                     method="update"
                 )
             )
+        channel_buttons = [
+            dict(label='All', method='update', args=[{
+                'visible': [True] * len(fig.data)
+            }]),
+        ]
+        for channel in CHANNEL_NAMES:
+            channel_buttons.append(
+                dict(
+                    args=[{
+                        "visible": [trace.name.startswith(channel) for trace in fig.data]
+                    }],
+                    label=channel,
+                    method="update"
+                )
+            )
 
         fig.update_layout(
             updatemenus=[
                 dict(
                     active=0,
-                    buttons=button_list,
+                    buttons=main_button_list,
                     showactive=True,
                     direction="down",
                     x=1.02,
                     xanchor="left",
+                    y=1.02,
+                    yanchor="bottom"
+                ),
+                dict(
+                    active=0,
+                    buttons=channel_buttons,
+                    showactive=True,
+                    direction="down",
+                    x=1.019,
+                    xanchor="right",
                     y=1.02,
                     yanchor="bottom"
                 )
