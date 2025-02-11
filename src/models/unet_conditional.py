@@ -207,7 +207,7 @@ class ConditionalUNet(nn.Module):
         ) == 2 + self.spatial_dim, f"Expected batch, channel plus configured spacial dims, but got {x.dim()}"  # [b, c, *spatial_dims]
         # Get time-step embeddings
         t = self.time_emb(t)
-        t1_emb = self.time_emb(torch.tensor(1.0, device=self.device))
+        t1_emb = self.time_emb(torch.tensor(1.0, device=self.device))  # TODO: clean up this hack
 
         # Get image projection
         x = self.image_proj(x)
