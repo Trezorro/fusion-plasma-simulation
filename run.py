@@ -27,16 +27,19 @@ import lightning as L
 import lightning.pytorch.callbacks as pl_callbacks
 from lightning.pytorch.loggers import WandbLogger
 
+from src.evaluation import PlotsCallback
+import src.models
+import src.data_loaders
+import src.metrics as metrics
+
+metrics.define_error_metrics("val")
+metrics.define_error_metrics("train")
+
 wandb_logger = WandbLogger(
     log_model=True,
     experiment=run,
     save_dir="output/",
 )
-
-from src.evaluation import PlotsCallback
-import src.models
-import src.data_loaders
-import src.metrics as metrics
 
 logger.info("Imports complete, loading model and data.")
 ModelClass = getattr(src.models, C.model.Class)
