@@ -8,6 +8,7 @@ gradient_clip_val: .5
 skip_log_summary: true
 evaluation:
   n_steps: 50
+  max_n: 64
   val_every_n_epochs: 20
   train_every_n_epochs: 40
   scrutinize_epochs: 10  # Epochs equal or lower than this will always be fully evaluated. -1 to disable

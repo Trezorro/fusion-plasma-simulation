@@ -14,8 +14,9 @@
                 "WANDB_NOTES": "debugging",
             },
             "args": [
-                "epochs=6"
-                "skip_log_summary=True"
+                "epochs=6",
+                "skip_log_summary=True",
+                "evaluation.plot_functions=null"
             ],
             "justMyCode": false
             

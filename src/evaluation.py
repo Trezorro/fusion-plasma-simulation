@@ -53,11 +53,11 @@ class PlotsCallback(L.Callback):
         self.train_every_n_epochs = self.config.get("train_every_n_epochs", 20)
         self.scrutinize_epochs = self.config.get("scrutinize_epochs", 1)
         self.plot_functions = self.config.get("plot_functions", [])
-        if not self.plot_functions:
-            logger.warning("No plot functions specified for evaluation callback.")
-            self.max_n = 0
-        else:
+        self.max_n = self.config.get("max_n", 0)
+        if not self.max_n and self.plot_functions:
             self.max_n = max([func_c.get("n", 0) for func_c in self.plot_functions])
+        elif not self.max_n:
+            logger.warning("No plot functions specified and no max n.")
 
     def call_plot_functions(self, evaluation_output: dict, trainval: str, global_step: int, title_base: str):
 
