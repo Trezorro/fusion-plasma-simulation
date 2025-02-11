@@ -71,7 +71,9 @@ class FlowModule(L.LightningModule):
         if loss.isnan().any():
             raise ValueError(f"Loss is NaN: {loss}")
         if loss > 1000:
-            logger.warning(f"Loss is very high: {loss}\nfor batch {batch_idx} of size {velocity.size()}")
+            logger.warning(
+                f"Loss is very high: {loss} at EPOCH {self.current_epoch}, step {self.global_step}\nfor batch {batch_idx} of size {velocity.size()}"
+            )
             summary_str = lambda x: f"mean: {x.mean().item()}, std: {x.std().item()}, min: {x.min().item()}, max: {x.max().item()}"
             logger.debug("velocity: %s\n pred_velocity:%s", summary_str(velocity), summary_str(pred_velocity))
             logger.debug("Shots: %s", batch[0]['shot_number'])
@@ -229,6 +231,21 @@ class FlowModule(L.LightningModule):
             self.optimizer_params = dict()
         optimizer = torch.optim.Adam(self.parameters(), **self.optimizer_params)
         return optimizer
+
+    def on_before_optimizer_step(self, optimizer):
+        # Compute the 2-norm for each layer
+        # If using mixed precision, the gradients are already unscaled here
+        grads = [
+            param.grad.detach().flatten()
+            for param in self.model.parameters()
+            if param.grad is not None and param.requires_grad
+        ]
+        total_norm = torch.cat(grads).norm()
+        self.log("loss/grad_norm", total_norm, on_step=True, on_epoch=False, prog_bar=True)
+        if total_norm > 1000:
+            logger.warning(
+                f"Gradient norm is very high: {total_norm} at EPOCH {self.current_epoch}, step {self.global_step}"
+            )
 
     def log_summary(self, config: DictConfig):
         """
