@@ -73,7 +73,7 @@ class FlowModule(L.LightningModule):
         if loss > 1000:
             logger.warning(f"Loss is very high: {loss}\nfor batch {batch_idx} of size {velocity.size()}")
             summary_str = lambda x: f"mean: {x.mean().item()}, std: {x.std().item()}, min: {x.min().item()}, max: {x.max().item()}"
-            logger.debug("velocity: %s\n pred_velocity:", summary_str(velocity), summary_str(pred_velocity))
+            logger.debug("velocity: %s\n pred_velocity:%s", summary_str(velocity), summary_str(pred_velocity))
             logger.debug("Meta: %s", batch[0])
         return loss
 
