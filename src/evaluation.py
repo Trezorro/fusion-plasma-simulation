@@ -23,14 +23,17 @@ logger.setLevel(logging.DEBUG)
 class PlotsCallback(L.Callback):
     """Calls a specified function, with the model and batch as arguments.
 
-    Model is always put in eval mode, and the batch may be tensor or tuple, on some device.
-    Plot function should take care of accepting any device.
+    The plot functions should accept pytorch tensors as input and return some figure or image.
 
-    Args:
-        plot_fn_key (str): The key of the function to call, also used as the wandb logging key.
-        num_samples (int): The number of samples to plot at once.
-        every_n_epochs (int): The interval of epochs to plot validation data.
+    Args in config.evaluation:
+        n_steps (int): The number of steps to plot.
+        val_every_n_epochs (int): The interval of epochs to plot validation data.
         train_every_n_epochs (int): The interval of epochs to plot training data. If 0, don't plot training data.
+        scrutinize_epochs (int): Epochs equal or lower than this will always be fully evaluated. -1 to disable.
+        plot_functions (list): A list of dictionaries, each specifying a function to call and its arguments.
+            key: The key of the function to call, also used as the wandb logging key.
+            n: The number of samples to plot. If not specified, the maximum number of samples over all plots or the batch size is used.
+            Any other arguments are passed to the function.
     """
 
     # these functions should each accept the args: n, title_base, and **kwargs
@@ -48,6 +51,7 @@ class PlotsCallback(L.Callback):
         # Only save those images every N epochs (otherwise tensorboard gets quite large)
         self.val_every_n_epochs = self.config.get("val_every_n_epochs", 20)
         self.train_every_n_epochs = self.config.get("train_every_n_epochs", 20)
+        self.scrutinize_epochs = self.config.get("scrutinize_epochs", 1)
         self.plot_functions = self.config.get("plot_functions", [])
         if not self.plot_functions:
             logger.warning("No plot functions specified for evaluation callback.")
@@ -66,11 +70,12 @@ class PlotsCallback(L.Callback):
             wandb.log({f"{trainval}/{key}": fig, "trainer/global_step": global_step}, commit=False)
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
-
         # Skip for all other epochs
-        if trainer.current_epoch % self.val_every_n_epochs == 1:
+        if (
+            trainer.current_epoch % self.val_every_n_epochs == 1
+        ) or trainer.current_epoch <= self.scrutinize_epochs:
             # Generate images
-            logger.info(f"Generating validation plots for epoch {trainer.current_epoch}")
+            logger.info(f"Generating validation plots for EPOCH {trainer.current_epoch}")
             data_set = trainer.val_dataloaders.dataset
             batch = next(
                 iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
@@ -83,8 +88,11 @@ class PlotsCallback(L.Callback):
             logger.debug("Plotters done.")
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
-        if self.train_every_n_epochs and trainer.current_epoch % self.train_every_n_epochs == 0:
-            logger.info(f"Generating training plots for epoch {trainer.current_epoch}")
+        if self.train_every_n_epochs and (
+            (trainer.current_epoch % self.train_every_n_epochs == 0) or
+            trainer.current_epoch <= self.scrutinize_epochs
+        ):
+            logger.info(f"Generating training plots for EPOCH {trainer.current_epoch}")
             # Generate images
             data_set = trainer.train_dataloader.dataset
             batch = next(

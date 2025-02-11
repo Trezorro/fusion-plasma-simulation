@@ -10,6 +10,7 @@ evaluation:
   n_steps: 50
   val_every_n_epochs: 20
   train_every_n_epochs: 40
+  scrutinize_epochs: 10  # Epochs equal or lower than this will always be fully evaluated. -1 to disable
   plot_functions:
     # every item has to have a 'key' key.
     # n are optional through defaults in PlotsCallback
@@ -63,7 +64,7 @@ data:
   Class: ShotFlowDS
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
-  seq_length: 500
+  seq_length: 250
   history_length: ${ data.seq_length } # default null / 0, if positive int, will include x_history in the conditioning_inputs
   crop_margin: 2000  # Determines the unused period at start and end of each shot for preprocessing
   force_start: 11000
