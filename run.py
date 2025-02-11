@@ -66,13 +66,15 @@ trainer = L.Trainer(
     max_epochs=C["epochs"],
     logger=wandb_logger,
     profiler='simple',
+
     # num_sanity_val_steps=1,
     log_every_n_steps=1,
     check_val_every_n_epoch=1,  # May validate less often
     gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
     callbacks=[
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
-        PlotsCallback(C.evaluation)
+        PlotsCallback(C.evaluation),
+        pl_callbacks.LearningRateMonitor(logging_interval='epoch'),
     ]
 )
 logger.info("Starting training with first validation...")

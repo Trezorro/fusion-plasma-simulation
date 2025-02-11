@@ -229,8 +229,37 @@ class FlowModule(L.LightningModule):
     def configure_optimizers(self):
         if self.optimizer_params is None:
             self.optimizer_params = dict()
-        optimizer = torch.optim.Adam(self.parameters(), **self.optimizer_params)
-        return optimizer
+        self.opt = torch.optim.Adam(self.parameters(), **self.optimizer_params)
+        self.reduce_lr_on_plateau = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.opt, mode='min', factor=0.5, patience=5, min_lr=1e-6, verbose=True
+        )
+
+        return {
+            'optimizer': self.opt,
+            'lr_scheduler':
+                {
+                    # REQUIRED: The scheduler instance
+                    "scheduler": self.reduce_lr_on_plateau,
+                    # The unit of the scheduler's step size, could also be 'step'.
+                    # 'epoch' updates the scheduler on epoch end whereas 'step'
+                    # updates it after a optimizer update.
+                    "interval": "epoch",
+                    # How many epochs/steps should pass between calls to
+                    # `scheduler.step()`. 1 corresponds to updating the learning
+                    # rate after every epoch/step.
+                    "frequency": 1,
+                    # Metric to to monitor for schedulers like `ReduceLROnPlateau`
+                    "monitor": "val_loss",
+                    # If set to `True`, will enforce that the value specified 'monitor'
+                    # is available when the scheduler is updated, thus stopping
+                    # training if not found. If set to `False`, it will only produce a warning
+                    "strict": True,
+                    # If using the `LearningRateMonitor` callback to monitor the
+                    # learning rate progress, this keyword can be used to specify
+                    # a custom logged name
+                    # "name": None,
+                }
+        }
 
     def on_before_optimizer_step(self, optimizer):
         # Compute the 2-norm for each layer
