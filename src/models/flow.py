@@ -70,9 +70,9 @@ class FlowModule(L.LightningModule):
         self.automatic_optimization = False
 
     def _validate_configuration(self):
-        assert self.batch_rematch_factor >= 0 and type(
+        assert self.batch_rematch_factor > 0 and type(
             self.batch_rematch_factor
-        ) == int, "batch_rematch_factor must be non-negative integer"
+        ) == int, "batch_rematch_factor must be positive integer"
         assert self.batch_rematch_factor % self.step_every_nth_match == 0, (
             "batch_rematch_factor must be divisible by step_every_nth_match, or"
             " step_every_nth_match must be None. Otherwise, optimizer steps will"
@@ -99,6 +99,7 @@ class FlowModule(L.LightningModule):
                 # See: on_before_optimizer_step() for gradient clipping
                 opt.step()
                 opt.zero_grad()
+        total_loss /= self.batch_rematch_factor
         self.log("loss/train", total_loss, prog_bar=True)
 
     def batch_match(self, batch, batch_idx, match_i=0):
