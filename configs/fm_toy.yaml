@@ -41,6 +41,9 @@ model:
     prior: 'normal'  # normal, copy
     ot_method: 'exact'  # null to disable
     ot_replace: true  # Default false
+    batch_rematch_factor: 6  # Default 1
+    step_every_nth_match: 2  # Default 1 # TODO
+    gradient_clip_val: ${ gradient_clip_val }
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history'] # will affect architecture

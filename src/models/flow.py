@@ -1,6 +1,7 @@
 from functools import partial
 from typing import Any, Optional
 import lightning as L
+from lightning.pytorch.core.optimizer import LightningOptimizer
 import torch
 import torchinfo
 import torchmetrics
@@ -45,6 +46,9 @@ class FlowModule(L.LightningModule):
         prior: str = "normal",
         ot_method: Optional[str] = None,
         ot_replace: bool = False,
+        batch_rematch_factor: int = 0,
+        step_every_nth_match: Optional[int] = None,  # if None, step only after all matches.
+        gradient_clip_val: float = 1.0,
         **kwargs: Any
     ):
         super().__init__()
@@ -59,25 +63,61 @@ class FlowModule(L.LightningModule):
         self.ot_method = ot_method
         self.ot_sampler = OTPlanSampler(method=ot_method, reg=0.05) if ot_method else None
         self.ot_replace = ot_replace
+        self.gradient_clip_val = gradient_clip_val
+        self.batch_rematch_factor = batch_rematch_factor
+        self.step_every_nth_match = step_every_nth_match or batch_rematch_factor
+        self._validate_configuration()
+        self.automatic_optimization = False
+
+    def _validate_configuration(self):
+        assert self.batch_rematch_factor >= 0 and type(
+            self.batch_rematch_factor
+        ) == int, "batch_rematch_factor must be non-negative integer"
+        assert self.batch_rematch_factor % self.step_every_nth_match == 0, (
+            "batch_rematch_factor must be divisible by step_every_nth_match, or"
+            " step_every_nth_match must be None. Otherwise, optimizer steps will"
+            " be unbalanced."
+        )
+        logger.info(
+            "Will do %d matches per batch, stepping every %d, so %d steps per batch.",
+            self.batch_rematch_factor, self.step_every_nth_match,
+            self.batch_rematch_factor // self.step_every_nth_match
+        )
 
     def forward(self, x, t, conditioning=None):
         return self.model(x, t, conditioning=conditioning)
 
     def training_step(self, batch, batch_idx):
+        opt: LightningOptimizer = self.optimizers()  # type: ignore
+        total_loss = 0
+        opt.zero_grad()
+        for match_i in range(1, self.batch_rematch_factor + 1):
+            loss = self.batch_match(batch, batch_idx, match_i=match_i)
+            self.manual_backward(loss)
+            total_loss += loss.detach()
+            if match_i % self.step_every_nth_match == 0:
+                # See: on_before_optimizer_step() for gradient clipping
+                opt.step()
+                opt.zero_grad()
+        self.log("loss/train", total_loss, prog_bar=True)
+
+    def batch_match(self, batch, batch_idx, match_i=0):
         t, samples_at_t, velocity, conditioning_input = self.interpolate_samples(batch)
         pred_velocity = self.model(samples_at_t, t, conditioning_input)
         loss = self.loss(pred_velocity, velocity)
-        self.log("loss/train", loss, prog_bar=True)
         if loss.isnan().any():
             raise ValueError(f"Loss is NaN: {loss}")
         if loss > 1000:
             logger.warning(
-                f"Loss is very high: {loss} at EPOCH {self.current_epoch}, step {self.global_step}\nfor batch {batch_idx} of size {velocity.size()}"
+                f"Loss is very high: {loss} at EPOCH {self.current_epoch}, step {self.global_step}\nfor batch {batch_idx} (match {match_i}) of size {velocity.size()}"
             )
             summary_str = lambda x: f"mean: {x.mean().item()}, std: {x.std().item()}, min: {x.min().item()}, max: {x.max().item()}"
             logger.debug("velocity: %s\n pred_velocity:%s", summary_str(velocity), summary_str(pred_velocity))
             logger.debug("Shots: %s", batch[0]['shot_number'])
         return loss
+
+    def on_after_backward(self) -> None:
+        pass
 
     def validation_step(self, batch, batch_idx):
         t, samples_at_t, velocity, conditioning_input = self.interpolate_samples(batch)
@@ -275,6 +315,10 @@ class FlowModule(L.LightningModule):
             logger.warning(
                 f"Gradient norm is very high: {total_norm} at EPOCH {self.current_epoch}, step {self.global_step}"
             )
+        self.clip_gradients(
+            optimizer, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm="norm"
+        )
+
 
     def log_summary(self, config: DictConfig):
         """

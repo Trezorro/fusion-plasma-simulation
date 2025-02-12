@@ -70,7 +70,7 @@ trainer = L.Trainer(
     # num_sanity_val_steps=1,
     log_every_n_steps=1,
     check_val_every_n_epoch=1,  # May validate less often
-    gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
+    # gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
     callbacks=[
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
         PlotsCallback(C.evaluation),
