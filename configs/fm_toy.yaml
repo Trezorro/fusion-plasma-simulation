@@ -72,7 +72,7 @@ data:
   Class: ShotFlowDS
   dir: ./data/
   file: 2024_05_01-NaNsFiltered.parquet
-  seq_length: 128
+  seq_length: 256
   history_length: ${ data.seq_length } # default null / 0, if positive int, will include x_history in the conditioning_inputs
   crop_margin: 2000  # Determines the unused period at start and end of each shot for preprocessing
   force_start: 11000
