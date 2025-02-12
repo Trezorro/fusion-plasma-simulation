@@ -87,6 +87,9 @@ class ConditionalUNet(nn.Module):
         """
         super().__init__()
         self.spatial_dim = spatial_dim
+        if not spatial_dim == 1:
+            # especially for conditioning concatenation, harder to implement for 2D
+            raise NotImplementedError("Only 1D supported for now.")
         self.conditioning = conditioning
         self.use_x_history = "x_history" in conditioning
 
@@ -100,7 +103,10 @@ class ConditionalUNet(nn.Module):
         self.act = ACTIVATION_OPTIONS[activation]()
         self.ConvLayer = CONV_LAYERS[spatial_dim]
         # Project image into feature map
-        self.image_proj = self.ConvLayer(input_channels, apex_hidden_channels, kernel_size=3, padding=1)
+        # If conditioning, add a dummy channel to signal the presence of conditioning or previous input.
+        self.image_proj = self.ConvLayer(
+            input_channels + self.use_x_history, apex_hidden_channels, kernel_size=3, padding=1
+        )
 
         # #### First half of U-Net - decreasing resolution
         down = []
@@ -199,17 +205,26 @@ class ConditionalUNet(nn.Module):
         conditioning_input: Optional[dict[str, torch.Tensor]] = None
     ) -> torch.Tensor:
         """
-        * `x` has shape `[batch_size, in_channels, height, width]`
+        * `x` has shape `[batch_size, in_channels, *spatial dim (HxW | L)]`
         * `t` has shape `[batch_size]` or scalar
         """
         x_in_shape = x.shape
-        assert x.dim(
-        ) == 2 + self.spatial_dim, f"Expected batch, channel plus configured spacial dims, but got {x.dim()}"  # [b, c, *spatial_dims]
+        n, c, seq_length = x.shape
+        assert x.dim() == 2 + self.spatial_dim, (
+            f"Expected batch, channel plus configured spacial dims, but got {x.dim()}"
+        )  # [n, c, *spatial_dims]
         # Get time-step embeddings
         t = self.time_emb(t)
-        t1_emb = self.time_emb(torch.tensor(1.0, device=self.device))  # TODO: clean up this hack
 
         # Get image projection
+        if conditioning_input and self.use_x_history:
+            # Add x_history as a condition
+            x_history = conditioning_input["x_history"]
+            double_length = x_history.shape[-1] + seq_length
+            cond_signal = torch.ones(n, 1, double_length, device=self.device)
+            cond_signal[:, :, -seq_length:] = 0  # signal for current input
+            x = torch.cat((x_history, x), dim=2)
+            x = torch.cat((x, cond_signal), dim=1)
         x = self.image_proj(x)
 
         # `hidden features` will store outputs at each resolution for skip connection
@@ -218,16 +233,6 @@ class ConditionalUNet(nn.Module):
         for down_layer in self.down:
             x = down_layer(x, t)
             hid_features.append(x)
-
-        if conditioning_input and self.use_x_history:
-            # Add x_history as a condition
-            x_history = conditioning_input["x_history"]
-            x_history = self.image_proj(x_history)
-            for down_layer in self.down:
-                x_history = down_layer(
-                    x_history, t
-                )  # used to be t1_emb, but this allows less information about flow progress
-            x = torch.cat((x_history, x), dim=-1)
 
         # Middle (bottom)
         x = self.middle(x, t)
@@ -253,7 +258,7 @@ class ConditionalUNet(nn.Module):
 
         # Final normalization and convolution
         x = self.final(self.act(self.norm(x)))
-        x = self._crop_Nd(x, x_in_shape)  # crop spatial dim to match features
+        x = self._crop_right(x, x_in_shape)  # crop spatial dim to match features
         return x
 
     def _crop_Nd(
@@ -285,6 +290,35 @@ class ConditionalUNet(nn.Module):
         breaking_arr = np.tile([1, -1], int(len(pad_temp) / 2)) / 1000
         pad = tuple(map(lambda p: int(round(p)), pad_temp + breaking_arr))
         enc_ftrs = F.pad(enc_ftrs, pad)
+        return enc_ftrs
+
+    def _crop_right(
+        self,
+        enc_ftrs: torch.Tensor,
+        target: torch.Tensor | np.ndarray | torch.Size | tuple,
+    ) -> torch.Tensor:
+        """Crop the encoder features to match the shape of the decoder features.
+
+        Supports different spatial dimensions (1D, 2D, 3D) by dynamically calculating paddings based on the number of spatial dimensions.
+
+        By K Minartz
+        
+        Args:
+            enc_ftrs (torch.Tensor): Encoder features.
+            shape (torch.Tensor): Shape to crop to.
+        
+        Returns:
+            torch.Tensor: Cropped encoder features.
+        """
+        if isinstance(target, torch.Tensor) or isinstance(target, np.ndarray):
+            target = target.shape
+        target_spatial_shape = target[-1]
+        input_spatial_shape = enc_ftrs.shape[-1]
+        # first, calculate preliminary paddings - may contain non-integers ending in .5):
+        padding_difference = np.subtract(target_spatial_shape, input_spatial_shape)
+        # to break the .5 symmetry to round one padding up and one down, we add a small pos/neg number respectively
+        # note this will not impact the case where pad_temp[i] is integer since it is still rounded to that integer
+        enc_ftrs = F.pad(enc_ftrs, (padding_difference, 0))
         return enc_ftrs
 
 
