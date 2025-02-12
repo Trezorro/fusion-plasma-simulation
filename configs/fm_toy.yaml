@@ -6,7 +6,7 @@ features:
   - true_condition_concat
 
 epochs: 8000
-batch_size: 64
+batch_size: 82
 patience: 400
 gradient_clip_val: 10
 skip_log_summary: true
