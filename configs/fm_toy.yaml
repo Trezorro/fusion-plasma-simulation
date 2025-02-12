@@ -1,11 +1,13 @@
-tags:
+features:
+  - manual_optimization
+  - batch_rematching
   - pass_t_to_conditioning_input
   - learning_rate_schedule
 
-epochs: 6000
+epochs: 8000
 batch_size: 64
 patience: 400
-gradient_clip_val: .5
+gradient_clip_val: 10
 skip_log_summary: true
 evaluation:
   n_steps: 50
@@ -42,7 +44,7 @@ model:
     ot_method: 'exact'  # null to disable
     ot_replace: true  # Default false
     batch_rematch_factor: 6  # Default 1
-    step_every_nth_match: 2  # Default 1 # TODO
+    step_every_nth_match: 3  # Default 1 # TODO
     gradient_clip_val: ${ gradient_clip_val }
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
