@@ -8,10 +8,10 @@ features:
 epochs: 8000
 batch_size: 82
 patience: 400
-gradient_clip_val: 10
+gradient_clip_val: 10  # in testing, lower values did not help prevent loss explosions. This is just a safeguard
 skip_log_summary: true
 evaluation:
-  n_steps: 50
+  n_steps: 150
   max_n: 64
   val_every_n_epochs: 20
   train_every_n_epochs: 40
@@ -45,7 +45,7 @@ model:
     ot_method: 'exact'  # null to disable
     ot_replace: true  # Default false
     batch_rematch_factor: 6  # Default 1
-    step_every_nth_match: 3  # Default 1 # TODO
+    step_every_nth_match: 1  # Default 1 # TODO
     gradient_clip_val: ${ gradient_clip_val }
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
