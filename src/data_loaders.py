@@ -245,6 +245,7 @@ class ShotFlowDS(data.Dataset):
         random_start: bool | list[int] = True,
         force_mean_zero=False,
         force_fixed_shot: Optional[int] = None,
+        overfit_on_shots: Optional[list[int]] = None,
         force_start: Optional[int] = None,
         **kwargs
     ):
@@ -261,6 +262,7 @@ class ShotFlowDS(data.Dataset):
         self.random_start = random_start
         self.force_mean_zero = force_mean_zero
         self.force_fixed_shot = force_fixed_shot
+        self.overfit_on_shots = overfit_on_shots
         self.force_start = force_start
         assert random_start is not True or force_start is None, "Cannot have random_start and force_start at the same time, unless random_start is a list of int options."
 
@@ -298,6 +300,9 @@ class ShotFlowDS(data.Dataset):
     def __getitem__(self, idx):
         if self.force_fixed_shot and self.force_fixed_shot < len(self.shot_numbers):
             idx = self.force_fixed_shot
+        elif self.overfit_on_shots:
+            pick = idx % len(self.overfit_on_shots)
+            idx = self.overfit_on_shots[pick]
 
         shot_number = self.shot_numbers[idx]
         shot_data = self.data[self.data['ShotNum'] == shot_number]  # indexed by time
