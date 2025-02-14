@@ -65,7 +65,7 @@ trainer = L.Trainer(
     enable_progress_bar=wandb.run.disabled,
     max_epochs=C["epochs"],
     logger=wandb_logger,
-    profiler='simple',
+    # profiler='simple',
 
     # num_sanity_val_steps=1,
     log_every_n_steps=1,

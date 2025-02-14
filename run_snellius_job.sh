@@ -9,6 +9,7 @@
 #SBATCH --cpus-per-task=5
 #SBATCH --gpus=1
 
+# TODO: Copy config to a safe place so I can submit more jobs without overwriting the config
 
 echo "==============================="
 echo $(date)

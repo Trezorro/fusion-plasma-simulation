@@ -29,7 +29,7 @@ Inspired by Koen Minartz https://openreview.net/forum?id=CCVsGbhFdj implementati
 - Added configurable activation and input dimensionalities.
 - Cropping function to match encoder and decoder features
 """
-
+import logging
 from typing import Callable, Optional, Tuple, Union, List
 
 import torch
@@ -39,6 +39,8 @@ import numpy as np
 
 from src.models.time_embeddings import TimeEmbedding, DummyTimeEmbedding
 from src.models.activations import ACTIVATION_OPTIONS
+
+logger = logging.getLogger(__name__)
 
 CONV_LAYERS = {
     1: nn.Conv1d,
@@ -76,6 +78,7 @@ class ConditionalUNet(nn.Module):
         use1x1: bool = False,  # TODO implement 1x1 convolution
         norm_groups: int = 8,  # If 0, no group normalization
         conditioning: list[str] = [],
+        conditioning_method: str = "sequence",  # sequence, channels, mid-sequence, mid-channels
         **kwargs
     ):
         """
@@ -92,6 +95,7 @@ class ConditionalUNet(nn.Module):
             raise NotImplementedError("Only 1D supported for now.")
         self.conditioning = conditioning
         self.use_x_history = "x_history" in conditioning
+        self.conditioning_method = conditioning_method
 
         # Number of resolutions
         n_resolutions = len(ch_mults)
@@ -104,9 +108,14 @@ class ConditionalUNet(nn.Module):
         self.ConvLayer = CONV_LAYERS[spatial_dim]
         # Project image into feature map
         # If conditioning, add a dummy channel to signal the presence of conditioning or previous input.
-        self.image_proj = self.ConvLayer(
-            input_channels + self.use_x_history, apex_hidden_channels, kernel_size=3, padding=1
-        )
+        if self.use_x_history:
+            if conditioning_method == "sequence":
+                in_channels = input_channels + 1
+            elif conditioning_method == "channels":
+                in_channels = input_channels * 2
+            else:
+                in_channels = input_channels
+        self.image_proj = self.ConvLayer(in_channels, apex_hidden_channels, kernel_size=3, padding=1)
 
         # #### First half of U-Net - decreasing resolution
         down = []
@@ -208,24 +217,25 @@ class ConditionalUNet(nn.Module):
         * `x` has shape `[batch_size, in_channels, *spatial dim (HxW | L)]`
         * `t` has shape `[batch_size]` or scalar
         """
-        x_in_shape = x.shape
-        n, c, seq_length = x.shape
         assert x.dim() == 2 + self.spatial_dim, (
             f"Expected batch, channel plus configured spacial dims, but got {x.dim()}"
         )  # [n, c, *spatial_dims]
-        # Get time-step embeddings
-        t = self.time_emb(t)
-
+        x_in_shape = x.shape
+        n, c, seq_length = x.shape
+        x_hist_emb = None  # Placeholder for x_history embeddings WIP
         # Get image projection
         if conditioning_input and self.use_x_history:
             # Add x_history as a condition
             x_history = conditioning_input["x_history"]
-            double_length = x_history.shape[-1] + seq_length
-            cond_signal = torch.ones(n, 1, double_length, device=self.device)
-            cond_signal[:, :, -seq_length:] = 0  # signal for current input
-            x = torch.cat((x_history, x), dim=2)
-            x = torch.cat((x, cond_signal), dim=1)
-        x = self.image_proj(x)
+            if self.conditioning_method == "sequence":
+                x = self.condition_sequentially(x_history, x)
+            elif self.conditioning_method == "channels":
+                x = self.condition_channel_wise(x_history, x)
+            elif self.conditioning_method == "mid-sequence":  # shared weights TODO implement unshared
+                x_hist_emb = self.image_proj(x_history)
+
+        x = self.image_proj(x)  # Project input to hidden channels
+        t = self.time_emb(t)  # Get flow time embeddings
 
         # `hidden features` will store outputs at each resolution for skip connection
         hid_features = [x]
@@ -233,6 +243,12 @@ class ConditionalUNet(nn.Module):
         for down_layer in self.down:
             x = down_layer(x, t)
             hid_features.append(x)
+            if x_hist_emb is not None:  # Prepare x_history embeddings for middle block
+                x_hist_emb = down_layer(x_hist_emb, t)
+
+        if x_hist_emb is not None:  # conditioning method is mid-sequence
+            x = torch.cat((x_hist_emb, x), dim=2)
+            # TODO implement mid-channels and id dummy channel for conditioning
 
         # Middle (bottom)
         x = self.middle(x, t)
@@ -259,6 +275,30 @@ class ConditionalUNet(nn.Module):
         # Final normalization and convolution
         x = self.final(self.act(self.norm(x)))
         x = self._crop_right(x, x_in_shape)  # crop spatial dim to match features
+        return x
+
+    def condition_sequentially(self, x_history, x):
+        n, c, seq_length = x.shape
+        double_length = x_history.shape[-1] + seq_length
+        cond_signal = torch.ones(n, 1, double_length, device=self.device)
+        cond_signal[:, :, -seq_length:] = 0  # signal for current input
+        x = torch.cat((x_history, x), dim=2)
+        x = torch.cat((x, cond_signal), dim=1)
+        return x
+
+    def condition_channel_wise(self, x_history, x):
+        n, c, seq_length = x.shape
+        history_length = x_history.shape[-1]
+        if history_length > seq_length:
+            # if history is longer, pad the input on the left, so most relevant information is on the right
+            padding_difference = history_length - seq_length
+            x = F.pad(x, (padding_difference, 0))
+        elif seq_length > history_length:
+            # if input is longer, pad the history on the left, so most relevant information is on the right
+            padding_difference = seq_length - history_length
+            x_history = F.pad(x_history, (padding_difference, 0))
+
+        x = torch.cat((x_history, x), dim=1)
         return x
 
     def _crop_Nd(
@@ -316,6 +356,7 @@ class ConditionalUNet(nn.Module):
         input_spatial_shape = enc_ftrs.shape[-1]
         # first, calculate preliminary paddings - may contain non-integers ending in .5):
         padding_difference = np.subtract(target_spatial_shape, input_spatial_shape)
+        logger.debug("Conforming spatial dimensions: %s -> %s to the right", input_spatial_shape, target_spatial_shape)
         # to break the .5 symmetry to round one padding up and one down, we add a small pos/neg number respectively
         # note this will not impact the case where pad_temp[i] is integer since it is still rounded to that integer
         enc_ftrs = F.pad(enc_ftrs, (padding_difference, 0))
