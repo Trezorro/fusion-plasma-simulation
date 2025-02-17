@@ -10,7 +10,7 @@ epochs: 8000
 batch_size: 82
 patience: 400
 gradient_clip_val: 10  # in testing, lower values did not help prevent loss explosions. This is just a safeguard
-skip_log_summary: true
+skip_log_summary: false
 evaluation:
   n_steps: 150
   max_n: 64
@@ -51,7 +51,7 @@ model:
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history'] # will affect architecture
-      conditioning_method: channels
+      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 2 # Default 3
       apex_hidden_channels: 64  # Default 128
