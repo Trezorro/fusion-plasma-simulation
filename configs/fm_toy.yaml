@@ -4,6 +4,7 @@ features:
   - pass_t_to_conditioning_input
   - learning_rate_schedule
   - true_condition_concat
+  - speed_monitor
 
 epochs: 8000
 batch_size: 82

@@ -27,7 +27,7 @@ import lightning as L
 import lightning.pytorch.callbacks as pl_callbacks
 from lightning.pytorch.loggers import WandbLogger
 
-from src.evaluation import PlotsCallback
+from src.evaluation import PlotsCallback, TrainStepMonitor
 import src.models
 import src.data_loaders
 import src.metrics as metrics
@@ -75,6 +75,7 @@ trainer = L.Trainer(
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
         PlotsCallback(C.evaluation),
         pl_callbacks.LearningRateMonitor(logging_interval='epoch'),
+        TrainStepMonitor()
     ]
 )
 logger.info("Starting training with first validation...")

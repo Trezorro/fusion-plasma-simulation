@@ -356,7 +356,7 @@ class ConditionalUNet(nn.Module):
         input_spatial_shape = enc_ftrs.shape[-1]
         # first, calculate preliminary paddings - may contain non-integers ending in .5):
         padding_difference = np.subtract(target_spatial_shape, input_spatial_shape)
-        logger.debug("Conforming spatial dimensions: %s -> %s to the right", input_spatial_shape, target_spatial_shape)
+        # logger.debug("Conforming spatial dimensions: %s -> %s to the right", input_spatial_shape, target_spatial_shape)
         # to break the .5 symmetry to round one padding up and one down, we add a small pos/neg number respectively
         # note this will not impact the case where pad_temp[i] is integer since it is still rounded to that integer
         enc_ftrs = F.pad(enc_ftrs, (padding_difference, 0))

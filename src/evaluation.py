@@ -2,6 +2,7 @@
 #%%
 from typing import Any, Callable, Mapping
 import logging
+import time
 from venv import logger
 from matplotlib import pyplot as plt
 import plotly.graph_objects as go
@@ -116,6 +117,36 @@ class PlotsCallback(L.Callback):
             train_metrics = {"train" + k: v for k, v in evaluation_output['metrics'].items()}  # Add prefix
             wandb.log(train_metrics | {"trainer/global_step": trainer.global_step}, commit=True)
 
+
+class TrainStepMonitor(L.Callback):
+    """Logs the number of train steps and train steps per minute to wandb."""
+
+    def __init__(self):
+        super().__init__()
+        self.start_time: float = 0.0
+        self.train_steps = 0
+        self.samples_seen = 0
+
+    def on_train_start(self, trainer: pl.Trainer, pl_module: L.LightningModule):
+        self.start_time = time.time()
+
+    def on_train_batch_end(
+        self, trainer: pl.Trainer, pl_module: L.LightningModule, outputs, batch, batch_idx
+    ):
+        self.train_steps += 1
+        self.samples_seen += len(batch[2]) * pl_module.batch_rematch_factor
+        elapsed_time = (time.time() - self.start_time) / 60.0
+        steps_per_minute = self.train_steps / elapsed_time if elapsed_time > 0 else 0
+        samples_per_minute = self.samples_seen / elapsed_time if elapsed_time > 0 else 0
+        self.log_dict(
+            {
+                "trainer/steps": trainer.global_step,
+                "trainer/steps_per_minute": steps_per_minute,
+                "trainer/samples_per_minute": samples_per_minute,
+                "trainer/global_step": trainer.global_step,
+                "trainer/samples_seen": self.samples_seen,
+            }
+        )
 
 
 # %% Utilities and metrics

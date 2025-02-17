@@ -46,7 +46,7 @@ class FlowModule(L.LightningModule):
         prior: str = "normal",
         ot_method: Optional[str] = None,
         ot_replace: bool = False,
-        batch_rematch_factor: int = 0,
+        batch_rematch_factor: int = 1,
         step_every_nth_match: Optional[int] = None,  # if None, step only after all matches.
         gradient_clip_val: float = 1.0,
         **kwargs: Any
