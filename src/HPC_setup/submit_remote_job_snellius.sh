@@ -50,6 +50,7 @@ git push origin "$JOB_NAME"
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     cd $REPO_PATH
     git fetch origin
+    git checkout $GIT_BRANCH  # Switch to the main branch, incase we are detached
     git reset --hard origin/$GIT_BRANCH  # Reset local branch to match remote
     git pull origin $GIT_BRANCH
     sbatch --job-name=$JOB_NAME $JOB_SCRIPT $JOB_NAME

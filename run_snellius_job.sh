@@ -9,7 +9,6 @@
 #SBATCH --cpus-per-task=5
 #SBATCH --gpus=1
 
-# TODO: Copy config to a safe place so I can submit more jobs without overwriting the config
 
 echo "==============================="
 echo $(date)
@@ -47,6 +46,7 @@ export WANDB_NOTES=$(git log -n 5 --pretty=format:"%B (%h - %ar) %N")
 
 # Run the Python script
 echo "---------------- JOB START ----------------"
+git checkout tags/$1
 srun python run.py run_name=$1
 
 # srun wandb agent deep-learning-course-team/plasma/96sckgvi
