@@ -6,7 +6,7 @@
 #SBATCH --time=300:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=5
+#SBATCH --cpus-per-task=9
 #SBATCH --gpus=1
 #SBATCH --ear=on
 #SBATCH --ear-policy=monitoring
