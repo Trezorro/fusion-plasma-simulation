@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=snelliustestgpu
 #SBATCH --output=output/slurms/job-%j-%x.out
-#SBATCH --error=output/slurms/job-%j-%x.out
+#SBATCH --error=output/slurms/job-%j-%x.err
 #SBATCH --partition=gpu_mig
 #SBATCH --reservation=terv92681
 #SBATCH --time=300:00
@@ -9,9 +9,10 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
 #SBATCH --gpus=1
-#SBATCH --ear=on
-#SBATCH --ear-policy=monitoring
-#SBATCH --ear-verbose=1
+
+### S BATCH --ear=on
+### S BATCH --ear-policy=monitoring
+### S BATCH --ear-verbose=1
 
 echo "==============================="
 echo $(date)
