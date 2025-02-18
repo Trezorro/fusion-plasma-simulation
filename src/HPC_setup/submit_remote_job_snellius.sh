@@ -9,7 +9,7 @@ JOB_SCRIPT="run_snellius_job.sh"
 GIT_BRANCH="main"  # Branch to pull from
 REMOTE_SLURM_DIR="$REMOTE_USER@$REMOTE_HOST:/home/$REMOTE_USER/fusion-plasma-simulation/output/slurms"
 LOCAL_HPC_PATH="output/snellius/"
-QUEUE_FORMAT="--format=\"%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.17R\""
+QUEUE_FORMAT="--format=\"%.10i %.80j %.8T %.5M %.5D %P %R\""
 
 sync_slurms() {
     # Run rsync and capture the output
