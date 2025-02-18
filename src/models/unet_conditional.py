@@ -73,6 +73,7 @@ class ConditionalUNet(nn.Module):
         ch_mults: Union[Tuple[int, ...], List[int]] = (1, 2, 2, 4),
         is_attn: Tuple[bool, ...] = (False, False, False, False),
         mid_attn: bool = False,
+        attn_heads: int = 1,
         n_blocks: int = 2,
         activation: str = "GELU",
         use1x1: bool = False,  # TODO implement 1x1 convolution
@@ -133,6 +134,7 @@ class ConditionalUNet(nn.Module):
                         out_channels,
                         time_embedding_channels,
                         is_attn[i],
+                        attn_heads=attn_heads,
                         act=self.act,
                         norm_groups=norm_groups,
                         spatial_dim=spatial_dim
@@ -153,7 +155,8 @@ class ConditionalUNet(nn.Module):
             has_attn=mid_attn,
             act=self.act,
             norm_groups=norm_groups,
-            spatial_dim=spatial_dim
+            spatial_dim=spatial_dim,
+            attn_heads=attn_heads,
         )
 
         # #### Second half of U-Net - increasing resolution
@@ -173,7 +176,8 @@ class ConditionalUNet(nn.Module):
                         is_attn[i],
                         act=self.act,
                         norm_groups=norm_groups,
-                        spatial_dim=spatial_dim
+                        spatial_dim=spatial_dim,
+                        attn_heads=attn_heads,
                     )
                 )
             # Final block to reduce the number of channels
@@ -186,7 +190,8 @@ class ConditionalUNet(nn.Module):
                     is_attn[i],
                     act=self.act,
                     norm_groups=norm_groups,
-                    spatial_dim=spatial_dim
+                    spatial_dim=spatial_dim,
+                    attn_heads=attn_heads,
                 )
             )
             in_channels = out_channels
@@ -485,7 +490,7 @@ class AttentionBlock(nn.Module):
         # Multiply by values
         res = torch.einsum('bijh,bjhd->bihd', attn, v)
         # Reshape to `[batch_size, seq, n_heads * d_k]`
-        res = res.view(batch_size, n_spatial, self.n_heads * self.d_k)
+        res = res.reshape(batch_size, n_spatial, self.n_heads * self.d_k)
         # Transform to `[batch_size, seq, n_channels]`
         res = self.output(res)
 
@@ -521,6 +526,7 @@ class DownBlock(nn.Module):
         act: nn.Module | Callable[[torch.Tensor], torch.Tensor] = nn.SELU(),
         norm_groups: int = 32,
         spatial_dim: int = 2,
+        attn_heads: int = 1,
     ):
         super().__init__()
         self.res = ResidualBlock(
@@ -532,7 +538,7 @@ class DownBlock(nn.Module):
             spatial_dim=spatial_dim
         )
         if has_attn:
-            self.attn = AttentionBlock(out_channels)
+            self.attn = AttentionBlock(out_channels, n_heads=attn_heads)
         else:
             self.attn = nn.Identity()
 
@@ -564,6 +570,7 @@ class UpBlock(nn.Module):
         act: nn.Module | Callable[[torch.Tensor], torch.Tensor] = nn.SELU(),
         norm_groups: int = 32,
         spatial_dim: int = 2,
+        attn_heads: int = 1,
     ):
         super().__init__()
         # The input has `in_channels + out_channels` because we concatenate the output of the same resolution
@@ -577,7 +584,7 @@ class UpBlock(nn.Module):
             spatial_dim=spatial_dim
         )
         if has_attn:
-            self.attn = AttentionBlock(out_channels)
+            self.attn = AttentionBlock(out_channels, n_heads=attn_heads)
         else:
             self.attn = nn.Identity()
 
@@ -604,6 +611,7 @@ class MiddleBlock(nn.Module):
         act: nn.Module | Callable[[torch.Tensor], torch.Tensor] = nn.SELU(),
         norm_groups: int = 32,
         spatial_dim: int = 2,
+        attn_heads: int = 1,
     ):
         super().__init__()
         if in_channels is None:
@@ -617,7 +625,7 @@ class MiddleBlock(nn.Module):
             spatial_dim=spatial_dim,
         )
         if has_attn:
-            self.attn = AttentionBlock(n_channels)
+            self.attn = AttentionBlock(n_channels, n_heads=attn_heads)
         else:
             self.attn = nn.Identity()
         self.res2 = ResidualBlock(
