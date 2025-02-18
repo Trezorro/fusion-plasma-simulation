@@ -83,6 +83,10 @@ class FlowModule(L.LightningModule):
             self.batch_rematch_factor, self.step_every_nth_match,
             self.batch_rematch_factor // self.step_every_nth_match
         )
+        assert self.prior in ["normal", "copy"], f"Invalid prior: {self.prior}"
+        assert (
+            self.prior == "normal" or self.ot_method is None
+        ), "OT sampling only supported with fully random prior"
 
     def forward(self, x, t, conditioning=None):
         return self.model(x, t, conditioning=conditioning)
@@ -127,18 +131,19 @@ class FlowModule(L.LightningModule):
         self.log("loss/val", loss, prog_bar=True)
         return loss
 
+    @torch.no_grad()
     def interpolate_samples(self, batch):
         _meta, conditioning_inputs, target_samples = batch
         prior_samples = self.get_prior_samples(conditioning_inputs, target_samples.size())
-
+        # TODO: just sample 100x more and pair up with many to one target samples, sample as many t's.
         if self.ot_sampler is not None:
             # sample from optimal transport plan based on prior and target samples in minibatch
-            prior_samples, target_samples = self.ot_sampler.sample_plan(
-                prior_samples, target_samples, replace=self.ot_replace
-            )
-            # put back on correct device, because OT sampler may have moved them to cpu. TODO: verify on a gpu
-            # prior_samples = prior_samples.to(self.device)
-            # target_samples = target_samples.to(self.device)
+            pi = self.ot_sampler.get_map(prior_samples, x1=target_samples)
+            i, j = self.ot_sampler.sample_map(pi, prior_samples.shape[0], replace=self.ot_replace)
+            prior_samples = prior_samples[i]
+            target_samples = target_samples[j]
+            # Fix for conditioning inputs to match their respective target X
+            conditioning_inputs = {k: v[j] for k, v in conditioning_inputs.items()}
 
         # interpolate the probability path at t (making the example path)
         t = torch.rand(target_samples.size(0), device=self.device)

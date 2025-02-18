@@ -1,10 +1,11 @@
 features:
   - manual_optimization
   - batch_rematching
-  - pass_t_to_conditioning_input
+  - pass_t_to_conditioning_input  #  Makes sure flow t is also available in the conditioning input when sequentially conditioning
   - learning_rate_schedule
   - true_condition_concat
   - speed_monitor
+  - FIX_conditioning_input_matching
 
 epochs: 8000
 batch_size: 82
