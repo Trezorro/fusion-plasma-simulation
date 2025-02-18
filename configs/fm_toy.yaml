@@ -51,7 +51,7 @@ model:
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history'] # will affect architecture
-      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
+      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 2 # Default 3
       apex_hidden_channels: 64  # Default 128
