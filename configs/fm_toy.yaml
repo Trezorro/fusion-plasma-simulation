@@ -52,7 +52,7 @@ model:
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history'] # will affect architecture
-      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
+      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 2 # Default 3
       apex_hidden_channels: 64  # Default 128
@@ -61,7 +61,7 @@ model:
       time_embedding: sinusoidal  # default: sinusoidal, other: dummy
       ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
       is_attn: [false, false, false, false] # Default [false, false, false, false]
-      mid_attn: false # Default false
+      mid_attn: true # Default false
       attn_heads: 4  # Default 1
       n_blocks: 2 # Default 2. Number of residual blocks
       norm_groups: 0 # Default false
@@ -82,7 +82,7 @@ data:
   force_start: 11000
   random_start: false
   force_fixed_shot: null # int if you want to overfit on one data point or null
-  overfit_on_shots: [0, 1, 2, 3, 4]
+  overfit_on_shots: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 ]
   force_mean_zero: true
   time_last: true  # Sets the time dim as the last dim
   sample_rate: 10000
