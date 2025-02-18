@@ -138,14 +138,14 @@ class TrainStepMonitor(L.Callback):
         elapsed_time = (time.time() - self.start_time) / 60.0
         steps_per_minute = self.train_steps / elapsed_time if elapsed_time > 0 else 0
         samples_per_minute = self.samples_seen / elapsed_time if elapsed_time > 0 else 0
+        self.log("trainer/samples_seen", self.samples_seen, prog_bar=True)
+        self.log("trainer/samples_per_minute", samples_per_minute, prog_bar=True)
         self.log_dict(
             {
                 "trainer/steps": trainer.global_step,
-                "trainer/steps_per_minute": steps_per_minute,
-                "trainer/samples_per_minute": samples_per_minute,
                 "trainer/global_step": trainer.global_step,
-                "trainer/samples_seen": self.samples_seen,
-            }
+                "trainer/steps_per_minute": steps_per_minute,
+            },
         )
 
 

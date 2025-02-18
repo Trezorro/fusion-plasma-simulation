@@ -60,7 +60,7 @@ model:
       time_embedding: sinusoidal  # default: sinusoidal, other: dummy
       ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
       is_attn: [false, false, false, false] # Default [false, false, false, false]
-      mid_attn: false # Default false
+      mid_attn: true # Default false
       n_blocks: 2 # Default 2. Number of residual blocks
       norm_groups: 0 # Default false
       use1x1: false # Default false
