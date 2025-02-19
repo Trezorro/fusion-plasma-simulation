@@ -52,16 +52,16 @@ model:
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history'] # will affect architecture
-      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
+      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
-      input_channels: 5 # Default 3
+      input_channels: 2 # Default 3
       apex_hidden_channels: 64  # Default 128
       # activation: GELU  # Default GELU # TODO implement configurable activation
       time_embedding_channels: 128  # Default apex_hidden_channels * 4
       time_embedding: sinusoidal  # default: sinusoidal, other: dummy
       ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
       is_attn: [false, false, false, false] # Default [false, false, false, false]
-      mid_attn: true # Default false
+      mid_attn: false # Default false
       attn_heads: 4  # Default 1
       n_blocks: 2 # Default 2. Number of residual blocks
       norm_groups: 0 # Default false
@@ -82,7 +82,7 @@ data:
   force_start: 11000
   random_start: false
   force_fixed_shot: null # int if you want to overfit on one data point or null
-  overfit_on_shots: null  # list of ints or null
+  overfit_on_shots: [0, 1, 2, 3, 4]  # list of ints or null
   force_mean_zero: true
   time_last: true  # Sets the time dim as the last dim
   sample_rate: 10000
@@ -92,9 +92,9 @@ data:
     - time
     x: [
             # "FIR",  # density lijn Interferometer (not in my dataset)
-            "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
+            # "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
             "PD",  # photodiode lijn op de divertor
             "DML",  # Magnetische respons  correleert met de energie in het plasma
-            "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
-            "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
+            # "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
+            # "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
         ]
