@@ -64,7 +64,7 @@ model:
       mid_attn: true # Default false
       attn_heads: 4  # Default 1
       n_blocks: 2 # Default 2. Number of residual blocks
-      norm_groups: 1 # Default false
+      norm_groups: 4 # Default false
       use1x1: false # Default false
     loss: MSELoss
     optimizer_params:
