@@ -61,10 +61,10 @@ model:
       time_embedding: sinusoidal  # default: sinusoidal, other: dummy
       ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
       is_attn: [false, false, false, false] # Default [false, false, false, false]
-      mid_attn: false # Default false
+      mid_attn: true # Default false
       attn_heads: 4  # Default 1
       n_blocks: 2 # Default 2. Number of residual blocks
-      norm_groups: 0 # Default false
+      norm_groups: 1 # Default false
       use1x1: false # Default false
     loss: MSELoss
     optimizer_params:
@@ -82,7 +82,7 @@ data:
   force_start: 11000
   random_start: false
   force_fixed_shot: null # int if you want to overfit on one data point or null
-  overfit_on_shots: [0, 1, 2, 3, 4]  # list of ints or null
+  overfit_on_shots: null  # list of ints or null
   force_mean_zero: true
   time_last: true  # Sets the time dim as the last dim
   sample_rate: 10000

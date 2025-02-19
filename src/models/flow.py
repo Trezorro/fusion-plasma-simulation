@@ -146,7 +146,7 @@ class FlowModule(L.LightningModule):
             conditioning_inputs = {k: v[j] for k, v in conditioning_inputs.items()}
 
         # interpolate the probability path at t (making the example path)
-        t = torch.rand(target_samples.size(0), device=self.device)
+        t = torch.rand(target_samples.size(0), device=self.device)  # TODO add safety non 1.0. see cfm.
         # if self.warp_fn is not None: # TODO warp option
         #     t = self.warp_fn(t)
         t_broadcast = t.view(-1, 1, 1)
