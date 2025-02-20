@@ -264,7 +264,7 @@ class ShotFlowDS(data.Dataset):
         self.force_fixed_shot = force_fixed_shot
         self.overfit_on_shots = overfit_on_shots
         self.force_start = force_start
-        assert random_start is not True or force_start is None, "Cannot have random_start and force_start at the same time, unless random_start is a list of int options."
+        assert random_start is not True or not force_start, "Cannot have random_start and force_start at the same time, unless random_start is a list of int options."
 
         self.load_and_filter_data()
         self.normalize_columns()
@@ -321,7 +321,7 @@ class ShotFlowDS(data.Dataset):
             f"Shot {shot_number} is too short (T{shot_len}) for desired "
             f"seq_length {self.seq_length} and crop_margin {self.crop_margin}"
         )
-        if self.force_start is not None:
+        if self.force_start:
             start = self.force_start
             if isinstance(self.random_start, Sequence):
                 start += random.choice(self.random_start)
