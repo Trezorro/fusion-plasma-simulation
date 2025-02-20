@@ -11,7 +11,7 @@ from omegaconf import DictConfig
 from src.config import get_current_config
 from src.models.flow_nets import VelocityNet
 from src.models.unet_conditional import ConditionalUNet
-from torchcfm.optimal_transport import OTPlanSampler
+from src.optimal_transport import OTPlanSampler
 import src.metrics as metrics
 
 import logging
