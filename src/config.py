@@ -43,6 +43,8 @@ def load_config_from_file(name='main', as_omega=False) -> dict | omegaconf.DictC
         main_conf = OmegaConf.merge(main_conf, model_conf)
     cli_conf = OmegaConf.from_cli()
     conf: omegaconf.DictConfig = OmegaConf.merge(main_conf, cli_conf)
+    if 'data' in conf and 'cols' in conf.data and 'x' in conf.data.cols:
+        conf.model.params.model_params.input_channels = len(conf.data.cols.x)
     if as_omega:
         return conf
     conf = OmegaConf.to_object(conf)
