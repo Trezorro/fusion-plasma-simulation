@@ -2,7 +2,6 @@
 #SBATCH --job-name=sweepjob
 #SBATCH --output=output/slurms/agent-%j.out
 #SBATCH --gres=gpu:1
-#SBATCH --time=5-00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=64

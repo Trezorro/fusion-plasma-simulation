@@ -24,7 +24,7 @@
       {
         "label": "Run HPC Sweep Agent",
         "type": "shell",
-        "command": "bash src/HPC_setup/submit_snellius_sweep_agent.sh '${input:sweep_id}'",
+        "command": "bash src/HPC_setup/submit_HPC_sweep_agent.sh '${input:sweep_id}'",
         "problemMatcher": [
           "$python"
         ]
