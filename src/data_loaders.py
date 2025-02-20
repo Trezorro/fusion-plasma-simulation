@@ -273,7 +273,7 @@ class ShotFlowDS(data.Dataset):
         self.data = pd.read_parquet(self.file_path)
         # Reduce memory usage and quicker indexing:
         self.data['ShotNum'] = self.data['ShotNum'].astype(np.int32)
-
+        self.data = self.data.ffill()
         # Filter out shots that are too short, i.e. less than seq_length + 2 * crop_margin or less than seq_length + force_start
         if not self.force_fixed_shot:
             if self.force_start:
@@ -293,6 +293,15 @@ class ShotFlowDS(data.Dataset):
         self.min = self.data[self.columns_X].min()
         self.max = self.data[self.columns_X].max()
         self.data[self.columns_X] = (self.data[self.columns_X] - self.min) / (self.max - self.min)
+
+        # Summarize statistics per column
+        for column in self.data.columns:
+            col_data = self.data[column]
+            logger.info(
+                "Column '%-15s': min=%-11.4f max=%-11.4f mean=%-11.4f std=%-11.4f nans=%-10d", column,
+                col_data.min(), col_data.max(), col_data.mean(), col_data.std(),
+                col_data.isna().sum()
+            )
 
     def __len__(self):
         return len(self.shot_numbers)
@@ -352,4 +361,6 @@ class ShotFlowDS(data.Dataset):
         if self.force_mean_zero:
             x = x - window_mean  # either the history mean (if available) or the target window mean
             x = x / window_std
+        assert not np.isnan(x).any(
+        ), "NaNs found in the output window. Often casued by division by zero in normalization."
         return meta, conditioning_input, x  # prior, conditioning and X shapes: (variables, seq_length)
