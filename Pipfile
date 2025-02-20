@@ -23,9 +23,6 @@ numba = "<=0.58.1"  # numba 0.59.0 caused an import error in ydata-profiling
 torchinfo = "*"
 omegaconf = "*"
 lightning = "*"
-torchvision = "*"
-torchaudio = "*"
-torchcfm = "*"
 
 [dev-packages]
 jupyter = "*"
