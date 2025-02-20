@@ -66,7 +66,7 @@ ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     git checkout $GIT_BRANCH  # Switch to the main branch, incase we are detached
     git reset --hard origin/$GIT_BRANCH  # Reset local branch to match remote
     git pull origin $GIT_BRANCH
-    sbatch --job-name=$JOB_NAME -p $SLURM_PARTITION $JOB_SCRIPT $JOB_NAME
+    sbatch --job-name=$JOB_NAME -p $SLURM_PARTITION $JOB_SCRIPT $AGENT_TARGET
     echo "Submitted job '$JOB_NAME'. Checking queue status for partition '$SLURM_PARTITION':"
     squeue $QUEUE_FORMAT
 EOF
