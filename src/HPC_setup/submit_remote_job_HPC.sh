@@ -5,11 +5,20 @@ JOB_NAME=$1
 REMOTE_USER="TUE_s162507"
 REMOTE_HOST="datamininghpc.win.tue.nl"
 REPO_PATH="~/fusion-plasma-simulation"
-JOB_SCRIPT="run_job.sh"
+JOB_SCRIPT="run_HPC_job.sh"
 SLURM_PARTITION="zirconium"  # Adjust as needed
 GIT_BRANCH="main"  # Branch to pull from
 REMOTE_SLURM_DIR="TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms"
 LOCAL_HPC_PATH="output/hpc/"
+QUEUE_FORMAT="--format=\"%.10i %.80j %.8T %.5M %.5D %P %R\""
+
+sync_slurms() {
+    # Run rsync and capture the output
+    RSYNC_OUTPUT=$(rsync -avzv $REMOTE_SLURM_DIR $LOCAL_HPC_PATH)
+    # Filter and format the output
+    echo "Updated files:"
+    echo "$RSYNC_OUTPUT" | grep '\.out' | grep -v 'is uptodate' | awk -v LOCAL_HPC_PATH="$LOCAL_HPC_PATH" '{print LOCAL_HPC_PATH $1}'
+}
 
 # Check if a job name argument is provided
 if [ "$#" -ne 1 ] || [ -z "$1" ]; then
@@ -42,7 +51,6 @@ if [[ -n $LOCAL_COMMITS ]]; then
 fi
 
 # Tag the last commit with the job name
-# Tag the last commit with the job name
 if ! git tag -a "$JOB_NAME" -m "Job '$JOB_NAME' [$(date)]"; then
     echo "Error: Failed to tag the last commit."
     exit 1
@@ -53,29 +61,23 @@ git push origin "$JOB_NAME"
 # SSH into the main node, pull latest code, submit SLURM job, and inspect queue
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     cd $REPO_PATH
-    git fetch origin
+    git fetch origin    
+    git checkout $GIT_BRANCH  # Switch to the main branch, incase we are detached
     git reset --hard origin/$GIT_BRANCH  # Reset local branch to match remote
     git pull origin $GIT_BRANCH
     sbatch --job-name=$JOB_NAME -p $SLURM_PARTITION $JOB_SCRIPT $JOB_NAME
     echo "Submitted job '$JOB_NAME'. Checking queue status for partition '$SLURM_PARTITION':"
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 
 echo "Code updated, SLURM job '$JOB_NAME' submitted, and Git tag '$JOB_NAME' created. :D"
 
-sync_slurms() {
-    # Run rsync and capture the output
-    RSYNC_OUTPUT=$(rsync -avzv $REMOTE_SLURM_DIR $LOCAL_HPC_PATH)
-    # Filter and format the output
-    echo "Updated files:"
-    echo "$RSYNC_OUTPUT" | grep '\.out' | grep -v 'is uptodate' | awk -v LOCAL_HPC_PATH="$LOCAL_HPC_PATH" '{print LOCAL_HPC_PATH $1}'
-}
 
 sleep 1
 echo "Syncing results from HPC in 10 seconds..."
 sleep 10
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 echo "-----------------------------------------------------------"
 sync_slurms
@@ -84,7 +86,7 @@ echo "-----------------------------------------------------------"
 echo "Syncing results from HPC in 10 seconds..."
 sleep 10
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 echo "-----------------------------------------------------------"
 sync_slurms
@@ -92,7 +94,7 @@ echo "-----------------------------------------------------------"
 echo "Syncing results from HPC in 10 seconds..."
 sleep 10
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 echo "-----------------------------------------------------------"
 sync_slurms
@@ -100,7 +102,7 @@ echo "-----------------------------------------------------------"
 echo "Syncing results from HPC in 30 seconds..."
 sleep 30
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 echo "-----------------------------------------------------------"
 sync_slurms
@@ -109,7 +111,7 @@ echo "-----------------------------------------------------------"
 echo "Syncing results from HPC in 1 minute..."
 sleep 60
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 echo "-----------------------------------------------------------"
 sync_slurms
@@ -119,7 +121,7 @@ echo "-----------------------------------------------------------"
 echo "Syncing results from HPC in 2 minutes..."
 sleep 120
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
-    squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.8R"
+    squeue $QUEUE_FORMAT
 EOF
 echo "-----------------------------------------------------------"
 sync_slurms

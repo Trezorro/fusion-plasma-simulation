@@ -14,9 +14,17 @@
         "command": "bash src/HPC_setup/submit_remote_job_snellius.sh '${input:run_name}'"
       },
       {
-        "label": "Run HPC Cluster Experiment",
+        "label": "Run HPC Experiment",
         "type": "shell",
-        "command": "bash src/HPC_setup/submit_remote_job.sh '${input:run_name}'",
+        "command": "bash src/HPC_setup/submit_remote_job_HPC.sh '${input:run_name}'",
+        "problemMatcher": [
+          "$python"
+        ]
+      },
+      {
+        "label": "Run HPC Sweep Agent",
+        "type": "shell",
+        "command": "bash src/HPC_setup/submit_snellius_sweep_agent.sh '${input:sweep_id}'",
         "problemMatcher": [
           "$python"
         ]
@@ -33,6 +41,12 @@
       "id": "run_name",
       "type": "promptString",
        "description": "What is the experiment run name?",
+      // type specific configuration attributes
+    },
+    {
+      "id": "sweep_id",
+      "type": "promptString",
+       "description": "What is the sweep ID to link the agent to?",
       // type specific configuration attributes
     }
 ]
