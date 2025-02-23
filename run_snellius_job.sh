@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=snelliustestgpu
-#SBATCH --output=output/slurms/job-%j-%x.out
-#SBATCH --error=output/slurms/job-%j-%x.out
+#SBATCH --output=output/slurms/gpujob-%j-%x.out
+#SBATCH --error=output/slurms/gpujob-%j-%x.out
 #SBATCH --partition=gpu_mig
 #SBATCH --reservation=terv92681
 #SBATCH --time=300:00

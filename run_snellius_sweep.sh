@@ -1,8 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=sweepjobGPU
-#SBATCH --output=output/slurms/agent-%A_%a.out
-#SBATCH --error=output/slurms/agent-%A_%a.out
+#SBATCH --output=output/slurms/agent-%A_%a_GPU.out
+#SBATCH --error=output/slurms/agent-%A_%a_GPU.out
 #SBATCH --partition=gpu_mig
+#SBATCH --reservation=terv92681
 #SBATCH --time=300:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

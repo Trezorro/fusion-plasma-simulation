@@ -28,8 +28,8 @@ sync_slurms() {
 }
 
 # Check if a job name argument is provided
-if [ "$#" -ne 1 ] || [ -z "$1" ]; then
-    echo "To submit a new job, use: $0 <job_name>"
+if [ "$#" -lt 1 ] || [ -z "$1" ]; then
+    echo "To submit a new job, use: $0 <job_name> [CPU]"
     echo "Will check the queue and sync results from snellius."
     # SSH into the main node, check the queue status, and run rsync
     sync_slurms

@@ -62,8 +62,8 @@
       "type": "pickString",
       "description": "Do you want to use the CPU?",
       "options": [
-        "CPU",
-        "no"
+        "No, GPU!",
+        "CPU"
       ],
     }
 ]

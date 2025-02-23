@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=sweepjob_cpu
-#SBATCH --output=output/slurms/agent-%A_%a.out
-#SBATCH --error=output/slurms/agent-%A_%a.out
+#SBATCH --output=output/slurms/agent-%A_%a_CPU.out
+#SBATCH --error=output/slurms/agent-%A_%a_CPU.out
 #SBATCH --partition=thin
 #SBATCH --time=600:00
 #SBATCH --nodes=1
