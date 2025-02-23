@@ -1,22 +1,23 @@
 #!/bin/bash
-#SBATCH --job-name=snelliustestgpu
-#SBATCH --output=output/slurms/job-%j-%x.out
-#SBATCH --error=output/slurms/job-%j-%x.out
-#SBATCH --partition=gpu_mig
-#SBATCH --reservation=terv92681
-#SBATCH --time=300:00
+#SBATCH --job-name=sweepjob_cpu
+#SBATCH --output=output/slurms/agent-%A_%a.out
+#SBATCH --error=output/slurms/agent-%A_%a.out
+#SBATCH --partition=thin
+#SBATCH --time=600:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=9
-#SBATCH --gpus=1
+#SBATCH --cpus-per-task=16
+#SBATCH --gpus=0
+#SBATCH --array=1-20
 #SBATCH --ear=on
 #SBATCH --ear-policy=monitoring
 #SBATCH --ear-verbose=1
 
 echo "==============================="
 echo $(date)
+echo "(CPU job)"
 echo "-------------------------------"
-echo $1
+echo Run agent to $1
 echo "==============================="
 echo
 echo "Job script $0"
@@ -24,6 +25,9 @@ echo "Current working directory:"
 pwd
 echo
 echo "-------------------------------"
+
+echo "Job array index: $SLURM_ARRAY_TASK_ID"
+echo "Job array ID: $SLURM_ARRAY_JOB_ID"
 
 echo "Loading modules..."
 # Load necessary modules (adjust based on your environment)
@@ -44,13 +48,12 @@ echo "Version: $(python --version 2>&1)"
 
 
 # Export wandb env variable
-git checkout tags/$1
 export WANDB_DIR="~/fusion-plasma-simulation/output"
-export WANDB_NOTES=$(git log -n 5 --pretty=format:"%B (%h - %ar) %N")
+export WANDB_NOTES=$(git log -n 10 --pretty=format:"%B (%h - %ar) %N")
 
 # Run the Python script
 echo "---------------- JOB START ----------------"
-srun python run.py run_name=$1
+srun wandb agent --count 1 $1
 
 # srun wandb agent deep-learning-course-team/plasma/96sckgvi
 # Deactivate the conda environment

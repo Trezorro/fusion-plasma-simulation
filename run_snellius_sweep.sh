@@ -1,15 +1,17 @@
 #!/bin/bash
-#SBATCH --job-name=sweepjob
+#SBATCH --job-name=sweepjobGPU
 #SBATCH --output=output/slurms/agent-%A_%a.out
 #SBATCH --error=output/slurms/agent-%A_%a.out
 #SBATCH --partition=gpu_mig
-#SBATCH --time=250:00
+#SBATCH --time=300:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=5
+#SBATCH --cpus-per-task=9
 #SBATCH --gpus=1
-#SBATCH --array=1-40
-
+#SBATCH --array=1-20
+#SBATCH --ear=on
+#SBATCH --ear-policy=monitoring
+#SBATCH --ear-verbose=1
 
 echo "==============================="
 echo $(date)
@@ -46,7 +48,7 @@ echo "Version: $(python --version 2>&1)"
 
 # Export wandb env variable
 export WANDB_DIR="~/fusion-plasma-simulation/output"
-export WANDB_NOTES=$(git log -n 5 --pretty=format:"%B (%h - %ar) %N")
+export WANDB_NOTES=$(git log -n 10 --pretty=format:"%B (%h - %ar) %N")
 
 # Run the Python script
 echo "---------------- JOB START ----------------"
