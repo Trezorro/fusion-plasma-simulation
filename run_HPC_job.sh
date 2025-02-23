@@ -45,7 +45,7 @@ echo "Python executable path:"
 which python
 echo "Version: $(python --version 2>&1)"
 
-
+git checkout tags/$1
 
 # Export wandb env variable
 export WANDB_DIR="/home/TUE/s162507/fusion-plasma-simulation/output"
