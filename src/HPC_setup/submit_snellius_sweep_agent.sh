@@ -7,7 +7,7 @@ JOB_SCRIPT="run_snellius_sweep.sh"
 # Check if the second argument exists and is "CPU"
 if [ "$#" -ge 2 ] && [ "$2" == "CPU" ]; then
     CPU_JOB=true
-    JOB_NAME="SWEEP_CPU_$1"
+    JOB_NAME="SNELSWEEP_CPU_$1"
     JOB_SCRIPT="run_snellius_sweep_CPU.sh"
 fi
 AGENT_TARGET=$1

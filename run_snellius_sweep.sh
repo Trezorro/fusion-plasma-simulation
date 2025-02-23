@@ -17,6 +17,7 @@ echo "==============================="
 echo $(date)
 echo "-------------------------------"
 echo Run agent to $1
+echo "(GPU job)"
 echo "==============================="
 echo
 echo "Job script $0"

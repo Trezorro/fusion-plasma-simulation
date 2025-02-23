@@ -15,9 +15,9 @@
 
 echo "==============================="
 echo $(date)
-echo "(CPU job)"
 echo "-------------------------------"
 echo Run agent to $1
+echo "(CPU job)"
 echo "==============================="
 echo
 echo "Job script $0"
