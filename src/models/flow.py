@@ -52,7 +52,7 @@ class FlowModule(L.LightningModule):
         **kwargs: Any
     ):
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(logger=False)
         self.optimizer_params = optimizer_params or dict()  # type: ignore
         if model_params is None:
             model_params = dict()

@@ -139,7 +139,7 @@ class EncoderDecoder(L.LightningModule):
         input_length=None,
     ):
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(logger=False)
         self.loss = getattr(torch.nn, loss)()
         self.encoder = ConvEncoder(
             input_length=input_length,  # Not used yet, but could be useful for debugging

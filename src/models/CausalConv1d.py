@@ -157,7 +157,7 @@ class AutoRegressiveModel(L.LightningModule):
                  loss="MSELoss",
                  **kwargs):
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(logger=False)
         self.out_channels = out_channels
         self.train_rollout = train_rollout
         self.val_rollout = validation_rollout
