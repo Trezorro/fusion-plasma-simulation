@@ -24,7 +24,15 @@
       {
         "label": "Submit HPC Sweep Agent",
         "type": "shell",
-        "command": "bash src/HPC_setup/submit_HPC_sweep_agent.sh '${input:sweep_id}'",
+        "command": "bash src/HPC_setup/submit_HPC_sweep_agent.sh '${input:sweep_id}' '${input:use_cpu}'",
+        "problemMatcher": [
+          "$python"
+        ]
+      },
+      {
+        "label": "Submit Snellius Sweep Agent",
+        "type": "shell",
+        "command": "bash src/HPC_setup/submit_snellius_sweep_agent.sh '${input:sweep_id}' '${input:use_cpu}'",
         "problemMatcher": [
           "$python"
         ]
@@ -48,6 +56,15 @@
       "type": "promptString",
        "description": "What is the sweep ID to link the agent to?",
       // type specific configuration attributes
+    },
+    {
+      "id": "use_cpu",
+      "type": "pickString",
+      "description": "Do you want to use the CPU?",
+      "options": [
+        "CPU",
+        "no"
+      ],
     }
 ]
 }

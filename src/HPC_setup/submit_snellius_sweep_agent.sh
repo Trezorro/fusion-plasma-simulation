@@ -1,12 +1,19 @@
 #!/bin/bash
 
 # Variables
-JOB_NAME="SWEEP_$1"
+CPU_JOB=false
+JOB_NAME="SNELSWEEP_$1"
+JOB_SCRIPT="run_snellius_sweep.sh"
+# Check if the second argument exists and is "CPU"
+if [ "$#" -ge 2 ] && [ "$2" == "CPU" ]; then
+    CPU_JOB=true
+    JOB_NAME="SWEEP_CPU_$1"
+    JOB_SCRIPT="run_snellius_sweep_CPU.sh"
+fi
 AGENT_TARGET=$1
 REMOTE_USER="mtresoor"
 REMOTE_HOST="snellius.surf.nl"
 REPO_PATH="~/fusion-plasma-simulation"
-JOB_SCRIPT="run_snellius_sweep.sh"
 GIT_BRANCH="main"  # Branch to pull from
 REMOTE_SLURM_DIR="$REMOTE_USER@$REMOTE_HOST:/home/$REMOTE_USER/fusion-plasma-simulation/output/slurms"
 LOCAL_HPC_PATH="output/snellius/"
@@ -42,11 +49,12 @@ fi
 # Tag the last commit with the job name
 if ! git tag -a "$JOB_NAME" -m "Job '$JOB_NAME' [$(date)]"; then
     echo "Error: Failed to tag the last commit."
-    exit 1
+    # exit 0
 fi
 
 git push origin "$JOB_NAME"
 
+############################################  Main Action  ############################################
 # SSH into the main node, pull latest code, submit SLURM job, and inspect queue
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     cd $REPO_PATH

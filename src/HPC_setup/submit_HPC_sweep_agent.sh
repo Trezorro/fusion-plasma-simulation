@@ -7,7 +7,7 @@ REMOTE_USER="TUE_s162507"
 REMOTE_HOST="datamininghpc.win.tue.nl"
 REPO_PATH="~/fusion-plasma-simulation"
 JOB_SCRIPT="run_HPC_sweep.sh"
-SLURM_PARTITION="zirconium"  # Adjust as needed
+SLURM_PARTITION="calcium"  # Adjust as needed
 GIT_BRANCH="main"  # Branch to pull from
 REMOTE_SLURM_DIR="TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output/slurms"
 LOCAL_HPC_PATH="output/hpc/"
@@ -54,7 +54,7 @@ fi
 # Tag the last commit with the job name
 if ! git tag -a "$JOB_NAME" -m "Job '$JOB_NAME' [$(date)]"; then
     echo "Error: Failed to tag the last commit."
-    exit 1
+    # exit 0
 fi
 
 git push origin "$JOB_NAME"
@@ -62,7 +62,7 @@ git push origin "$JOB_NAME"
 # SSH into the main node, pull latest code, submit SLURM job, and inspect queue
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     cd $REPO_PATH
-    git fetch origin    
+    git fetch origin
     git checkout $GIT_BRANCH  # Switch to the main branch, incase we are detached
     git reset --hard origin/$GIT_BRANCH  # Reset local branch to match remote
     git pull origin $GIT_BRANCH
