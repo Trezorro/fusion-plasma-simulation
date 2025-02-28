@@ -1,5 +1,5 @@
 program: run.py
-name: BigConditioningSweep
+name: PosEncodings
 method: random
 metric:
   goal: minimize
@@ -12,9 +12,9 @@ parameters:
   batch_size:
     values: [64, 96, 128]
   data.seq_length:
-    values: [128, 256, 512, 1024]
+    values: [128, 256]
   data.crop_margin:
-    values: [1000, 2000, 4000, 8000]
+    values: [1000, 8000]
   data.cols.x:
     values: 
       - [ "FIR_core", "PD", "DML", "POHM", "Z_axis"]
@@ -26,12 +26,24 @@ parameters:
     values: [true, false]
   model.params.model_params.is_attn:
     values: [[true, true, true, true], [false, false, false, false],  [true, false, false, false], [true, true, false, false]]
+  model.params.model_params.apex_hidden_channels:
+    values: [64, 128]
   model.params.model_params.attn_heads:
     values: [1, 2, 4]
   model.params.model_params.norm_groups:
-    values: [0, 1, 4, 8]
+    values: [1, 4]
   model.params.batch_rematch_factor:
-    values: [1, 12, 32]
+    values: [32, 64]
+  model.params.model_params.time_embedding:
+    values: ['sinusoidal', 'sinusoidal', 'sinusoidal', 'sinusoidal+mlp', 'sinusoidal+mlp', 'dummy']
+  model.params.model_params.time_embedding_d:
+    values: [8, 32, 64]
+  model.params.model_params.positional_encoding:
+    values: ['sinusoidal', 'sinusoidal', 'sinusoidal', 'sinusoidal+mlp','sinusoidal+mlp', 'dummy']
+  model.params.model_params.positional_encoding_d:
+    values: [8, 32, 64]
+  model.params.model_params.positional_encoding_c:
+    values: [4, 16, 64, 128]
 
 command:
   - ${env}

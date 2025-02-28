@@ -37,7 +37,7 @@ from torch import nn
 from torch.nn import functional as F
 import numpy as np
 
-from src.models.time_embeddings import TimeEmbedding, DummyTimeEmbedding
+from src.models.time_embeddings import TimeEmbedding, DummyTimeEmbedding, build_time_embedder
 from src.models.activations import ACTIVATION_OPTIONS
 
 logger = logging.getLogger(__name__)
@@ -68,8 +68,11 @@ class ConditionalUNet(nn.Module):
         input_channels: int = 3,
         spatial_dim: int = 1,  # 2 for images, 1 for time series
         apex_hidden_channels: int = 64,
-        time_embedding_channels: Optional[int] = None,
-        time_embedding: str = "sinusoidal",
+        time_embedding: str = "sinusoidal+mlp",
+        time_embedding_d: int = 32,
+        positional_encoding: Optional[str] = "sinusoidal",
+        positional_encoding_d: int = 32,
+        positional_encoding_c: int = 32,
         ch_mults: Union[Tuple[int, ...], List[int]] = (1, 2, 2, 4),
         is_attn: Tuple[bool, ...] = (False, False, False, False),
         mid_attn: bool = False,
@@ -97,32 +100,49 @@ class ConditionalUNet(nn.Module):
         self.conditioning = conditioning
         self.use_x_history = "x_history" in conditioning
         self.conditioning_method = conditioning_method
+        self.time_emb = build_time_embedder(
+            time_embedding,
+            d=time_embedding_d,
+            max_value=1.0,
+            suggested_projection_dim=apex_hidden_channels * 4
+        )
+        # Dynamically determined in the factory function based on the time_embedding string:
+        self.time_emb_channels = self.time_emb.output_dim
+        if positional_encoding is not None and positional_encoding:
+            self.use_positional_embedding = True
+            self.pos_emb = build_time_embedder(
+                positional_encoding,
+                d=positional_encoding_d,
+                max_value=2.0,
+                suggested_projection_dim=positional_encoding_c
+            )
+            positional_encoding_channels = self.pos_emb.output_dim
+        else:
+            self.use_positional_embedding = False
+            positional_encoding_channels = 0
 
-        # Number of resolutions
-        n_resolutions = len(ch_mults)
-        # Time embedding layer. Time embedding has `n_channels * 4` channels
-        if time_embedding_channels is None:
-            time_embedding_channels = apex_hidden_channels * 4
-        self.time_emb = self.TIME_EMBEDDING_CLASSES[time_embedding](time_embedding_channels)
-
-        self.act = ACTIVATION_OPTIONS[activation]()
-        self.ConvLayer = CONV_LAYERS[spatial_dim]
-        # Project image into feature map
+        # Figure out the channels of the inital forward input to the U-Net
         # If conditioning, add a dummy channel to signal the presence of conditioning or previous input.
         if self.use_x_history:
             if conditioning_method == "sequence":
-                in_channels = input_channels + 1
+                in_channels = input_channels + 1 + positional_encoding_channels  # +1 for conditioning signal channel
             elif conditioning_method == "channels":
-                in_channels = input_channels * 2
-            else:
-                in_channels = input_channels
+                in_channels = (
+                    input_channels + positional_encoding_channels
+                ) * 2  # TODO: diagram of this spekkoek structure
+            else:  # mid sequence
+                in_channels = input_channels  # TODO: support: + positional_encoding_c for mid-sequence
+        # TODO: concat positional encoding also when not using x_history, condition only on position then.
+        self.act = ACTIVATION_OPTIONS[activation]()
+        self.ConvLayer = CONV_LAYERS[spatial_dim]
+        # Project image into feature map
         self.image_proj = self.ConvLayer(in_channels, apex_hidden_channels, kernel_size=3, padding=1)
 
         # #### First half of U-Net - decreasing resolution
         down = []
-        # Number of channels
         in_channels = apex_hidden_channels
         # For each resolution
+        n_resolutions = len(ch_mults)
         for i in range(n_resolutions):
             # Number of output channels at this resolution
             out_channels = in_channels * ch_mults[i]
@@ -132,7 +152,7 @@ class ConditionalUNet(nn.Module):
                     DownBlock(
                         in_channels,
                         out_channels,
-                        time_embedding_channels,
+                        self.time_emb_channels,
                         is_attn[i],
                         attn_heads=attn_heads,
                         act=self.act,
@@ -151,7 +171,7 @@ class ConditionalUNet(nn.Module):
         # Middle block
         self.middle = MiddleBlock(
             out_channels,
-            time_embedding_channels,
+            self.time_emb_channels,
             has_attn=mid_attn,
             act=self.act,
             norm_groups=norm_groups,
@@ -172,7 +192,7 @@ class ConditionalUNet(nn.Module):
                     UpBlock(
                         in_channels,
                         out_channels,
-                        time_embedding_channels,
+                        self.time_emb_channels,
                         is_attn[i],
                         act=self.act,
                         norm_groups=norm_groups,
@@ -186,7 +206,7 @@ class ConditionalUNet(nn.Module):
                 UpBlock(
                     in_channels,
                     out_channels,  # out channels should also match the skip connection channels
-                    time_embedding_channels,
+                    self.time_emb_channels,
                     is_attn[i],
                     act=self.act,
                     norm_groups=norm_groups,
@@ -218,9 +238,17 @@ class ConditionalUNet(nn.Module):
         t: torch.Tensor,
         conditioning_input: Optional[dict[str, torch.Tensor]] = None
     ) -> torch.Tensor:
-        """
-        * `x` has shape `[batch_size, in_channels, *spatial dim (HxW | L)]`
-        * `t` has shape `[batch_size]` or scalar
+        """Forward pass
+
+        Args:
+            x (torch.Tensor): Input tensor of X sensors.
+              Shape `[batch_size, in_channels, *spatial dim (HxW | L)]`
+            t (torch.Tensor): Flow time step scalars, will be embedded. 
+              Shape `[batch_size]` or scalar that will be broadcast.
+                
+            conditioning_input (Optional[dict[str, torch.Tensor]], optional): Dictionary of conditioning inputs.
+                Defaults to None. If `use_x_history` is True, it should contain `x_history` tensor. May also contain
+                positional sequence which will be embedded.
         """
         assert x.dim() == 2 + self.spatial_dim, (
             f"Expected batch, channel plus configured spacial dims, but got {x.dim()}"
@@ -230,14 +258,13 @@ class ConditionalUNet(nn.Module):
         x_hist_emb = None  # Placeholder for x_history embeddings WIP
         # Get image projection
         if conditioning_input and self.use_x_history:
-            # Add x_history as a condition
-            x_history = conditioning_input["x_history"]
             if self.conditioning_method == "sequence":
-                x = self.condition_sequentially(x_history, x)
+                x = self.condition_sequentially(conditioning_input, x)
             elif self.conditioning_method == "channels":
-                x = self.condition_channel_wise(x_history, x)
+                x = self.condition_channel_wise(conditioning_input, x)
             elif self.conditioning_method == "mid-sequence":  # shared weights TODO implement unshared
-                x_hist_emb = self.image_proj(x_history)
+                # TODO: support positional encoding for mid-sequence. Concat it to x_history
+                x_hist_emb = self.image_proj(conditioning_input["x_history"])
 
         x = self.image_proj(x)  # Project input to hidden channels
         t = self.time_emb(t)  # Get flow time embeddings
@@ -282,28 +309,61 @@ class ConditionalUNet(nn.Module):
         x = self._crop_right(x, x_in_shape)  # crop spatial dim to match features
         return x
 
-    def condition_sequentially(self, x_history, x):
+    def condition_sequentially(self, conditioning_input, x):
+        """Concatenate x_history to x sequentially, so that the history is to the left, continuing to the
+        forecast window.
+        """
         n, c, seq_length = x.shape
+        x_history = conditioning_input["x_history"]
         double_length = x_history.shape[-1] + seq_length
         cond_signal = torch.ones(n, 1, double_length, device=self.device)
         cond_signal[:, :, -seq_length:] = 0  # signal for current input
         x = torch.cat((x_history, x), dim=2)
         x = torch.cat((x, cond_signal), dim=1)
+        if self.use_positional_embedding:
+            position_sequence = conditioning_input.get("position_sequence")  # [batch_size, full_seq_length]
+            pos_n, pos_seq_length = position_sequence.shape
+            assert pos_seq_length == double_length, (
+                f"Position sequence length {pos_seq_length} does not match conditioned sequence length {double_length}"
+            )
+            assert pos_n == n  # TODO: remove this when we have a proper test
+            position_embedding = self.pos_emb(
+                position_sequence
+            )  # batch_size, full_lenght, positional_encoding_c
+            position_embedding = position_embedding.permute(
+                0, 2, 1
+            )  # batch_size, positional_encoding_c, full_length
+            x = torch.cat((x, position_embedding), dim=1)
         return x
 
-    def condition_channel_wise(self, x_history, x):
+    def condition_channel_wise(self, conditioning_input, x):
+        x_history = conditioning_input["x_history"]
         n, c, seq_length = x.shape
         history_length = x_history.shape[-1]
+        if self.use_positional_embedding:
+            position_sequence = conditioning_input.get("position_sequence")  # [batch_size, full_seq_length]
+            pos_n, pos_seq_length = position_sequence.shape
+            assert pos_seq_length == history_length + seq_length
+            assert pos_n == n  # TODO: remove this when we have a proper test
+            position_embedding = self.pos_emb(
+                position_sequence
+            )  # batch_size, full_lenght, positional_encoding_c
+            position_embedding = position_embedding.permute(
+                0, 2, 1
+            )  # batch_size, positional_encoding_c, full_length
+            x = torch.cat((x, position_embedding[:, :, -seq_length:]), dim=1)
+            x_history = torch.cat((x_history, position_embedding[:, :, :history_length]), dim=1)
         if history_length > seq_length:
             # if history is longer, pad the input on the left, so most relevant information is on the right
             padding_difference = history_length - seq_length
             x = F.pad(x, (padding_difference, 0))
+            seq_length = history_length  # modify for positional embedding
         elif seq_length > history_length:
             # if input is longer, pad the history on the left, so most relevant information is on the right
             padding_difference = seq_length - history_length
             x_history = F.pad(x_history, (padding_difference, 0))
-
         x = torch.cat((x_history, x), dim=1)
+
         return x
 
     def _crop_Nd(

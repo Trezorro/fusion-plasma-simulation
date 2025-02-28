@@ -240,8 +240,7 @@ class ShotFlowDS(data.Dataset):
         cols: DictConfig,
         seq_length=200,
         crop_margin=1000,
-        history_length: Optional[int] = 0,
-        time_last=True,
+        history_length: Optional[int] = 0,  # 0 or None, when no history conditioning is used.
         random_start: bool | list[int] = True,
         force_mean_zero=False,
         force_fixed_shot: Optional[int] = None,
@@ -341,7 +340,7 @@ class ShotFlowDS(data.Dataset):
             'end': shot_data.index[end],
         }
         conditioning_input = {}
-        if self.history_length:
+        if self.history_length:  # if we are conditioning on X history
             history_start = start - self.history_length
             history_end = start
             assert history_start >= 0, "Not enough history data available."
@@ -354,10 +353,14 @@ class ShotFlowDS(data.Dataset):
                 x_history = x_history - window_mean
                 x_history = x_history / window_std
             conditioning_input['x_history'] = x_history
+            conditioning_input['position_sequence'] = shot_data.index[history_start:end].values.astype(
+                np.float32
+            )
             meta['history_start'] = shot_data.index[history_start]
         else:
             window_mean = x.mean(axis=1, keepdims=True)
             window_std = x.std(axis=1, keepdims=True)
+            conditioning_input['position_sequence'] = shot_data.index[start:end].values.astype(np.float32)
         if self.force_mean_zero:
             x = x - window_mean  # either the history mean (if available) or the target window mean
             x = x / window_std

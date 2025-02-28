@@ -16,7 +16,7 @@
             "args": [
                 "epochs=6",
                 "skip_log_summary=True",
-                "evaluation.plot_functions=null",
+                // "evaluation.plot_functions=null",
                 "evaluation.n_steps=4",
                 // "data.seq_length=64",
                 "batch_size=16"
