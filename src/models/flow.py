@@ -344,7 +344,8 @@ class FlowModule(L.LightningModule):
                         (
                             config.batch_size, config.model.params.model_params.input_channels,
                             config.data.seq_length
-                        )
+                        ),
+                    'position_sequence': (config.batch_size, config.data.seq_length * 2)
                 }
             ), torch.float32, self.device
         )
