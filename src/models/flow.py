@@ -36,6 +36,7 @@ class FlowModule(L.LightningModule):
         # UNetModern=UNetModern,
         ConditionalUNet=ConditionalUNet,
     )
+    SAMPLE_RATE = 10_000  # Hz
 
     def __init__(
         self,
@@ -68,6 +69,7 @@ class FlowModule(L.LightningModule):
         self.step_every_nth_match = step_every_nth_match or batch_rematch_factor
         self._validate_configuration()
         self.automatic_optimization = False
+        self.register_buffer("sqrt_dt", torch.sqrt(torch.tensor(1 / self.SAMPLE_RATE)))
 
     def _validate_configuration(self):
         assert self.batch_rematch_factor > 0 and type(
@@ -83,7 +85,7 @@ class FlowModule(L.LightningModule):
             self.batch_rematch_factor, self.step_every_nth_match,
             self.batch_rematch_factor // self.step_every_nth_match
         )
-        assert self.prior in ["normal", "copy"], f"Invalid prior: {self.prior}"
+        assert self.prior in ["normal", "copy", "brownian"], f"Invalid prior: {self.prior}"
         assert (
             self.prior == "normal" or self.ot_method is None
         ), "OT sampling only supported with fully random prior"
@@ -158,17 +160,41 @@ class FlowModule(L.LightningModule):
         assert type(target_size) == torch.Size and 2 <= len(
             target_size
         ) <= 5, "target_size must be a torch.Size with 2-5 dimensions"
+        seq_length = target_size[2]
         match self.prior:
             case "normal":
                 prior_samples = torch.randn(target_size, device=self.device)
             case "copy":
                 assert 'x_history' in conditioning_inputs, "x_history must be in conditioning for prior='copy'"
                 # in case the x_history is longer than the target_samples, crop to seq_length
-                seq_length = target_size[2]
                 prior_samples = conditioning_inputs['x_history'][:, :, -seq_length:].to(self.device)
+            case "brownian":
+                x_last = conditioning_inputs['x_history'][:, :, -1]
+                prior_samples = self.generate_brownian_motion(x_last, seq_length)
             case _:
                 raise ValueError(f"Invalid prior: {self.prior}")
         return prior_samples
+
+    def generate_brownian_motion(self, x_last, seq_length):
+        """Generate a Brownian motion trajectory with fixed dt = 1/10000.
+
+        Brownian motion follows the stochastic differential equation:
+        dx_t = dB_t,
+            where B_t is a standard Brownian motion with independent Gaussian increments:
+            x_{t+dt} = x_t + \\sqrt{dt} * \\xi,  \\xi \\sim \\mathcal{N}(0,1).
+        
+        Parameters:
+        x_last (torch.Tensor): Initial positions of shape (N, C), where N = batch size, C = number of channels.
+        seq_length (int): Number of time steps in the sequence.
+        device (str): Device to run computations on ("cpu" or "cuda").
+        
+        Returns:
+        torch.Tensor: Brownian motion trajectory of shape (N, C, seq_length).
+        """
+        N, C = x_last.shape
+        dB = self.sqrt_dt * torch.randn((N, C, seq_length), device=self.device)
+        x_t = x_last.unsqueeze(-1) + torch.cumsum(dB, dim=-1)
+        return x_t
 
     test_step = validation_step
 
@@ -176,6 +202,7 @@ class FlowModule(L.LightningModule):
     def evaluate(self, batch: tuple[dict, dict, torch.Tensor], n_steps=50, warp_fn=None, to_cpu=True):
         # TODO: may add matching, and (pred) velocity to the output  to debug and plot a training step.
         self.model.eval()
+        # Use lightnings manner of moving to correct current device:
         meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch)
         prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
         generated_samples, trajectories = self.integrate_path(

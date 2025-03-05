@@ -43,8 +43,8 @@ evaluation:
 model: 
   Class: FlowModule
   params:
-    prior: 'normal'  # normal, copy
-    ot_method: 'exact'  # null to disable
+    prior: 'brownian'  # normal, copy, brownian
+    ot_method: null  # null to disable
     ot_replace: true  # Default false
     batch_rematch_factor: 64  # Default 1
     step_every_nth_match: 1  # Default 1 # TODO
@@ -52,7 +52,7 @@ model:
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history'] # will affect architecture
-      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
+      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 5 # Default 3
       apex_hidden_channels: 64  # Default 128
