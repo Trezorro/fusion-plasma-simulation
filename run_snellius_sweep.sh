@@ -9,7 +9,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
 #SBATCH --gpus=1
-#SBATCH --array=1-20
+#SBATCH --array=1-40
 #SBATCH --ear=on
 #SBATCH --ear-policy=monitoring
 #SBATCH --ear-verbose=1

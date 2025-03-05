@@ -51,7 +51,7 @@ model:
     gradient_clip_val: ${ gradient_clip_val }
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
-      conditioning: ['x_history'] # will affect architecture
+      conditioning: ['x_history'] # TODO will affect architecture
       conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 5 # Default 3
@@ -74,7 +74,28 @@ model:
       lr: 0.0001
       weight_decay: 0  # Default 0
       amsgrad: false  # Default false
-    
+
+# Shorthands for important parameters for wandb
+Prior: ${ model.params.prior }
+Ot_method: ${ model.params.ot_method }
+Cond_dim: ${ model.params.model_params.conditioning_method }
+Channels: ${ model.params.model_params.input_channels }
+Apex_channels: ${ model.params.model_params.apex_hidden_channels }
+T_embedding: ${ model.params.model_params.time_embedding }
+T_emb_d: ${ model.params.model_params.time_embedding_d }
+Pos_encoding: ${ model.params.model_params.positional_encoding }
+Pos_enc_d: ${ model.params.model_params.positional_encoding_d }
+Pos_enc_c: ${ model.params.model_params.positional_encoding_c }
+Attn: ${ model.params.model_params.is_attn }
+Mid_attn: ${ model.params.model_params.mid_attn }
+Attn_heads: ${ model.params.model_params.attn_heads }
+Norm_groups: ${ model.params.model_params.norm_groups }
+Seq_L: ${ data.seq_length }
+Crop: ${ data.crop_margin }
+Cols: ${ data.cols.x }
+Learning_rate: ${ model.params.optimizer_params.lr }
+Rematches: ${ model.params.batch_rematch_factor }
+
 data:
   Class: ShotFlowDS
   dir: ./data/
