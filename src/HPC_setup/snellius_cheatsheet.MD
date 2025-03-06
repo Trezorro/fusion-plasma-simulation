@@ -192,7 +192,7 @@ Then run the sbatch script with
 ```bash
 sbatch run_snellius_job.sh snelliusexperimenttest
 
-squeue --format="%.18i %.50j %.12u %.8T %.10M %.6D %.10P"  # to see the jobs in prettier format
+squeue --format="%.15i %.80j %.8T %.5M %.5D %P %R"  # to see the jobs in prettier format
 
 cat output/slurms/* # to see the output
 
