@@ -46,13 +46,13 @@ model:
     prior: 'brownian'  # normal, copy, brownian
     ot_method: null  # null to disable
     ot_replace: true  # Default false
-    batch_rematch_factor: 64  # Default 1
-    step_every_nth_match: 1  # Default 1 # TODO
+    batch_rematch_factor: 128  # Default 1
+    step_every_nth_match: 2  # Default 1 # TODO
     gradient_clip_val: ${ gradient_clip_val }
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
-      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
+      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 5 # Default 3
       c_channels: 0  # Default 0 disables conditioning on C
@@ -66,13 +66,13 @@ model:
       ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
       is_attn: [true, false, false, false] # Default [false, false, false, false]
       mid_attn: true # Default false
-      attn_heads: 4  # Default 1
+      attn_heads: 2  # Default 1
       n_blocks: 2 # Default 2. Number of residual blocks
       norm_groups: 4 # Default false
       use1x1: false # Default false
     loss: MSELoss
     optimizer_params:
-      lr: 0.0001
+      lr: 0.00005
       weight_decay: 0  # Default 0
       amsgrad: false  # Default false
 
