@@ -451,6 +451,7 @@ def multi_channel_lines_plotly(
     target_samples: torch.Tensor,
     generated_samples: torch.Tensor,
     conditioning_input: dict[str, torch.Tensor],
+    show_c: bool = True,
     n=5,
     title_base="",
     subtitle="",  # Subtitle for the plot
@@ -459,6 +460,17 @@ def multi_channel_lines_plotly(
 ):
     """Create a simple line plot where each channel is a separate color, shots are overlaid, and predictions are show in dotted lines.
 
+    Args:
+        meta (dict): Dictionary containing metadata about the samples.
+        target_samples (torch.Tensor): Target samples, shape: [num_samples, num_channels, num_timepoints].
+        generated_samples (torch.Tensor): Generated samples, shape: [num_samples, num_channels, num_timepoints].
+        conditioning_input (dict): Dictionary containing the conditioning input.
+        show_c (bool): Whether to show the conditioning channels, if available.
+        n (int, optional): Number of traces to visualize. Defaults to 5.
+        title_base (str, optional): Base title for the plot. Defaults to "".
+        subtitle (str, optional): Subtitle for the plot. Defaults to "".
+        buttons (bool, optional): Whether to add buttons to the plot. Defaults to False.
+
     The legend is grouped by shot.
     Legend format is: 
         Shot 1 - Target:
@@ -466,14 +478,25 @@ def multi_channel_lines_plotly(
     """
     C = get_current_config()
     CHANNEL_NAMES = C.data.cols.x
+    history_length = C.data.history_length
+    seq_length = C.data.seq_length
     # Generate and visualize new samples
-    show_conditioning = "x_history" in conditioning_input
-    shot_numbers = meta.get('shot_number')
-    start_times = meta.get('start')
-    end_times = meta.get('end')
+    show_history = "x_history" in conditioning_input
+    if show_c and "c" in conditioning_input:
+        c_input = conditioning_input["c"] - 1  # Translate everything in c to -1 to 0
+        c_channels = c_input.size(1)
+        c_axis_values = np.arange(-history_length, seq_length)
+        C_CHANNEL_NAMES = C.data.cols.c
+    else:
+        c_channels = 0
+    position_sequence = conditioning_input["position_sequence"]
+    shot_numbers = meta["shot_number"]
+    start_times = meta["start"]
+    end_times = meta["end"]
     num_samples, n_channels, num_timepoints = target_samples.size()
     num_samples = min(n, num_samples)  # Number of traces to visualize
     COLOR_SCALE = plt_colors.qualitative.Plotly
+    C_COLOR_SCALE = plt_colors.qualitative.Set2
     mse = ((target_samples[:num_samples] - generated_samples[:num_samples])**2).mean().item()
     subtitle = f"MSE: {mse:.4f}" + (f" | {subtitle}" if subtitle else "")
     main_button_list = []
@@ -482,29 +505,28 @@ def multi_channel_lines_plotly(
         title=title_base + (f"<br><sub>{subtitle}</sub>" if subtitle else ""),
         template='plotly_dark' if BG_THEME in ['black', 'dark'] else 'plotly_white',
     )
-    if show_conditioning:
+    if show_history:
         # draw a vertical line around x = 0 to separate conditioning from prediction
         fig.add_vline(x=-0.5, line_width=3, line_dash="solid", line_color="yellow", opacity=0.5)
         fig.add_vrect(x0=-1, x1=0, line_width=0, opacity=0.3, fillcolor="yellow")
         x_history = conditioning_input['x_history']
 
-    for sample_i in range(num_samples):
-        if shot_numbers is not None:
-            shot_number = shot_numbers[sample_i]
-            start_time = start_times[sample_i]
-            end_time = end_times[sample_i]
-            sample_description = f"#{shot_number} (timespan: {start_time}s-{end_time}s)"
+    for shot_i in range(num_samples):
+        shot_number = shot_numbers[shot_i]
+        start_time = start_times[shot_i]
+        end_time = end_times[shot_i]
+        sample_description = f"#{shot_number} (timespan: {start_time}s-{end_time}s)"
         # Plot target samples
         for channel_i in range(n_channels):
             # Plot target samples
-            channel_color = COLOR_SCALE[((n_channels * sample_i) + channel_i) % len(COLOR_SCALE)]
+            channel_color = COLOR_SCALE[((n_channels * shot_i) + channel_i) % len(COLOR_SCALE)]
             channel_label = CHANNEL_NAMES[channel_i]
-            if show_conditioning:
-                history_start_time = meta['history_start'][sample_i]
+            if show_history:
+                history_start_time = meta['history_start'][shot_i]
                 fig.add_trace(
                     go.Scatter(
                         x=np.arange(-num_timepoints, 0),
-                        y=x_history[sample_i, channel_i, :],
+                        y=x_history[shot_i, channel_i, :],
                         mode='lines',
                         line=dict(color=channel_color, width=3),
                         opacity=0.8,
@@ -519,7 +541,7 @@ def multi_channel_lines_plotly(
             fig.add_trace(
                 go.Scatter(
                     x=np.arange(num_timepoints),
-                    y=target_samples[sample_i, channel_i, :],
+                    y=target_samples[shot_i, channel_i, :],
                     mode='lines',
                     line=dict(color=channel_color, width=3),
                     opacity=0.6,
@@ -535,7 +557,7 @@ def multi_channel_lines_plotly(
             fig.add_trace(
                 go.Scatter(
                     x=np.arange(num_timepoints),
-                    y=generated_samples[sample_i, channel_i, :],
+                    y=generated_samples[shot_i, channel_i, :],
                     mode='lines',
                     line=dict(dash='dot', color=channel_color),
                     opacity=0.9,
@@ -543,6 +565,25 @@ def multi_channel_lines_plotly(
                     legendgroup=f'Shot {shot_number} - Predicted',
                     legendgrouptitle_text=f'Shot {shot_number} - Predicted',
                     text=sample_description,
+                    hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
+                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
+                )
+            )
+        for channel_i in range(c_channels):
+            # Plot C traces
+            channel_color = C_COLOR_SCALE[((c_channels * shot_i) + channel_i) % len(C_COLOR_SCALE)]
+            channel_label = C_CHANNEL_NAMES[channel_i]
+            fig.add_trace(
+                go.Scatter(
+                    x=c_axis_values,
+                    y=c_input[shot_i, channel_i, :],
+                    mode='lines',
+                    line=dict(color=channel_color, width=4),
+                    opacity=0.7,
+                    name=f'{channel_label} (C)',
+                    text=sample_description,
+                    legendgroup=f'Shot {shot_number} - C',
+                    legendgrouptitle_text=f'Shot {shot_number} - C',
                     hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
                     f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
                 )
@@ -568,8 +609,8 @@ def multi_channel_lines_plotly(
                 'visible': not_target
             }])
         ]
-        for sample_i in range(num_samples):
-            shot_num = str(shot_numbers[sample_i].item())
+        for shot_i in range(num_samples):
+            shot_num = str(shot_numbers[shot_i].item())
             main_button_list.append(
                 dict(
                     args=[{
