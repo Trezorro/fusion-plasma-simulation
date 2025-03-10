@@ -10,9 +10,11 @@
 #SBATCH --cpus-per-task=9
 #SBATCH --gpus=1
 #SBATCH --array=1-40
-#SBATCH --ear=on
-#SBATCH --ear-policy=monitoring
-#SBATCH --ear-verbose=1
+
+# EAR options but not best for sweeps maybe:
+###S BATCH --ear=on
+###S BATCH --ear-policy=monitoring
+#### SBATCH --ear-verbose=1
 
 echo "==============================="
 echo $(date)
