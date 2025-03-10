@@ -253,15 +253,12 @@ class ShotFlowDS(data.Dataset):
         super().__init__()
         self.file_path = dir + file
         self.columns_C = list(cols.get('c', []))
-        if self.columns_C:
-            logger.warning("Warning: columns_C will not be used right now.")
         self.columns_X = list(cols.x)
         self.seq_length = seq_length
         self.history_length = history_length if history_length is not None else 0
         self.crop_margin = crop_margin
         assert self.crop_margin >= self.history_length, "crop_margin must be greater than or equal to history_length to provide enough context."
         self.random_start = random_start
-        self.force_mean_zero = force_mean_zero
         self.force_fixed_shot = force_fixed_shot
         self.overfit_on_shots = overfit_on_shots
         self.force_start = force_start
@@ -291,9 +288,10 @@ class ShotFlowDS(data.Dataset):
 
     def normalize_columns(self):
         """Normalize within 0-1"""
-        self.min = self.data[self.columns_X].min()
-        self.max = self.data[self.columns_X].max()
-        self.data[self.columns_X] = (self.data[self.columns_X] - self.min) / (self.max - self.min)
+        target_cols = self.columns_X + self.columns_C
+        self.min = self.data[target_cols].min()
+        self.max = self.data[target_cols].max()
+        self.data[target_cols] = (self.data[target_cols] - self.min) / (self.max - self.min)
 
         # Summarize statistics per column
         for column in self.data.columns:
@@ -342,6 +340,7 @@ class ShotFlowDS(data.Dataset):
             'end': shot_data.index[end],
         }
         conditioning_input = {}
+
         if self.history_length:  # if we are conditioning on X history
             history_start = start - self.history_length
             history_end = start
@@ -353,8 +352,12 @@ class ShotFlowDS(data.Dataset):
                 np.float32
             )
             meta['history_start'] = shot_data.index[history_start]
+            if self.columns_C:
+                conditioning_input['c'] = shot_data[self.columns_C].iloc[history_start:end].values.T
         else:
             conditioning_input['position_sequence'] = shot_data.index[start:end].values.astype(np.float32)
+            if self.columns_C:
+                conditioning_input['c'] = shot_data[self.columns_C].iloc[start:end].values.T
         assert not np.isnan(x).any(
         ), "NaNs found in the output window. Often casued by division by zero in normalization."
         return meta, conditioning_input, x  # prior, conditioning and X shapes: (variables, seq_length)

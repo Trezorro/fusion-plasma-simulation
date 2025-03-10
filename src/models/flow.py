@@ -57,6 +57,7 @@ class FlowModule(L.LightningModule):
         self.optimizer_params = optimizer_params or dict()  # type: ignore
         if model_params is None:
             model_params = dict()
+        self.model_params = model_params
         self.model = self.MODEL_OPTIONS[model](**model_params)  # type: ignore
         self.loss = self.LOSS_OPTIONS[loss]()
         self.prior = prior
@@ -89,6 +90,9 @@ class FlowModule(L.LightningModule):
         assert (
             self.prior == "normal" or self.ot_method is None
         ), "OT sampling only supported with fully random prior"
+        assert ('position_sequence' in self.model_params.conditioning) == (
+            self.model_params["positional_encoding"] is not None
+        ), ("Positional encoding must be configured for position_sequence conditioning")
 
     def forward(self, x, t, conditioning=None):
         return self.model(x, t, conditioning=conditioning)
@@ -352,7 +356,6 @@ class FlowModule(L.LightningModule):
             optimizer, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm="norm"
         )
 
-
     def log_summary(self, config: DictConfig):
         """
         Log a summary of the model.
@@ -363,19 +366,25 @@ class FlowModule(L.LightningModule):
         Args:
             config (DictConfig): The global configuration object, mirroring the <config>.yaml file.
         """
-        dummy_data = self.get_dummy_input_tensor(
-            (
+        conditioning_shape = {
+            'x_history':
                 (config.batch_size, config.model.params.model_params.input_channels, config.data.seq_length),
-                (config.batch_size,), {
-                    'x_history':
-                        (
-                            config.batch_size, config.model.params.model_params.input_channels,
-                            config.data.seq_length
-                        ),
-                    'position_sequence': (config.batch_size, config.data.seq_length * 2)
-                }
-            ), torch.float32, self.device
-        )
+            'position_sequence': (config.batch_size, config.data.seq_length * 2),
+            'c':
+                (
+                    config.batch_size, config.model.params.model_params.c_channels,
+                    config.data.history_length + config.data.seq_length
+                ),
+        }
+        # Filter: only keep the conditioning inputs that are actually used in the model
+        conditioning_shape = {
+            k: v for k, v in conditioning_shape.items() if k in config.model.params.model_params.conditioning
+        }
+        x_shape = (config.batch_size, config.model.params.model_params.input_channels, config.data.seq_length)
+        t_shape = (config.batch_size,)
+        # this is passed to the forward of the UNet model(x, t, conditioning)
+        expected_in_shape = [x_shape, t_shape, conditioning_shape]
+        dummy_data = self.get_dummy_input_tensor(expected_in_shape, torch.float32, self.device)
         summary = torchinfo.summary(
             self.model,
             input_data=dummy_data,
@@ -393,13 +402,14 @@ class FlowModule(L.LightningModule):
             verbose=1
         )  # (batch_size, seq_length, input_size)
 
+        logger.info("Model expected input shape: %s", expected_in_shape)
         if __name__ == '__main__':  # Don't log to wandb in test mode, break now.
             return
         wandb.log(
             {
                 "model/summary": str(summary),
                 "model/trainable_params": sum(p.numel() for p in self.model.parameters() if p.requires_grad),
-                # "model/minimum_input_length": self.convnet.minimum_input_length,
+                "model/expected_input_shape": expected_in_shape,
             },
             step=0
         )

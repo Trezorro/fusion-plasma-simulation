@@ -43,8 +43,7 @@ def load_config_from_file(name='main', as_omega=False) -> dict | omegaconf.DictC
         main_conf = OmegaConf.merge(main_conf, model_conf)
     cli_conf = OmegaConf.from_cli()
     conf: omegaconf.DictConfig = OmegaConf.merge(main_conf, cli_conf)
-    if 'data' in conf and 'cols' in conf.data and 'x' in conf.data.cols:
-        conf.model.params.model_params.input_channels = len(conf.data.cols.x)
+    update_model_input_channels(conf)
     if as_omega:
         return conf
     conf = OmegaConf.to_object(conf)
@@ -52,6 +51,18 @@ def load_config_from_file(name='main', as_omega=False) -> dict | omegaconf.DictC
     if not type(conf) == dict:
         raise ValidationError("Configuration was not in dict style. Got: " + repr(conf))
     return dict(conf)
+
+
+def update_model_input_channels(conf):
+    """Force the model configuration to have the correct input channels, based on the data configuration.
+
+    This is a hack to avoid having to match the input channels in the config file manually.
+    """
+    if 'data' in conf and 'cols' in conf.data:
+        if 'x' in conf.data.cols:
+            conf.model.params.model_params.input_channels = len(conf.data.cols.x)
+        if 'c' in conf.data.cols:
+            conf.model.params.model_params.c_channels = len(conf.data.cols.c)
 
 
 # wandb.config.update(conf)
