@@ -489,6 +489,7 @@ def multi_channel_lines_plotly(
         C_CHANNEL_NAMES = C.data.cols.c
     else:
         c_channels = 0
+        C_CHANNEL_NAMES = []
     position_sequence = conditioning_input["position_sequence"]
     shot_numbers = meta["shot_number"]
     start_times = meta["start"]
@@ -571,7 +572,7 @@ def multi_channel_lines_plotly(
             )
         for channel_i in range(c_channels):
             # Plot C traces
-            channel_color = C_COLOR_SCALE[((c_channels * shot_i) + channel_i) % len(C_COLOR_SCALE)]
+            channel_color = C_COLOR_SCALE[channel_i]
             channel_label = C_CHANNEL_NAMES[channel_i]
             fig.add_trace(
                 go.Scatter(
@@ -625,7 +626,7 @@ def multi_channel_lines_plotly(
                 'visible': [True] * len(fig.data)
             }]),
         ]
-        for channel in CHANNEL_NAMES:
+        for channel in (CHANNEL_NAMES + C_CHANNEL_NAMES):
             channel_buttons.append(
                 dict(
                     args=[{

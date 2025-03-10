@@ -36,7 +36,7 @@ metrics.define_error_metrics("val")
 metrics.define_error_metrics("train")
 
 wandb_logger = WandbLogger(
-    log_model=True,
+    log_model=False,
     experiment=run,
     save_dir="output/",
 )

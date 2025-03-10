@@ -198,6 +198,33 @@ cat output/slurms/* # to see the output
 
 ```
 
+# Maintenance
+## Handling File quota issues and Cleaning up heavy files
+
+If you run into a file quota issue, you can check the disk usage with `myquota` on snellius, or `du -sh ~/fusion-plasma-simulation/` in general.
+
+You can use more quota tools by running:
+```bash
+export PATH=$PATH:/gpfs/admin/hpc/usertools/
+myquota
+home-quota
+```
+
+See the largest files sorted by size with: 
+```bash
+du -ah ~/fusion-plasma-simulation/ | sort -rh | head -n 100
+```
+
+Wandb has some cleanup utilities that you can try such as  `wandb artifact cache cleanup 1GB`  See [Wandb Storage Docs](https://docs.wandb.ai/guides/artifacts/storage/)
+
+Otherwise you can manually delete the files with `rm -rf <file>` or `rm -rf <folder>`.
+Advanced automated search for all checkpoints folders: (use with caution)
+```bash
+find ~/fusion-plasma-simulation/output/ -type d -name 'checkpoints' -exec rm -rf {} +
+```
+This will find all folders named `checkpoints` and delete them.
+
+
 # Appendix
 From https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial1/Lisa_Cluster.html#Job-Arrays
 
