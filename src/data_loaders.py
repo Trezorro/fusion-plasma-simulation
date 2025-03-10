@@ -227,7 +227,8 @@ class ShotFlowDS(data.Dataset):
         crop_margin: Minimum distance from the start and end of the shot to the start and end of the sequence.
         random_start: If True, the sequence will start at a random point within the shot.
         time_last: If True, the time dimension will be the last dimension of the output.
-        force_mean_zero: If True, the mean of the sequence will be zero.
+        force_mean_zero: If True, the mean of the sequence will be zero. [DEPRECATED]
+            (Caused division by zero when window was constant for a sensor)
         force_fixed_shot: If not None, the dataset will always return the same shot. Useful for debugging by overfitting.
         force_start: If not None, the dataset will always return the same start timestep index. May be modified by random_start.
         **kwargs: Additional arguments that are not used.
@@ -242,7 +243,8 @@ class ShotFlowDS(data.Dataset):
         crop_margin=1000,
         history_length: Optional[int] = 0,  # 0 or None, when no history conditioning is used.
         random_start: bool | list[int] = True,
-        force_mean_zero=False,
+        force_mean_zero=False,  # Deprecated: Causes division by zero if the window is constant.
+        # overfitting helpers:
         force_fixed_shot: Optional[int] = None,
         overfit_on_shots: Optional[list[int]] = None,
         force_start: Optional[int] = None,
@@ -346,24 +348,13 @@ class ShotFlowDS(data.Dataset):
             assert history_start >= 0, "Not enough history data available."
             x_history = shot_data[self.columns_X].iloc[history_start:history_end].values.T
 
-            # When theres history context, normalize the window based on the history window
-            window_mean = x_history.mean(axis=1, keepdims=True)
-            window_std = x_history.std(axis=1, keepdims=True)
-            if self.force_mean_zero:
-                x_history = x_history - window_mean
-                x_history = x_history / window_std
             conditioning_input['x_history'] = x_history
             conditioning_input['position_sequence'] = shot_data.index[history_start:end].values.astype(
                 np.float32
             )
             meta['history_start'] = shot_data.index[history_start]
         else:
-            window_mean = x.mean(axis=1, keepdims=True)
-            window_std = x.std(axis=1, keepdims=True)
             conditioning_input['position_sequence'] = shot_data.index[start:end].values.astype(np.float32)
-        if self.force_mean_zero:
-            x = x - window_mean  # either the history mean (if available) or the target window mean
-            x = x / window_std
         assert not np.isnan(x).any(
         ), "NaNs found in the output window. Often casued by division by zero in normalization."
         return meta, conditioning_input, x  # prior, conditioning and X shapes: (variables, seq_length)
