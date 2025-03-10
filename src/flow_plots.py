@@ -15,6 +15,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Partial code adapted from https://drscotthawley.github.io/blog/posts/FlowModels.html
 # for accessibility: Wong's color pallette: cf. https://davidmathlogic.com/colorblind
 #WONG_black = [0/255, 0/255, 0/255]          # #000000
 WONG_amber = [230 / 255, 159 / 255, 0 / 255]  # #E69F00
