@@ -24,6 +24,7 @@ torchinfo = "*"
 omegaconf = "*"
 lightning = "*"
 pot = "*"
+antropy = "*"
 
 [dev-packages]
 jupyter = "*"
@@ -41,8 +42,8 @@ python_version = "3.11.3"
 ## Conda Environment Definition for Cluster
 ### conda create -n py11 python=3.11.9 pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia   
 ### conda install wandb lightning pandas numpy numba matplotlib pyarrow plotly -c conda-forge torchinfo
-### conda install pytorch pytorch-cuda=11.8 lightning wandb pandas numpy numba matplotlib pyarrow plotly torchinfo omegaconf pot -c pytorch -c nvidia -c conda-forge
-### conda install -c conda-forge pot
+### conda install pytorch pytorch-cuda=11.8 lightning wandb pandas numpy numba matplotlib pyarrow plotly torchinfo omegaconf pot antropy -c pytorch -c nvidia -c conda-forge
+### conda install -c conda-forge pot antropy
 ## ## Snellius modules to use
 # Depending on whether you want to use the GPU or not, you can choose the following modules:
 # PyTorch/2.1.2-foss-2023a # vs my installed version 2.2.2
@@ -56,4 +57,4 @@ python_version = "3.11.3"
 # then the only pip packages to install are:
 # first make venv: python -m venv fusion
 # source ~/fusion/bin/activate
-# pip install pyarrow torchinfo omegaconf lightning wandb pytest pot
+# pip install pyarrow torchinfo omegaconf lightning wandb pytest pot antropy
