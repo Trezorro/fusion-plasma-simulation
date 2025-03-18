@@ -14,6 +14,7 @@ import wandb
 
 from src.plotting import get_and_plot_predictions
 import src.flow_plots as fp
+import src.entropy as entropy
 
 PlotFunction = Callable[[Any], plt.Figure | go.Figure | wandb.Image]
 
@@ -43,6 +44,7 @@ class PlotsCallback(L.Callback):
         '2d_flow_plot': fp.plot_flow,
         'line_flow_plot': fp.plot_flow_and_lines_plotly,
         'multi_channel_lines': fp.multi_channel_lines_plotly,
+        'entropy_plot': entropy.plot_entropy,
     }
 
     def __init__(self, evaluation_config: Mapping):

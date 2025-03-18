@@ -2,13 +2,13 @@ from functools import partial
 from typing import Any, Optional
 import lightning as L
 from lightning.pytorch.core.optimizer import LightningOptimizer
+import numpy as np
 import torch
 import torchinfo
 import torchmetrics
 import wandb
 from omegaconf import DictConfig
 
-from src.config import get_current_config
 from src.models.flow_nets import VelocityNet
 from src.models.unet_conditional import ConditionalUNet
 from src.optimal_transport import OTPlanSampler
@@ -217,7 +217,7 @@ class FlowModule(L.LightningModule):
             save_trajectories=True
         )
         # Metrics
-        error_metrics = metrics.get_moments_errors(generated_samples, target_samples)
+        metrics_out = metrics.get_moments_errors(generated_samples, target_samples)
         self.model.train()  # Reset model to training mode
 
         if to_cpu:
@@ -225,6 +225,8 @@ class FlowModule(L.LightningModule):
                 (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
                 device='cpu'  # type: ignore
             )
+            metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
+
         return dict(
             meta=meta,
             conditioning_input=conditioning_input,
@@ -232,7 +234,7 @@ class FlowModule(L.LightningModule):
             prior_samples=prior_samples,
             generated_samples=generated_samples,
             trajectories=trajectories,
-            metrics=error_metrics
+            metrics=metrics_out
         )
 
     @staticmethod

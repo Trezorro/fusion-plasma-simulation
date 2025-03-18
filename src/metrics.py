@@ -1,6 +1,10 @@
+import numpy as np
+from sklearn import metrics
 import torch
-# import torchmetrics.audio as audio
 import wandb
+from scipy.stats import wasserstein_distance
+import src.entropy as entropy
+from src.config import get_current_config
 """
 ## Absolute metrics (targets and predicted are both viable inputs on their own)
 - moments:
@@ -37,8 +41,6 @@ val/predictions/distributions/...
 val/predictions/moments/mean
 
 """
-wandb.define_metric("loss/train", summary="min")
-wandb.define_metric("loss/val", summary="min")
 
 #### -- Old Metrics -- ####
 # wandb.define_metric("loss/time_domain_train", summary="min")
@@ -65,6 +67,7 @@ def define_error_metrics(main_prefix: str):
     for metric_name in METRIC_NAMES:
         wandb.define_metric(f"{main_prefix}/error/magnitude_{metric_name}_mse", summary='min')
         wandb.define_metric(f"{main_prefix}/error/diff_{metric_name}_mse", summary='min')
+    wandb.define_metric(f"{main_prefix}/error/sample_entropy", summary='min')
 
 
 def first_difference(batched_time_series: torch.Tensor):
@@ -97,3 +100,45 @@ def get_moments_errors(pred: torch.Tensor, target: torch.Tensor):
         for (time_agg, vpredict), (_, vtarget) in zip(first_diff_pred.items(), first_diff_target.items())
     }
     return {**mag_out, **first_diff_out}
+
+
+def get_entropy_metrics(pred: torch.Tensor, target: torch.Tensor):
+    """Return a dict with the sample entropy metrics:
+
+    All entropy values are normalized to the target entropy mean and standard deviation.
+    The wasserstein distance is the only metric for which the mean cannot be calculated from combining all channels, it is calculated per channel first. Then averaged.
+    The other mean values are calculated by averaging over all values in the batch, irrespective of channel (as one big bag of values).
+
+    - /error/<channelname>/sample_entropy_wasserstein/ The wasserstein distance between the target and predicted normalized sample entropy batch distributions, per channel.
+    - /error/sample_entropy_wasserstein: The mean of the wasserstein distances between the target and predicted normalized sample entropy batch distributions, averaged over all channels.
+    - /error/<channelname>/sample_entropy_msd/ The mean signed difference (MSD) between the paired target and predicted sample entropy, per channel. Essentially estimating the bias of the prediction.
+    - /error/<channelname>/sample_entropy_mse/ The mean squared error between the paired target and predicted normalized sample entropy batch distributions, per channel.
+    - /error/sample_entropy_mse: The mean of the mean squared errors between the paired target and predicted normalized sample entropy batch distributions, averaged over all channels.
+    - /error/<channelname>/sample_entropy_mae/ The mean absolute error between the paired target and predicted normalized sample entropy batch distributions, per channel.
+    - /error/sample_entropy_mae: The mean of the mean absolute errors between the paired target and predicted normalized sample entropy batch distributions, averaged over all channels.
+    """
+    C = get_current_config()
+    channel_names = C.data.cols.x
+    entropy_target, entropy_pred = entropy.get_normalized_entropies(pred, target)
+    pair_errors = entropy_pred - entropy_target
+    msd_channel = np.mean(pair_errors, axis=0)
+    msd = np.mean(pair_errors)
+    mse_channel = np.mean(np.power(pair_errors, 2), axis=0)
+    mse = np.mean(np.power(pair_errors, 2))
+    mae_channel = np.mean(np.abs(pair_errors), axis=0)
+    mae = np.mean(np.abs(pair_errors))
+
+    wasserstein_sum = 0  # Wasserstein distance needs to be averaged after the channel loop
+    metrics = {}
+    for i, channel_name in enumerate(channel_names):
+        wasserstein_per_channel = wasserstein_distance(entropy_target[:, i], entropy_pred[:, i])
+        wasserstein_sum += wasserstein_per_channel
+        metrics[f"/error/{channel_name}/sample_entropy_wasserstein"] = wasserstein_per_channel
+        metrics[f"/error/{channel_name}/sample_entropy_msd"] = msd_channel[i]
+        metrics[f"/error/{channel_name}/sample_entropy_mse"] = mse_channel[i]
+        metrics[f"/error/{channel_name}/sample_entropy_mae"] = mae_channel[i]
+    metrics["/error/sample_entropy_wasserstein"] = wasserstein_sum / len(channel_names)
+    metrics["/error/sample_entropy_msd"] = msd
+    metrics["/error/sample_entropy_mse"] = mse
+    metrics["/error/sample_entropy_mae"] = mae
+    return metrics

@@ -34,7 +34,8 @@ import src.metrics as metrics
 
 metrics.define_error_metrics("val")
 metrics.define_error_metrics("train")
-
+wandb.define_metric("loss/train", summary="min")
+wandb.define_metric("loss/val", summary="min")
 wandb_logger = WandbLogger(
     log_model=False,
     experiment=run,

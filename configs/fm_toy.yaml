@@ -29,6 +29,8 @@ evaluation:
     - key: multi_channel_lines
       n: 5
       buttons: true
+    - key: entropy_plot
+      n: 64
 
 
 # model: model.yaml # To be replaced by respective yaml file content
