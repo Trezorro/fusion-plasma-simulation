@@ -44,7 +44,7 @@ class PlotsCallback(L.Callback):
         '2d_flow_plot': fp.plot_flow,
         'line_flow_plot': fp.plot_flow_and_lines_plotly,
         'multi_channel_lines': fp.multi_channel_lines_plotly,
-        'entropy_plot': entropy.plot_entropy,
+        'entropy_plot': entropy.plot_entropies_on_target,
     }
 
     def __init__(self, evaluation_config: Mapping):

@@ -58,7 +58,7 @@ train_set, val_set = data.random_split(data_set, [0.9, 0.1], generator=torch.Gen
 
 train_loader = data.DataLoader(train_set, batch_size=C.batch_size, shuffle=True)
 val_loader = data.DataLoader(val_set, batch_size=C.batch_size, shuffle=False)
-val_loader.dataset.random_start = False  # TODO this doesn't work, wrong dataset attribute.
+# val_loader.dataset.random_start = False  # TODO this doesn't work, wrong dataset attribute.
 
 logger.info("Data loaded, initializing trainer.")
 trainer = L.Trainer(
