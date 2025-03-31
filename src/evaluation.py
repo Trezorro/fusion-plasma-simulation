@@ -44,7 +44,7 @@ class PlotsCallback(L.Callback):
         '2d_flow_plot': fp.plot_flow,
         'line_flow_plot': fp.plot_flow_and_lines_plotly,
         'multi_channel_lines': fp.multi_channel_lines_plotly,
-        'entropy_plot': entropy.plot_entropies_on_target,
+        'entropy_plot': entropy.plot_entropy,
     }
 
     def __init__(self, evaluation_config: Mapping):
@@ -69,9 +69,10 @@ class PlotsCallback(L.Callback):
             key = func_c["key"]
             plot_fn: PlotFunction = self.PLOT_FN_OPTIONS[key]  # Function to generate images
             params = func_c.copy()
+            log_key = params.pop("log_key", key)  # if log_key is present, use it instead of key
             n = params.pop("n", self.max_n)
             fig = plot_fn(**evaluation_output, n=n, title_base=title_base, **params)
-            wandb.log({f"{trainval}/{key}": fig, "trainer/global_step": global_step}, commit=False)
+            wandb.log({f"{trainval}/{log_key}": fig, "trainer/global_step": global_step}, commit=False)
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
         # Skip for all other epochs

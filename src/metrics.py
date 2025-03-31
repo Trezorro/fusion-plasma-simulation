@@ -1,8 +1,6 @@
 import numpy as np
-from sklearn import metrics
 import torch
 import wandb
-from scipy.special import rel_entr  # Import for KL divergence
 from scipy.stats import wasserstein_distance
 import src.entropy as entropy
 from src.config import get_current_config
@@ -65,11 +63,20 @@ METRIC_NAMES = ["mean", "var", "skew", "kurtosis"]
 
 def define_error_metrics(main_prefix: str):
     # wandb.define_metric("val/error/magnitude_mean_mse", summary="min")
+    C = get_current_config()
     for metric_name in METRIC_NAMES:
         wandb.define_metric(f"{main_prefix}/error/magnitude_{metric_name}_mse", summary='min')
         wandb.define_metric(f"{main_prefix}/error/diff_{metric_name}_mse", summary='min')
-    wandb.define_metric(f"{main_prefix}/error/sample_entropy", summary='min')
-
+    for entropy_method in entropy.VALID_FUNCS.keys():
+        for channel_name in C.data.cols.x:
+            wandb.define_metric(f"{main_prefix}/error/{entropy_method}_mse/{channel_name}", summary='min')
+            wandb.define_metric(f"{main_prefix}/error/{entropy_method}_mae/{channel_name}", summary='min')
+            wandb.define_metric(
+                f"{main_prefix}/error/{entropy_method}_wasserstein/{channel_name}", summary='min'
+            )
+        wandb.define_metric(f"{main_prefix}/error/{entropy_method}_mse/mean", summary='min')
+        wandb.define_metric(f"{main_prefix}/error/{entropy_method}_mae/mean", summary='min')
+        wandb.define_metric(f"{main_prefix}/error/{entropy_method}_wasserstein/mean", summary='min')
 
 def first_difference(batched_time_series: torch.Tensor):
     return batched_time_series[:, :, 1:] - batched_time_series[:, :, :-1]
@@ -110,43 +117,48 @@ def get_entropy_metrics(pred: torch.Tensor, target: torch.Tensor):
     The wasserstein distance is the only metric for which the mean cannot be calculated from combining all channels, it is calculated per channel first. Then averaged.
     The other mean values are calculated by averaging over all values in the batch, irrespective of channel (as one big bag of values).
 
-    - /error/<channelname>/sample_entropy_wasserstein/ The wasserstein distance between the target and predicted normalized sample entropy batch distributions, per channel.
-    - /error/sample_entropy_wasserstein: The mean of the wasserstein distances between the target and predicted normalized sample entropy batch distributions, averaged over all channels.
-    - /error/<channelname>/sample_entropy_msd/ The mean signed difference (MSD) between the paired target and predicted sample entropy, per channel. Essentially estimating the bias of the prediction.
-    - /error/<channelname>/sample_entropy_mse/ The mean squared error between the paired target and predicted normalized sample entropy batch distributions, per channel.
-    - /error/sample_entropy_mse: The mean of the mean squared errors between the paired target and predicted normalized sample entropy batch distributions, averaged over all channels.
-    - /error/<channelname>/sample_entropy_mae/ The mean absolute error between the paired target and predicted normalized sample entropy batch distributions, per channel.
-    - /error/sample_entropy_mae: The mean of the mean absolute errors between the paired target and predicted normalized sample entropy batch distributions, averaged over all channels.
-    - /error/<channelname>/kl_divergence/ The Kullback-Leibler divergence between the target and predicted timeseries, per channel.
+    - /error/app_entropy_wasserstein/<channelname>:
+         The wasserstein distance between the target and predicted normalized app entropy batch distributions, per channel.
+    - /error/app_entropy_wasserstein/mean: 
+        The mean of the wasserstein distances between the target and predicted normalized app entropy batch distributions, averaged over all channels.
+    - /error/app_entropy_msd/<channelname>:
+         The mean signed difference (MSD) between the paired target and predicted app entropy, per channel. Essentially estimating the bias of the prediction.
+    - /error/app_entropy_mse/<channelname>:
+         The mean squared error between the paired target and predicted normalized app entropy batch distributions, per channel.
+    - /error/app_entropy_mse/mean: 
+        The mean of the mean squared errors between the paired target and predicted normalized app entropy batch distributions, averaged over all channels.
+    - /error/app_entropy_mae/<channelname>:
+         The mean absolute error between the paired target and predicted normalized app entropy batch distributions, per channel.
+    - /error/app_entropy_mae/mean: 
+        The mean of the mean absolute errors between the paired target and predicted normalized app entropy batch distributions, averaged over all channels.
+    - /error/kl_divergence/<channelname>:
+         The Kullback-Leibler divergence between the target and predicted timeseries, per channel.
     """
 
     C = get_current_config()
     channel_names = C.data.cols.x
-    entropy_target, entropy_pred = entropy.get_normalized_entropies(pred, target)
-    pair_errors = entropy_pred - entropy_target
-    msd_channel = np.mean(pair_errors, axis=0)
-    msd = np.mean(pair_errors)
-    mse_channel = np.mean(np.power(pair_errors, 2), axis=0)
-    mse = np.mean(np.power(pair_errors, 2))
-    mae_channel = np.mean(np.abs(pair_errors), axis=0)
-    mae = np.mean(np.abs(pair_errors))
-
-    wasserstein_sum = 0  # Wasserstein distance needs to be averaged after the channel loop
-    kl_divergence_sum = 0  # KL divergence needs to be averaged after the channel loop
     metrics = {}
-    for i, channel_name in enumerate(channel_names):
-        wasserstein_per_channel = wasserstein_distance(entropy_target[:, i], entropy_pred[:, i])
-        # kl_divergence_per_channel = np.sum(rel_entr(target[:, i], pred[:, i]))
-        wasserstein_sum += wasserstein_per_channel
-        # kl_divergence_sum += kl_divergence_per_channel
-        metrics[f"/error/{channel_name}/sample_entropy_wasserstein"] = wasserstein_per_channel
-        # metrics[f"/error/{channel_name}/kl_divergence"] = kl_divergence_per_channel
-        metrics[f"/error/{channel_name}/sample_entropy_msd"] = msd_channel[i]
-        metrics[f"/error/{channel_name}/sample_entropy_mse"] = mse_channel[i]
-        metrics[f"/error/{channel_name}/sample_entropy_mae"] = mae_channel[i]
-    metrics["/error/sample_entropy_wasserstein"] = wasserstein_sum / len(channel_names)
-    # metrics["/error/kl_divergence"] = kl_divergence_sum / len(channel_names)
-    metrics["/error/sample_entropy_msd"] = msd
-    metrics["/error/sample_entropy_mse"] = mse
-    metrics["/error/sample_entropy_mae"] = mae
+    for method, func in entropy.VALID_FUNCS.items():
+        entropy_target = entropy.batch_entropy(target, func)
+        entropy_pred = entropy.batch_entropy(pred, func)
+        pair_errors = entropy_pred - entropy_target
+        msd_channel = np.mean(pair_errors, axis=0)
+        msd = np.mean(pair_errors)
+        mse_channel = np.mean(np.power(pair_errors, 2), axis=0)
+        mse = np.mean(np.power(pair_errors, 2))
+        mae_channel = np.mean(np.abs(pair_errors), axis=0)
+        mae = np.mean(np.abs(pair_errors))
+
+        wasserstein_sum = 0  # Wasserstein distance needs to be averaged after the channel loop
+        for i, channel_name in enumerate(channel_names):
+            wasserstein_per_channel = wasserstein_distance(entropy_target[:, i], entropy_pred[:, i])
+            wasserstein_sum += wasserstein_per_channel
+            metrics[f"/error/{method}_wasserstein/{channel_name}"] = wasserstein_per_channel
+            metrics[f"/error/{method}_msd/{channel_name}"] = msd_channel[i]
+            metrics[f"/error/{method}_mse/{channel_name}"] = mse_channel[i]
+            metrics[f"/error/{method}_mae/{channel_name}"] = mae_channel[i]
+        metrics[f"/error/{method}_wasserstein/mean"] = wasserstein_sum / len(channel_names)
+        metrics[f"/error/{method}_msd/mean"] = msd
+        metrics[f"/error/{method}_mse/mean"] = mse
+        metrics[f"/error/{method}_mae/mean"] = mae
     return metrics
