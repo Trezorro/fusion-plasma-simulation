@@ -142,5 +142,4 @@ data:
       - a_minor  # reel gemeten plasma shape a k d (horizontale radius
       - KAPPA
       - DELTA  # linkerbovenhoek naar links vanuit hetmidden
-    label:
-    - LHD_label
+    label: LHD_label

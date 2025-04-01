@@ -1,5 +1,7 @@
 # @title Utility code: styles, functions, generators, visualization
+from pydoc import text
 from matplotlib import gridspec
+from matplotlib.dates import MO
 import numpy as np
 from matplotlib import colors
 
@@ -491,6 +493,7 @@ def multi_channel_lines_plotly(
         c_channels = 0
         C_CHANNEL_NAMES = []
     position_sequence = conditioning_input["position_sequence"]
+    labels = conditioning_input.get('label', None)
     shot_numbers = meta["shot_number"]
     start_times = meta["start"]
     end_times = meta["end"]
@@ -500,23 +503,74 @@ def multi_channel_lines_plotly(
     C_COLOR_SCALE = plt_colors.qualitative.Set2
     mse = ((target_samples[:num_samples] - generated_samples[:num_samples])**2).mean().item()
     subtitle = f"MSE: {mse:.4f}" + (f" | {subtitle}" if subtitle else "")
+
     main_button_list = []
-    fig = go.Figure()
+    fig = plotly_make_subplots(
+        rows=1,
+        cols=1,
+        specs=[[{
+            "secondary_y": True
+        }]],
+        subplot_titles=[title_base],
+        # vertical_spacing=0.05,
+    )
+
+    fig.update_yaxes(
+        range=(-1.5, None),
+        secondary_y=False,
+    )
+    fig.update_xaxes(
+        range=(-history_length, seq_length),
+        showticklabels=True,
+        title_text="Time steps (0.1ms/step)",
+        showgrid=True
+    )
     fig.update_layout(
         title=title_base + (f"<br><sub>{subtitle}</sub>" if subtitle else ""),
         template='plotly_dark' if BG_THEME in ['black', 'dark'] else 'plotly_white',
+        hovermode='closest',
+        barmode='stack',
+        barcornerradius=15,
     )
     if show_history:
         # draw a vertical line around x = 0 to separate conditioning from prediction
-        fig.add_vline(x=-0.5, line_width=3, line_dash="solid", line_color="yellow", opacity=0.5)
-        fig.add_vrect(x0=-1, x1=0, line_width=0, opacity=0.3, fillcolor="yellow")
+        fig.add_shape(
+            type="line",
+            x0=-0.5,
+            x1=-0.5,
+            y0=0,
+            y1=1,
+            line=dict(
+                color="yellow",
+                width=3,
+                dash="solid",
+            ),
+            xref="x",
+            yref="paper",
+            opacity=0.5,
+        )
+        fig.add_shape(
+            type="rect",
+            x0=-1,
+            x1=0,
+            y0=0,
+            y1=1,
+            fillcolor="yellow",
+            opacity=0.3,
+            line_width=0,
+            xref="x",
+            yref="paper",
+        )
         x_history = conditioning_input['x_history']
-
+    # add_label_traces(fig, labels, seq_length, history_length, shot_numbers)
     for shot_i in range(num_samples):
         shot_number = shot_numbers[shot_i]
         start_time = start_times[shot_i]
         end_time = end_times[shot_i]
         sample_description = f"#{shot_number} (timespan: {start_time}s-{end_time}s)"
+        if labels is not None:
+            add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, shot_number)
+
         # Plot target samples
         for channel_i in range(n_channels):
             # Plot target samples
@@ -526,7 +580,7 @@ def multi_channel_lines_plotly(
                 history_start_time = meta['history_start'][shot_i]
                 fig.add_trace(
                     go.Scatter(
-                        x=np.arange(-num_timepoints, 0),
+                        x=np.arange(-history_length, 0),
                         y=x_history[shot_i, channel_i, :],
                         mode='lines',
                         line=dict(color=channel_color, width=3),
@@ -541,7 +595,7 @@ def multi_channel_lines_plotly(
                 )
             fig.add_trace(
                 go.Scatter(
-                    x=np.arange(num_timepoints),
+                    x=np.arange(seq_length),
                     y=target_samples[shot_i, channel_i, :],
                     mode='lines',
                     line=dict(color=channel_color, width=3),
@@ -557,7 +611,7 @@ def multi_channel_lines_plotly(
             # Plot generated samples
             fig.add_trace(
                 go.Scatter(
-                    x=np.arange(num_timepoints),
+                    x=np.arange(seq_length),
                     y=generated_samples[shot_i, channel_i, :],
                     mode='lines',
                     line=dict(dash='dot', color=channel_color),
@@ -663,4 +717,134 @@ def multi_channel_lines_plotly(
         )
     if wandb.run.disabled:  # type: ignore
         fig.show()
+
     return fig
+
+
+def add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, shot_number):
+    BAR_WIDTH = 25
+    MODE_COLORS = ["grey", "lightskyblue", "orange", "red"]
+    MODE_NAMES = ["Unknown", "L", "D", "H"]
+    fig.update_yaxes(
+        range=(-BAR_WIDTH / 2, (BAR_WIDTH + num_samples) * 8),
+        showticklabels=False,
+        secondary_y=True,
+        fixedrange=True,
+        showgrid=False
+    )
+    shot_labels = labels[shot_i]
+    label_ranges = []
+    spans = []
+    modes = []
+    custom_data = []
+    colors = []
+    current_label = shot_labels[0]
+    start_t = -history_length
+    for next_t in range(-history_length + 1, seq_length):
+        if shot_labels[next_t] != current_label:
+            label_ranges.append((current_label, start_t, next_t))
+            spans.append(next_t - start_t)
+            modes.append(MODE_NAMES[int(current_label)])
+            colors.append(MODE_COLORS[int(current_label)])
+            custom_data.append([shot_number, start_t, next_t, MODE_NAMES[int(current_label)]])
+            current_label = shot_labels[next_t]
+            start_t = next_t
+            # Add the last range
+    label_ranges.append((current_label, start_t, seq_length))
+    spans.append(seq_length - start_t)
+    modes.append(MODE_NAMES[int(current_label)])
+    colors.append(MODE_COLORS[int(current_label)])
+    custom_data.append([shot_number, start_t, seq_length, MODE_NAMES[int(current_label)]])
+    # Add scatter lines for each range
+    fig.add_trace(
+        go.Bar(
+            x=(-history_length, 0),
+            y=(shot_i, shot_i),
+            orientation='h',
+            marker=dict(
+                color="black",
+                opacity=0,
+            ),
+            showlegend=False,  # Bar chart does not need a separate legend
+            name=f'Shot #{shot_number} - Start',
+            legendgroup=f'Shot {shot_number} - Modes',
+            hoverinfo='skip',  # Disable hover for this trace
+        ),
+        secondary_y=True,
+    )
+    fig.add_trace(
+        go.Bar(
+            x=spans,
+            y=(shot_i,) * len(spans),
+            width=BAR_WIDTH,
+            orientation='h',
+            marker=dict(
+                color=colors,
+                opacity=0.5,
+            ),
+            hovertemplate=
+            "Mode: %{customdata[3]}<br>Shot #%{customdata[0]}<br>Time steps: %{customdata[1]} - %{customdata[2]}<br>(%{x} steps)",
+            customdata=custom_data,
+            showlegend=True,  # Bar chart does not need a separate legend
+            name=f'Shot #{shot_number} - Modes',
+            # hoverinfo=['skip'] + ['all'] * (len(spans) - 1),  # Disable hover for this trace
+            legendgroup=f'Shot {shot_number} - Modes',
+            # legendgrouptitle_text=f'Shot {shot_number} - Modes',
+        ),
+        secondary_y=True,
+    )
+
+
+def add_label_traces(fig, labels, seq_length, history_length, shot_numbers):
+    """Add label traces to the plotly figure.
+
+    Args:
+        fig (go.Figure): The plotly figure to which the label traces will be added.
+        labels (list): List of labels for each shot.
+        seq_length (int): The length of the sequence.
+        history_length (int): The length of the history.
+        start_times (list): List of start times for each shot.
+        end_times (list): List of end times for each shot.
+        shot_numbers (list): List of shot numbers.
+
+    Returns:
+        None
+    """
+    # figure out, per shot, the start and end times of each consecutive mode
+    for shot_idx, shot_labels in enumerate(labels):
+        label_ranges = []
+        current_label = shot_labels[0]
+        start_idx = 0
+        for t in range(1, len(shot_labels)):
+            if shot_labels[t] != current_label:
+                label_ranges.append((current_label, -history_length + start_idx, -history_length + t))
+                current_label = shot_labels[t]
+                start_idx = t
+        # Add the last range
+        label_ranges.append((current_label, -history_length + start_idx, seq_length - 1))  # TODO
+        # Add scatter lines for each range
+        for label, start_time, end_time in label_ranges:
+            # fig.add_vrect(
+            #     x0=start_time,
+            #     x1=end_time,
+            #     line_width=0,
+            #     opacity=0.2,
+            #     fillcolor=plt_colors.qualitative.Plotly[int(label)],
+            #     annotation_text=f"{label} #{shot_numbers[shot_idx]}",
+            #     annotation_position="top left",
+            #     annotation_font_size=10,
+            #     annotation_font_color="black",
+            # )
+            fig.add_trace(
+                go.Scatter(
+                    x=[start_time, end_time],
+                    y=[0, 0],
+                    mode='lines',
+                    line=dict(color=plt_colors.qualitative.Plotly[int(label)], width=10),
+                    opacity=0.5,
+                    name=f'Shot #{shot_numbers[i]} - Label',
+                    legendgroup=f'Shot {shot_numbers[i]} - Label',
+                    legendgrouptitle_text=f'Shot {shot_numbers[i]} - Label',
+                    hovertemplate=f"Shot #{shot_numbers[i]}<br>Label: {labels[i]}"
+                )
+            )

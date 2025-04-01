@@ -19,7 +19,9 @@
                 // "evaluation.plot_functions=null",
                 "evaluation.n_steps=4",
                 "data.seq_length=64",
-                "batch_size=16"
+                "batch_size=16",
+                "model.params.batch_rematch_factor=1",
+                "model.params.step_every_nth_match=null"
             ],
             "justMyCode": false
             

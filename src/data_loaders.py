@@ -254,6 +254,7 @@ class ShotFlowDS(data.Dataset):
         self.file_path = dir + file
         self.columns_C = list(cols.get('c', []))
         self.columns_X = list(cols.x)
+        self.label = cols.get('label', None)
         self.seq_length = seq_length
         self.history_length = history_length if history_length is not None else 0
         self.crop_margin = crop_margin
@@ -343,21 +344,18 @@ class ShotFlowDS(data.Dataset):
 
         if self.history_length:  # if we are conditioning on X history
             history_start = start - self.history_length
-            history_end = start
             assert history_start >= 0, "Not enough history data available."
-            x_history = shot_data[self.columns_X].iloc[history_start:history_end].values.T
-
-            conditioning_input['x_history'] = x_history
-            conditioning_input['position_sequence'] = shot_data.index[history_start:end].values.astype(
-                np.float32
-            )
             meta['history_start'] = shot_data.index[history_start]
-            if self.columns_C:
-                conditioning_input['c'] = shot_data[self.columns_C].iloc[history_start:end].values.T
-        else:
-            conditioning_input['position_sequence'] = shot_data.index[start:end].values.astype(np.float32)
-            if self.columns_C:
-                conditioning_input['c'] = shot_data[self.columns_C].iloc[start:end].values.T
+            history_end = start
+            x_history = shot_data[self.columns_X].iloc[history_start:history_end].values.T
+            conditioning_input['x_history'] = x_history
+            start = history_start
+
+        conditioning_input['position_sequence'] = shot_data.index[start:end].values.astype(np.float32)
+        if self.columns_C:
+            conditioning_input['c'] = shot_data[self.columns_C].iloc[start:end].values.T
+        if self.label:
+            conditioning_input['label'] = shot_data[self.label].iloc[start:end].values.T
         assert not np.isnan(x).any(
         ), "NaNs found in the output window. Often casued by division by zero in normalization."
         return meta, conditioning_input, x  # prior, conditioning and X shapes: (variables, seq_length)
