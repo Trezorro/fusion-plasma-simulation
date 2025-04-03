@@ -18,7 +18,7 @@ pandas = "*"
 numpy = "<2"
 matplotlib = "*"
 pyarrow = "*"
-plotly = "*"
+plotly = "<6"
 numba = "<=0.58.1"  # numba 0.59.0 caused an import error in ydata-profiling
 torchinfo = "*"
 omegaconf = "*"
@@ -57,4 +57,4 @@ python_version = "3.11.3"
 # then the only pip packages to install are:
 # first make venv: python -m venv fusion
 # source ~/fusion/bin/activate
-# pip install pyarrow torchinfo omegaconf lightning wandb pytest pot antropy
+# pip install pyarrow torchinfo omegaconf lightning wandb pytest pot antropy "plotly<6.0.0"
