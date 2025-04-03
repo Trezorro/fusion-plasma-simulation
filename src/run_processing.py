@@ -9,12 +9,13 @@ import rich.progress
 import rich.traceback
 from ydata_profiling import ProfileReport
 import rich
+
 rich.traceback.install()
 
 # %%
 # data_dir = 'shots/'
-DATA_INPUT_DIR = "/Users/milan/Downloads/tcv_data/maurizio"
-DATA_SET_NAME = "2024_09_24-Maurizio"
+DATA_INPUT_DIR = "/Users/milan/Code/fusion/data/"
+DATA_SET_NAME = "LHD_labeled_TCV"
 DATE = pd.Timestamp.now().strftime("%Y_%m_%d")
 
 COLS_META = [
@@ -311,8 +312,9 @@ def generate_report(data: str | pd.DataFrame):
 
 
 #%% CHeck multiple data sets and compare them
-def compare_data_sets(input_dirs: list[str]):
-    shot_sets = {}
+def compare_data_sets(input_dirs: list[str], shot_lists: dict[str, list[int]] = None):
+    """Compare multiple datasets and check for duplicates."""
+    shot_sets = {} if shot_lists is None else shot_lists.copy()
     for data_dir in input_dirs:
         data_name = data_dir.split("/")[-1]
         sig_all, label_all = index_shot_names(data_dir)
@@ -323,8 +325,10 @@ def compare_data_sets(input_dirs: list[str]):
     for name, shot_set in shot_sets.items():
         new_elements = set(shot_set) - total_set
         total_set |= set(shot_set)
-        print(f"Total shots in {name}: {len(shot_set)} (+ adding {len(new_elements)} new shots to the total.)")
-    print("Total uniqie shot set: ", len(total_set))
+        print(
+            f"Total shots in {name}: {len(shot_set)} (+ adding {len(new_elements)} new shots to the total.)"
+        )
+    print("Total unique shot set: ", len(total_set))
     # Compare the sets
     for i, (name, shot_set) in enumerate(shot_sets.items()):
         for name2, shot_set2 in list(shot_sets.items())[i + 1:]:
@@ -358,10 +362,10 @@ generate_report("data/" + DATA_SET_NAME + ".parquet")
 
 #%%
 data_set_dirs = [
-    "/Users/milan/Code/fusion/data/LHD_labeled_TCV",
-    "/Users/milan/Downloads/tcv_data/ffelici",
-    "/Users/milan/Downloads/tcv_data/maurizio",
-    "/Users/milan/Downloads/tcv_data/labit",
+    "/Users/milan/Code/fusion/data/LHD_labeled_TCV", "/Users/milan/Code/fusion/experiments/data/shots"
+    # "/Users/milan/Downloads/tcv_data/ffelici",
+    # "/Users/milan/Downloads/tcv_data/maurizio",
+    # "/Users/milan/Downloads/tcv_data/labit",
 ]
 compare_data_sets(data_set_dirs)
 
@@ -369,3 +373,27 @@ compare_data_sets(data_set_dirs)
 # generate_report("data/2024_04_23-all_preprocessed.parquet")
 # %%
 # data_df = pd.read_parquet("data/2024_04_23-all_preprocessed.parquet")
+
+#%%
+import json
+with open("./LDH_demo/train.txt", 'r') as f:
+    train_shots = json.load(f)
+with open('./LDH_demo/test.txt', 'r') as f:
+    test_shots = json.load(f)
+
+# %%
+compare_data_sets(
+    ["/Users/milan/Code/fusion/data/LHD_labeled_TCV"], shot_lists={
+        "train": train_shots,
+        "test": test_shots
+    }
+)
+
+# %%
+compare_data_sets(
+    ["/Users/milan/Code/fusion/data/LHD_labeled_TCV"], shot_lists={
+        "all_yoeri": train_shots + test_shots,
+    }
+)
+
+# %%
