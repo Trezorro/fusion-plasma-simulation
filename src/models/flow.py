@@ -220,7 +220,7 @@ class FlowModule(L.LightningModule):
         metrics_out = metrics.get_moments_errors(generated_samples, target_samples)
         self.model.train()  # Reset model to training mode
 
-        if to_cpu:
+        if to_cpu:  # TODO: deprecate and alsways use cpu?
             meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
                 (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
                 device='cpu'  # type: ignore
