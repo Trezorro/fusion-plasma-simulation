@@ -796,24 +796,22 @@ def add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, 
         showgrid=False
     )
     shot_labels = labels[shot_i]
-    label_ranges = []
     spans = []
     modes = []
     custom_data = []
     colors = []
     current_label = shot_labels[0]
     start_t = -history_length
-    for next_t in range(-history_length + 1, seq_length):
-        if shot_labels[next_t] != current_label:
-            label_ranges.append((current_label, start_t, next_t))
+    for ti in range(0, history_length + seq_length):
+        if shot_labels[ti] != current_label:
+            next_t = ti - history_length  # Translate to the original time step
             spans.append(next_t - start_t)
             modes.append(MODE_NAMES[int(current_label)])
             colors.append(MODE_COLORS[int(current_label)])
             custom_data.append([shot_number, start_t, next_t, MODE_NAMES[int(current_label)]])
-            current_label = shot_labels[next_t]
+            current_label = shot_labels[ti]
             start_t = next_t
             # Add the last range
-    label_ranges.append((current_label, start_t, seq_length))
     spans.append(seq_length - start_t)
     modes.append(MODE_NAMES[int(current_label)])
     colors.append(MODE_COLORS[int(current_label)])
