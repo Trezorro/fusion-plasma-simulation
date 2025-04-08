@@ -95,7 +95,7 @@ class PlotsCallback(L.Callback):
                 [k.startswith("/") for k in evaluation_output['metrics']]
             ), "Metric keys returned by subset agnostic model should start with /"
             val_metrics = {"val" + k: v for k, v in evaluation_output['metrics'].items()}  # Add prefix
-            wandb.log(val_metrics | {"trainer/global_step": trainer.global_step}, commit=True)
+            wandb.log(val_metrics | {"trainer/global_step": trainer.global_step}, commit=False)
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
         if self.train_every_n_epochs and (
@@ -118,7 +118,7 @@ class PlotsCallback(L.Callback):
                 [k.startswith("/") for k in evaluation_output['metrics']]
             ), "Metric keys returned by subset agnostic model should start with /"
             train_metrics = {"train" + k: v for k, v in evaluation_output['metrics'].items()}  # Add prefix
-            wandb.log(train_metrics | {"trainer/global_step": trainer.global_step}, commit=True)
+            wandb.log(train_metrics | {"trainer/global_step": trainer.global_step}, commit=False)
 
 
 class TrainStepMonitor(L.Callback):
