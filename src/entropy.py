@@ -253,6 +253,8 @@ def plot_entropy(
         title=title,
         # xaxis_title="Entropy",
         height=SUBPLOT_HEIGHT * n_channels,  # Adjust height based on the number of channels
+        width=750,
+        autosize=False,  # Disable autosizing for wandb
         margin=dict(l=120, r=20, t=45, b=10),  # Increase left margin for titles
         # width=700,
         title_x=0.5,
