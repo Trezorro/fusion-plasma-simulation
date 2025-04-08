@@ -26,6 +26,10 @@ evaluation:
     #   n: 64
     # - key: line_flow_plot
     #   n: 5
+    - key: histogram
+      channel_name: PD
+      n: 64
+      log_key: peak_prominences_histogram
     - key: multi_channel_lines
       n: 5
       buttons: true
@@ -41,6 +45,7 @@ evaluation:
       method: perm_entropy
       log_key: permutation_entropy_plot
       n: 64
+
 
 # model: model.yaml # To be replaced by respective yaml file content
 # hidden_features: int = 128,

@@ -15,6 +15,7 @@ import wandb
 from src.plotting import get_and_plot_predictions
 import src.flow_plots as fp
 import src.entropy as entropy
+from src.plotters.histograms import plot_peak_prominences_histogram
 
 PlotFunction = Callable[[Any], plt.Figure | go.Figure | wandb.Image]
 
@@ -45,6 +46,7 @@ class PlotsCallback(L.Callback):
         'line_flow_plot': fp.plot_flow_and_lines_plotly,
         'multi_channel_lines': fp.multi_channel_lines_plotly,
         'entropy_plot': entropy.plot_entropy,
+        'histogram': plot_peak_prominences_histogram,
     }
 
     def __init__(self, evaluation_config: Mapping):
