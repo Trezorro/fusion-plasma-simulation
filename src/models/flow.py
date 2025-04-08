@@ -203,7 +203,7 @@ class FlowModule(L.LightningModule):
     test_step = validation_step
 
     @torch.inference_mode()
-    def evaluate(self, batch: tuple[dict, dict, torch.Tensor], n_steps=50, warp_fn=None, to_cpu=True):
+    def evaluate(self, batch: tuple[dict, dict, torch.Tensor], n_steps=50, warp_fn=None):
         # TODO: may add matching, and (pred) velocity to the output  to debug and plot a training step.
         self.model.eval()
         # Use lightnings manner of moving to correct current device:
@@ -220,13 +220,12 @@ class FlowModule(L.LightningModule):
         metrics_out = metrics.get_moments_errors(generated_samples, target_samples)
         self.model.train()  # Reset model to training mode
 
-        if to_cpu:  # TODO: deprecate and alsways use cpu?
-            meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
-                (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
-                device='cpu'  # type: ignore
-            )
-            metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
-
+        meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
+            (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
+            device='cpu'  # type: ignore
+        )
+        metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
+        peak_metrics, peak_features = metrics.get_peak_metrics(generated_samples, target_samples)
         return dict(
             meta=meta,
             conditioning_input=conditioning_input,
@@ -234,7 +233,8 @@ class FlowModule(L.LightningModule):
             prior_samples=prior_samples,
             generated_samples=generated_samples,
             trajectories=trajectories,
-            metrics=metrics_out
+            metrics=metrics_out | peak_metrics,
+            peak_features=peak_features,
         )
 
     @staticmethod

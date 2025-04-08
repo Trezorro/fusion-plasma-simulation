@@ -1,4 +1,5 @@
 # @title Utility code: styles, functions, generators, visualization
+from typing import Optional
 import torch
 import wandb
 import numpy as np
@@ -448,11 +449,13 @@ def multi_channel_lines_plotly(
     target_samples: torch.Tensor,
     generated_samples: torch.Tensor,
     conditioning_input: dict[str, torch.Tensor],
+    peak_features: Optional[dict] = None,
     show_c: bool = True,
     n=5,
     title_base="",
     subtitle="",  # Subtitle for the plot
     buttons=False,
+    label_bars=True,
     **kwargs  # catch-all for other arguments from evaluate.py
 ):
     """Create a simple line plot where each channel is a separate color, shots are overlaid, and predictions are show in dotted lines.
@@ -488,7 +491,7 @@ def multi_channel_lines_plotly(
         c_channels = 0  # skips the loop below
         C_CHANNEL_NAMES = []
     position_sequence = conditioning_input["position_sequence"]
-    labels = conditioning_input.get('label', None)
+    labels = conditioning_input.get('label').numpy()
     shot_numbers = meta["shot_number"]
     start_times = meta["start"]
     end_times = meta["end"]
@@ -556,88 +559,58 @@ def multi_channel_lines_plotly(
             yref="paper",
         )
         x_history = conditioning_input['x_history']
-    # add_label_traces(fig, labels, seq_length, history_length, shot_numbers)
     for shot_i in range(num_samples):
         shot_number = shot_numbers[shot_i]
         start_time = start_times[shot_i]
         end_time = end_times[shot_i]
         hover_info_template = "<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" + f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
+        shot_i_labels = labels[shot_i]
 
-        if labels is not None:
+        if label_bars:
             add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, shot_number)
-
         # Plot target samples
         for channel_i in range(n_channels):
             channel_color = COLOR_SCALE[((n_channels * shot_i) + channel_i) % len(COLOR_SCALE)]
-            channel_label = CHANNEL_NAMES[channel_i]
+            channel_name = CHANNEL_NAMES[channel_i]
             target_trace = target_samples[shot_i, channel_i, :].numpy()
 
-            # Find peaks and plot them
-            peak_positions, props = find_peaks(
-                target_trace, height=None, prominence=0.001, width=0, rel_height=1.0
-            )
-            peak_bases = target_trace[peak_positions] - props["prominences"]
-            peak_x_markers = []
-            peak_y_markers = []
-            peak_width_y_markers = []
-            peak_width_x_markers = []
-            for peak_t, base, width_l, width_r, width_height, y_value in zip(
-                peak_positions, peak_bases, props['left_ips'], props['right_ips'], props['width_heights'],
-                target_trace[peak_positions]
-            ):
-                peak_x_markers.extend([peak_t, peak_t, None])  # None creates a break between lines
-                peak_y_markers.extend([base, y_value, None])
-                peak_width_y_markers.extend([width_height, width_height, None])
-                peak_width_x_markers.extend([width_l, width_r, None])
-
-
-            fig.add_trace(  # Peak markers traces
+            if peak_features:
+                pred_peak_features = peak_features['pred_peaks'][channel_i][shot_i]
+                target_peak_features = peak_features['target_peaks'][channel_i][shot_i]
+                # Find peaks and plot them
+                add_peak_markers(
+                    fig,
+                    target_peak_features,
+                    "Target",
+                    shot_number,
+                    hover_info_template,
+                    channel_color,
+                    channel_name,
+                )
+                add_peak_markers(
+                    fig,
+                    pred_peak_features,
+                    "Predicted",
+                    shot_number,
+                    hover_info_template,
+                    channel_color,
+                    channel_name,
+                )
+            # Plot target traces
+            fig.add_trace(
                 go.Scatter(
-                    x=peak_x_markers,
-                    y=peak_y_markers,
-                    mode='markers+lines',
-                    marker=dict(
-                        size=10,
-                        color=channel_color,
-                        symbol="circle-open-dot",
-                        angleref="previous",
-                        opacity=0.8,
-                    ),
-                    opacity=0.9,
-                    line=dict(
-                        color=channel_color,
-                        dash="solid",
-                        width=0.8,
-                    ),
-                    name=f'{CHANNEL_NAMES[channel_i]} (peaks)',
-                    legendgroup=f'Shot {shot_number} - Peaks',
-                    legendgrouptitle_text=f'Shot {shot_number} - Peaks',
-                    hovertemplate=hover_info_template
-                ),
-                secondary_y=False
-            )
-            fig.add_trace(  # Peak markers traces
-                go.Scatter(
-                    x=peak_width_x_markers,
-                    y=peak_width_y_markers,
-                    mode='markers+lines',
-                    line=dict(
-                        color=channel_color,
-                        dash="solid",
-                        width=0.8,
-                    ),
-                    marker=dict(
-                        size=5,
-                        color=channel_color,
-                        symbol="line-ns-open",
-                        opacity=0.4,
-                    ),
-                    opacity=0.9,
-                    name=f'{CHANNEL_NAMES[channel_i]} (width)',
-                    legendgroup=f'Shot {shot_number} - Peaks',
-                    legendgrouptitle_text=f'Shot {shot_number} - Width',
-                    hovertemplate=hover_info_template
-                ),
+                    x=np.arange(seq_length),
+                    y=target_trace,
+                    mode='lines',
+                    line=dict(color=channel_color, width=3),
+                    opacity=0.6,
+                    customdata=shot_i_labels[history_length:],  # Only show labels for the prediction part
+                    name=f'{channel_name} (target)',
+                    legendgroup=f'Shot {shot_number} - Target',
+                    legendgrouptitle_text=f'Shot {shot_number} - Target',
+                    hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br>Label: %{customdata}<br><br>" +
+                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
+                )
             )
             # Plot target samples
             if show_history:
@@ -649,28 +622,15 @@ def multi_channel_lines_plotly(
                         mode='lines',
                         line=dict(color=channel_color, width=3),
                         opacity=0.8,
-                        name=f'{channel_label} (history)',
+                        customdata=shot_i_labels[:history_length],  # Only show labels for the history part
+                        name=f'{channel_name} (history)',
                         legendgroup=f'Shot {shot_number} - History',
                         legendgrouptitle_text=f'Shot {shot_number} - History',
-                        hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
+                        hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br>Label: %{customdata}<br><br>" +
                         f"<em>Shot #{shot_number}</em><br>History time span: {history_start_time:.4f}s-{start_time:.4f}s"
                     )
                 )
-            # Plot target traces
-            fig.add_trace(
-                go.Scatter(
-                    x=np.arange(seq_length),
-                    y=target_trace,
-                    mode='lines',
-                    line=dict(color=channel_color, width=3),
-                    opacity=0.6,
-                    name=f'{channel_label} (target)',
-                    legendgroup=f'Shot {shot_number} - Target',
-                    legendgrouptitle_text=f'Shot {shot_number} - Target',
-                    hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
-                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
-                )
-            )
+
             # Plot generated traces
             fig.add_trace(
                 go.Scatter(
@@ -679,7 +639,7 @@ def multi_channel_lines_plotly(
                     mode='lines',
                     line=dict(dash='dot', color=channel_color),
                     opacity=0.9,
-                    name=f'{channel_label} (predicted)',
+                    name=f'{channel_name} (predicted)',
                     legendgroup=f'Shot {shot_number} - Predicted',
                     legendgrouptitle_text=f'Shot {shot_number} - Predicted',
                     hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
@@ -689,7 +649,7 @@ def multi_channel_lines_plotly(
         for channel_j in range(c_channels):
             # Plot C (covariate) traces to the bottom of the plot
             channel_color = C_COLOR_SCALE[channel_j]
-            channel_label = C_CHANNEL_NAMES[channel_j]
+            channel_name = C_CHANNEL_NAMES[channel_j]
             fig.add_trace(
                 go.Scatter(
                     x=c_axis_values,
@@ -697,7 +657,7 @@ def multi_channel_lines_plotly(
                     mode='lines',
                     line=dict(color=channel_color, width=4),
                     opacity=0.7,
-                    name=f'{channel_label} (C)',
+                    name=f'{channel_name} (C)',
                     legendgroup=f'Shot {shot_number} - C',
                     legendgrouptitle_text=f'Shot {shot_number} - C',
                     hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
@@ -777,11 +737,81 @@ def multi_channel_lines_plotly(
             ]
         )
 
-
     if wandb.run.disabled:  # type: ignore
         fig.show()
 
     return fig
+
+
+def add_peak_markers(
+    fig,
+    peak_features,
+    group: str,
+    shot_number,
+    hover_info_template,
+    channel_color,
+    channel_name,
+):
+    peak_x_markers = []
+    peak_y_markers = []
+    peak_width_y_markers = []
+    peak_width_x_markers = []
+    for peak in peak_features:
+        peak_x_markers.extend([peak.X, peak.X, None])  # None creates a break between lines
+        peak_y_markers.extend([peak.bases, peak.Y, None])
+        peak_width_y_markers.extend([peak.bases, peak.bases, None])
+        peak_width_x_markers.extend([peak.left_ips, peak.right_ips, None])
+
+
+    fig.add_trace(  # Peak markers traces
+                    go.Scatter(
+                        x=peak_x_markers,
+                        y=peak_y_markers,
+                        mode='markers+lines',
+                        marker=dict(
+                            size=10,
+                            color=channel_color,
+                            symbol="circle-open-dot",
+                            angleref="previous",
+                            opacity=0.8,
+                        ),
+                        opacity=0.9,
+                        line=dict(
+                            color=channel_color,
+                            dash="solid",
+                            width=0.8,
+                        ),
+                        name=f'{channel_name} (peaks)',
+                        legendgroup=f'Shot {shot_number} - Peaks {group}',
+                        legendgrouptitle_text=f'Shot {shot_number} - Peaks {group}',
+                        hovertemplate=f"<b>{group}</b><br>{hover_info_template}"
+                    ),
+                    secondary_y=False
+                )
+    fig.add_trace(  # Peak markers traces
+                go.Scatter(
+                    x=peak_width_x_markers,
+                    y=peak_width_y_markers,
+                    mode='markers+lines',
+                    line=dict(
+                        color=channel_color,
+                        dash="solid",
+                        width=0.8,
+                    ),
+                    marker=dict(
+                        size=5,
+                        color=channel_color,
+                        symbol="line-ns-open",
+                        opacity=0.4,
+                    ),
+                    opacity=0.9,
+                    name=f'{channel_name} (width)',
+                    legendgroup=f'Shot {shot_number} - Peaks {group}',
+                    legendgrouptitle_text=f'Shot {shot_number} - Peaks {group}',
+                        hovertemplate=f"<b>{group}</b><br>{hover_info_template}"
+
+                ),
+                )
 
 
 def add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, shot_number):
