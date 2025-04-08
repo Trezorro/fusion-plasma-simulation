@@ -36,6 +36,7 @@ yapf = "*"
 pylint = "*"
 ruff = "*"
 pytest = "*"
+tuna = "*"
 
 [requires]
 python_version = "3.11.3"

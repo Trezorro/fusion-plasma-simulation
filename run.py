@@ -27,10 +27,14 @@ import lightning as L
 import lightning.pytorch.callbacks as pl_callbacks
 from lightning.pytorch.loggers import WandbLogger
 
+logger.info("Torch and lightning imported, importing src modules.")
+
 from src.evaluation import PlotsCallback, TrainStepMonitor
 import src.models
 import src.data_loaders
 import src.metrics as metrics
+
+logger.info("Imports complete, init wandb logger and loading model and data.")
 
 metrics.define_error_metrics("val")
 metrics.define_error_metrics("train")
@@ -42,7 +46,6 @@ wandb_logger = WandbLogger(
     save_dir="output/",
 )
 
-logger.info("Imports complete, loading model and data.")
 ModelClass = getattr(src.models, C.model.Class)
 model = ModelClass(**C.model.params)
 if "skip_log_summary" not in C or not C["skip_log_summary"]:
