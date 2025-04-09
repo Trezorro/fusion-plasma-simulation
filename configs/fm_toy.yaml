@@ -30,7 +30,7 @@ evaluation:
     - key: histogram  # see histograms.py
       log_key: peak_histogram/FIR_core_prominence
       channel_name: FIR_core
-      measure: prominence
+      measure: count
       n: 64
     - key: histogram  # see histograms.py
       log_key: peak_histogram/PD_prominence

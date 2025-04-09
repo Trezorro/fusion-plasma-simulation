@@ -25,18 +25,22 @@ def plot_peak_prominences_histogram(
     conditioning_input: dict,
     metrics: dict,
     channel_name: str = "PD",
-    measure: Literal["prominence", "width", "base"] = "prominence",
+    measure: Literal["prominence", "width", "base", "count"] = "prominence",
     n=64,
     title_base="",
     **kwargs,
 ) -> go.Figure:
     """
-    Plot a histogram of peak prominences for a given channel name.
+    Plot a histogram of peak measures for a given channel name.
 
     Args:
-        peak_features (dict): Dictionary containing predicted and target peaks.
-        channel_name (str): The channel name to plot.
-        n (int): Number of samples to plot.
+        peak_features (dict): Dictionary containing peak features: pred_peaks and target_peaks.
+        meta (dict): Metadata dictionary.
+        conditioning_input (dict): Conditioning input dictionary.
+        metrics (dict): Dictionary containing metrics.
+        channel_name (str): Name of the channel to plot.
+        measure (str): Measure to plot. Options are "prominence", "width", "base", or "count".
+        n (int): Number of shots to visualize.
         title_base (str): Base title for the plot.
         **kwargs: Additional arguments for the plot.
     """
@@ -46,70 +50,96 @@ def plot_peak_prominences_histogram(
     pred_peaks = peak_features["pred_peaks"][channel_idx]
     target_peaks = peak_features["target_peaks"][channel_idx]
     shot_numbers = meta["shot_number"]
-    labels = conditioning_input['label'].numpy()[:, history_length:]  # shape: (n_samples, time steps)
-    if len(pred_peaks) > n:
-        pred_peaks = pred_peaks[:n]
-    if len(target_peaks) > n:
-        target_peaks = target_peaks[:n]
+    labels = conditioning_input['label'].numpy(
+    )[:, history_length:]  # match the indexing of peak features (on the future window only)
+    mean_label_per_shot = labels.mean(axis=1)
+    n = min(n, len(shot_numbers))
+    count_hist = measure == "count"
 
     # Prepare data for plotly express
     data = []
-    for shot_i in range(len(shot_numbers)):
+    for shot_i in range(n):
         shot_num = shot_numbers[shot_i].item()
-        for peak in pred_peaks[shot_i]:
+        if count_hist:  # one scalar per shot
             data.append(
                 {
                     "distribution": "Predicted",
-                    "mode": int(labels[shot_i][peak.X].item()),
-                    "value": peak.prominences,
-                    "width": peak.widths,
+                    "mode": mean_label_per_shot[shot_i],
+                    "value": len(pred_peaks[shot_i]),
+                    "width": 0,
                     "shot_num": shot_num
                 }
             )
-        for peak in target_peaks[shot_i]:
             data.append(
                 {
                     "distribution": "Target",
-                    "mode": int(labels[shot_i][peak.X].item()),
-                    "value": peak.prominences,
-                    "width": peak.widths,
+                    "mode": mean_label_per_shot[shot_i],
+                    "value": len(target_peaks[shot_i]),
+                    "width": 0,
                     "shot_num": shot_num
                 }
             )
+        else:  # prominence, width, base, height, with multiple peak samples per shot
+            for peak in pred_peaks[shot_i]:
+                data.append(
+                    {
+                        "distribution": "Predicted",
+                        "mode": int(labels[shot_i][peak.X].item()),
+                        "value": getattr(peak, measure),
+                        "shot_num": shot_num
+                    }
+                )
+            for peak in target_peaks[shot_i]:
+                data.append(
+                    {
+                        "distribution": "Target",
+                        "mode": int(labels[shot_i][peak.X].item()),
+                        "value": getattr(peak, measure),
+                        "shot_num": shot_num
+                    }
+                )
     df = pd.DataFrame(data)
-    df["mode"] = df["mode"].map({1: "L", 2: "D", 3: "H", 0: "?"})
-
-    total_target_peaks = df.query("distribution == 'Target'").shape[0]
-    total_pred_peaks = df.query("distribution == 'Predicted'").shape[0]
-    visualized_shots = len(pred_peaks)
-    logger.debug(f"Visualized shots: {visualized_shots}")
-    logger.debug(f"Total target peaks: {total_target_peaks}, total predicted peaks: {total_pred_peaks}")
-
     ## Subtitle
-    marginal_metric = f"/error/peak_{measure}/marginal_wasserstein/{channel_name}"
-    pairwise_metric = f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}"
+    if count_hist:  # one scalar per shot
+        total_pred_peaks = df.query("distribution == 'Predicted'")['value'].sum()
+        total_target_peaks = df.query("distribution == 'Target'")['value'].sum()
+        marginal_metric = f"/error/peak_count/marginal_wasserstein/{channel_name}"
+        pairwise_metric = f"/error/peak_count/pairwise_mse/{channel_name}"
+    else:
+        df["mode"] = df["mode"].map({1: "L", 2: "D", 3: "H", 0: "?"})
+
+        total_target_peaks = df.query("distribution == 'Target'").shape[0]
+        total_pred_peaks = df.query("distribution == 'Predicted'").shape[0]
+
+        marginal_metric = f"/error/peak_{measure}/marginal_wasserstein/{channel_name}"
+        pairwise_metric = f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}"
+
     subtitle = (
-        f"<br><sub>{visualized_shots} shots: {total_target_peaks} target peaks, "
+        f"<br><sub>{n} shot samples: {total_target_peaks} target peaks, "
         f"{total_pred_peaks} predicted peaks &nbsp;&nbsp;&nbsp;&nbsp;"
         f"Marginal Wd: {metrics[marginal_metric]:.4f}, "
-        f"Pairwise Wd: {metrics[pairwise_metric]:.4f}"
+        f"Pairwise {'MSE' if measure == 'count' else 'Wd'}: {metrics[pairwise_metric]:.4f}"
         "</sub>"
     )
+    logger.debug(f"Visualized shots: {n}")
+    logger.debug(f"Total target peaks: {total_target_peaks}, total predicted peaks: {total_pred_peaks}")
 
     fig = px.histogram(
         df,
         x="value",
-        color="mode",
+        color="shot_num" if count_hist else "mode",
         barmode="stack",
         facet_col="distribution",
         histnorm="probability density",
-        color_discrete_sequence=COLOR_SCALE,
+        color_discrete_sequence=COLOR_SCALE if not count_hist else None,
         title=f"{title_base} Histogram of Peak <b>{measure.capitalize()}s</b> "
         f"for Channel: <b>{channel_name}</b>{subtitle}",
         labels={
-            "value": measure,
+            "value": f"<b>{measure.capitalize()}s</b>",
             "group": "Group",
-            "shot_num": "Shot Number"
+            "shot_num": "Shot Number",
+            "mode": "Mode",
+            "distribution": "Distribution",
         },
         hover_data=["shot_num", "mode"],
         marginal="rug",
@@ -122,7 +152,7 @@ def plot_peak_prominences_histogram(
 
     fig.update_layout(
         hovermode="x unified",
-        legend_title_text="Mode",
+        # legend_title_text="Mode",
         margin=dict(l=20, r=20, t=120, b=20),
         #     xaxis=dict(matches='x'),  # Link x-axis hovering between facets
     )

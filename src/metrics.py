@@ -210,6 +210,23 @@ class PeakProps(
         """
         return self.right_ips - self.left_ips
 
+    # Measure Aliases:
+    @property
+    def width(self):
+        return self.widths
+
+    @property
+    def height(self):
+        return self.Y
+
+    @property
+    def prominence(self):
+        return self.prominences
+
+    @property
+    def base(self):
+        return self.bases
+
     def __len__(self):
         """
         Returns the number of peaks.
@@ -337,41 +354,6 @@ def batch_get_peakprops(batch: torch.Tensor,
     return peak_results
 
 
-def pairwise_wasserstein_distance(
-    pred_peaks: list[list[PeakProps]], target_peaks: list[list[PeakProps]]
-) -> dict:
-    """Calculate the mean pairwise Wasserstein distance for each measure."""
-    C = get_current_config()
-    channel_names = C.data.cols.x
-    metrics = {}
-    measures = ["height", "prominence", "base", "width"]
-
-    for channel, pred_ch_samples, target_ch_samples in zip(channel_names, pred_peaks, target_peaks):
-        pairwise_channel_metrics = {
-            f"/error/peak_{measure}/pairwise_wasserstein/{channel}": 0. for measure in measures
-        }
-        marginal_pred = {measure: [] for measure in measures}
-        marginal_target = {measure: [] for measure in measures}
-        for pred_sample, target_sample in zip(pred_ch_samples, target_ch_samples):
-            pair_wasserstein = pred_sample - target_sample  # Subtraction operator is overloaded for PeakProps
-            for measure in measures:
-                pairwise_channel_metrics[f"/error/peak_{measure}/pairwise_wasserstein/{channel}"] += getattr(
-                    pair_wasserstein, measure
-                )
-                marginal_pred[measure].extend(getattr(pred_sample, measure))
-                marginal_target[measure].extend(getattr(target_sample, measure))
-
-        # Average over the batch
-        for measure in measures:
-            pairwise_channel_metrics[f"/error/peak_{measure}/pairwise_wasserstein/{channel}"] /= len(
-                pred_ch_samples
-            )
-
-        metrics.update(pairwise_channel_metrics)
-
-    return metrics
-
-
 def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, dict]:
     """Return a dict with the sample peak metrics and a dict with intermediate results for plotting.
 
@@ -381,7 +363,12 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
         - /error/peak_{measure}/marginal_wasserstein/<channelname>: The wasserstein distance between the target and predicted distributions of that measure, per channel.
 
          """
-    MEASURES = ["height", "prominence", "base", "width"]
+    MEASURES = [
+        "height",
+        "prominence",
+        "base",
+        "width",
+    ]  # + count with pairwise mse and marginal wasserstein
     C = get_current_config()
     CHANNEL_NAMES = C.data.cols.x
     BATCH_SIZE = pred.shape[0]
@@ -389,15 +376,18 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
     target_peaks = batch_get_peakprops(target)  # (C, B)
 
     metrics_out = {}
-
     for channel, pred_ch_samples, target_ch_samples in zip(CHANNEL_NAMES, pred_peaks, target_peaks):
         pairwise_distances = {
             f"/error/peak_{measure}/pairwise_wasserstein/{channel}": 0. for measure in MEASURES
         }
+        counts_target = []
+        counts_pred = []
         marginal_dist_pred = {measure: [] for measure in MEASURES}
         marginal_dist_target = {measure: [] for measure in MEASURES}
         for pred_sample, target_sample in zip(pred_ch_samples, target_ch_samples):
             pair_wasserstein = pred_sample - target_sample  # Subtraction operator is overloaded for PeakProps
+            counts_pred.append(len(pred_sample))
+            counts_target.append(len(target_sample))
             for measure in MEASURES:
                 pairwise_distances[f"/error/peak_{measure}/pairwise_wasserstein/{channel}"] += getattr(
                     pair_wasserstein, measure
@@ -418,6 +408,12 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
                     case _:
                         raise ValueError(f"Unknown measure: {measure}")
 
+        metrics_out[f"/error/peak_count/marginal_wasserstein/{channel}"] = wasserstein_distance(
+            counts_pred, counts_target
+        )
+        metrics_out[f"/error/peak_count/pairwise_mse/{channel}"] = (
+            np.mean(np.power(np.array(counts_pred) - np.array(counts_target), 2))
+        )
         # Average over the batch
         for measure in MEASURES:
             pairwise_distances[f"/error/peak_{measure}/pairwise_wasserstein/{channel}"] /= len(
