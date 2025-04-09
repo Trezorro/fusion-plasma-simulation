@@ -8,15 +8,15 @@ features:
   - FIX_conditioning_input_matching
 
 epochs: 8000
-batch_size: 82
+batch_size: 512 
 patience: 400
 gradient_clip_val: 10  # in testing, lower values did not help prevent loss explosions. This is just a safeguard
 skip_log_summary: false
 evaluation:
   n_steps: 150
   max_n: 64
-  val_every_n_epochs: 20
-  train_every_n_epochs: 40
+  val_every_n_epochs: 5
+  train_every_n_epochs: 10
   scrutinize_epochs: 10  # Epochs equal or lower than this will always be fully evaluated. -1 to disable
   plot_functions:
     # every item has to have a 'key' key.
@@ -183,8 +183,8 @@ model:
     prior: 'levy'  # normal, copy, brownian
     ot_method: null  # null to disable
     ot_replace: true  # Default false
-    batch_rematch_factor: 128  # Default 1
-    step_every_nth_match: 2  # Default 1 # TODO
+    batch_rematch_factor: 1  # Default 1
+    step_every_nth_match: 1  # Default 1 # TODO
     gradient_clip_val: ${ gradient_clip_val }
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
