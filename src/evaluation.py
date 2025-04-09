@@ -89,7 +89,7 @@ class PlotsCallback(L.Callback):
             logger.debug("Calling evaluate for validation data.")
             evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps)
             logger.debug("Evaluation done. Calling plotters.")
-            title_base = f"{wandb.run.name} |  Epoch {trainer.current_epoch}"
+            title_base = f"{wandb.run.name} |  Epoch <b>{trainer.current_epoch}</b>"
             self.call_plot_functions(evaluation_output, "val", trainer.global_step, title_base)
             logger.debug("Plotters done.")
             assert all(
