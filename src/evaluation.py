@@ -12,7 +12,6 @@ import lightning.pytorch as pl
 
 import wandb
 
-from src.plotting import get_and_plot_predictions
 import src.flow_plots as fp
 import src.entropy as entropy
 from src.plotters.histograms import plot_peak_prominences_histogram

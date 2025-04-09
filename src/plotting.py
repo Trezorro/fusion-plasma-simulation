@@ -301,7 +301,7 @@ def plot_signal_and_spectrum(df_stacked_time, df_freq, title, cutoff_t, subtitle
 
 @torch.inference_mode()
 def get_and_plot_predictions(module, batch, title_base=""):
-    """Get and plot predictions for a batch of shots. 
+    """Get and plot predictions for a batch of shots with traces and spectrogram.
 
     Plots n shots in the signal plot, and one signal from one shot in the spectogram plot.
     """
