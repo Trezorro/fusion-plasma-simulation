@@ -123,6 +123,7 @@ def plot_peak_prominences_histogram(
     )
     logger.debug(f"Visualized shots: {n}")
     logger.debug(f"Total target peaks: {total_target_peaks}, total predicted peaks: {total_pred_peaks}")
+    heavy_render = total_pred_peaks + total_target_peaks > 1000
 
     fig = px.histogram(
         df,
@@ -142,7 +143,7 @@ def plot_peak_prominences_histogram(
             "distribution": "Distribution",
         },
         hover_data=["shot_num", "mode"],
-        marginal="rug",
+        marginal="violin",
         nbins=100,
         category_orders={
             "mode": ['L', 'D', 'H', '?'],
@@ -151,9 +152,12 @@ def plot_peak_prominences_histogram(
     )
 
     fig.update_layout(
-        hovermode="x unified",
+        hovermode="x",
         # legend_title_text="Mode",
         margin=dict(l=20, r=20, t=120, b=20),
+        violingap=0,
+        violingroupgap=0,
+        violinmode='overlay'
         #     xaxis=dict(matches='x'),  # Link x-axis hovering between facets
     )
     if wandb.run.disabled:  # type: ignore

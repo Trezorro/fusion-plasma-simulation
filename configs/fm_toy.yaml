@@ -28,10 +28,31 @@ evaluation:
     #   n: 5
     # Prominence histograms
     - key: histogram  # see histograms.py
-      log_key: peak_histogram/FIR_core_prominence
+      log_key: peak_histogram/FIR_core_count
       channel_name: FIR_core
       measure: count
       n: 64
+    - key: histogram  # see histograms.py
+      log_key: peak_histogram/PD_count
+      channel_name: PD
+      measure: count
+      n: 64
+    - key: histogram  # see histograms.py
+      log_key: peak_histogram/DML_count
+      channel_name: DML
+      measure: count
+      n: 64
+    - key: histogram  # see histograms.py
+      log_key: peak_histogram/POHM_count
+      channel_name: POHM
+      measure: count
+      n: 64
+    - key: histogram  # see histograms.py
+      log_key: peak_histogram/Z_axis_count
+      channel_name: Z_axis
+      measure: count
+      n: 64
+    # Peak Prominence histograms
     - key: histogram  # see histograms.py
       log_key: peak_histogram/PD_prominence
       channel_name: PD
