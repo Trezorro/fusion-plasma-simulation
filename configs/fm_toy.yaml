@@ -31,7 +31,7 @@ evaluation:
       n: 64
       log_key: peak_prominences_histogram
     - key: multi_channel_lines
-      n: 5
+      n: 16
       buttons: true
     - key: entropy_plot
       method: app_entropy

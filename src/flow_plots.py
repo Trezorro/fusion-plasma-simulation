@@ -712,10 +712,16 @@ def multi_channel_lines_plotly(
                 )
             )
 
+        # update traces such that only the first shot is visible initially
+        first_shot = shot_numbers[0].item()
+        fig.update_traces(visible=False)
+        for trace in fig.data:
+            if trace.legendgroup.startswith(f'Shot {first_shot}'):
+                trace.visible = True
         fig.update_layout(
             updatemenus=[
                 dict(
-                    active=0,
+                    active=3,
                     buttons=main_button_list,
                     showactive=True,
                     direction="down",
