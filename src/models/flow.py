@@ -37,6 +37,7 @@ class FlowModule(L.LightningModule):
         ConditionalUNet=ConditionalUNet,
     )
     SAMPLE_RATE = 10_000  # Hz
+    PRIOR_OPTIONS = ["normal", "copy", "brownian", "levy"]
 
     def __init__(
         self,
@@ -86,7 +87,7 @@ class FlowModule(L.LightningModule):
             self.batch_rematch_factor, self.step_every_nth_match,
             self.batch_rematch_factor // self.step_every_nth_match
         )
-        assert self.prior in ["normal", "copy", "brownian"], f"Invalid prior: {self.prior}"
+        assert self.prior in self.PRIOR_OPTIONS, f"Invalid prior: {self.prior}"
         assert (
             self.prior == "normal" or self.ot_method is None
         ), "OT sampling only supported with fully random prior"
@@ -175,6 +176,9 @@ class FlowModule(L.LightningModule):
             case "brownian":
                 x_last = conditioning_inputs['x_history'][:, :, -1]
                 prior_samples = self.generate_brownian_motion(x_last, seq_length)
+            case "levy":
+                x_last = conditioning_inputs['x_history'][:, :, -1]
+                prior_samples = self.generate_levy_jump_process(x_last, seq_length)
             case _:
                 raise ValueError(f"Invalid prior: {self.prior}")
         return prior_samples
@@ -198,6 +202,28 @@ class FlowModule(L.LightningModule):
         N, C = x_last.shape
         dB = self.sqrt_dt * torch.randn((N, C, seq_length), device=self.device)
         x_t = x_last.unsqueeze(-1) + torch.cumsum(dB, dim=-1)
+        return x_t
+
+    def generate_levy_jump_process(self, x_last, seq_length, jump_prob=0.01, jump_scale=0.5):
+        """Generate a Lévy jump process trajectory.
+
+        The Lévy jump process is stationary for long periods and jumps to random levels
+        with a given probability.
+
+        Parameters:
+        x_last (torch.Tensor): Initial positions of shape (N, C), where N = batch size, C = number of channels.
+        seq_length (int): Number of time steps in the sequence.
+        jump_prob (float): Probability of a jump at each time step.
+        jump_scale (float): Scale of the random jumps.
+
+        Returns:
+        torch.Tensor: Lévy jump process trajectory of shape (N, C, seq_length).
+        """
+        N, C = x_last.shape
+        jumps = torch.rand((N, C, seq_length), device=self.device) < jump_prob  # Jump mask
+        jump_values = jump_scale * torch.randn((N, C, seq_length), device=self.device)  # Random jump values
+        jump_diff = jumps * jump_values
+        x_t = x_last.unsqueeze(-1) + torch.cumsum(jump_diff, dim=-1)
         return x_t
 
     test_step = validation_step
