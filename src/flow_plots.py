@@ -559,15 +559,17 @@ def multi_channel_lines_plotly(
             yref="paper",
         )
         x_history = conditioning_input['x_history']
+    shot_ids = []  # to match buttons to shot number - time identifiers
     for shot_i in range(num_samples):
-        shot_number = shot_numbers[shot_i]
         start_time = start_times[shot_i]
+        shot_sample_id = f"{shot_numbers[shot_i]}:{start_time:.2f}s"
+        shot_ids.append(shot_sample_id)
         end_time = end_times[shot_i]
-        hover_info_template = "<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" + f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
+        hover_info_template = "<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" + f"<em>Shot #{shot_sample_id}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
         shot_i_labels = labels[shot_i]
 
         if label_bars:
-            add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, shot_number)
+            add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, shot_sample_id)
         # Plot target samples
         for channel_i in range(n_channels):
             channel_color = COLOR_SCALE[((n_channels * shot_i) + channel_i) % len(COLOR_SCALE)]
@@ -582,7 +584,7 @@ def multi_channel_lines_plotly(
                     fig,
                     target_peak_features,
                     "Target",
-                    shot_number,
+                    shot_sample_id,
                     hover_info_template,
                     channel_color,
                     channel_name,
@@ -591,7 +593,7 @@ def multi_channel_lines_plotly(
                     fig,
                     pred_peak_features,
                     "Predicted",
-                    shot_number,
+                    shot_sample_id,
                     hover_info_template,
                     channel_color,
                     channel_name,
@@ -606,10 +608,10 @@ def multi_channel_lines_plotly(
                     opacity=0.6,
                     customdata=shot_i_labels[history_length:],  # Only show labels for the prediction part
                     name=f'{channel_name} (target)',
-                    legendgroup=f'Shot {shot_number} - Target',
-                    legendgrouptitle_text=f'Shot {shot_number} - Target',
+                    legendgroup=f'Shot {shot_sample_id} - Target',
+                    legendgrouptitle_text=f'Shot {shot_sample_id} - Target',
                     hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br>Label: %{customdata}<br><br>" +
-                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
+                    f"<em>Shot #{shot_sample_id}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
                 )
             )
             # Plot target samples
@@ -624,10 +626,10 @@ def multi_channel_lines_plotly(
                         opacity=0.8,
                         customdata=shot_i_labels[:history_length],  # Only show labels for the history part
                         name=f'{channel_name} (history)',
-                        legendgroup=f'Shot {shot_number} - History',
-                        legendgrouptitle_text=f'Shot {shot_number} - History',
+                        legendgroup=f'Shot {shot_sample_id} - History',
+                        legendgrouptitle_text=f'Shot {shot_sample_id} - History',
                         hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br>Label: %{customdata}<br><br>" +
-                        f"<em>Shot #{shot_number}</em><br>History time span: {history_start_time:.4f}s-{start_time:.4f}s"
+                        f"<em>Shot #{shot_sample_id}</em><br>History time span: {history_start_time:.4f}s-{start_time:.4f}s"
                     )
                 )
 
@@ -640,10 +642,10 @@ def multi_channel_lines_plotly(
                     line=dict(dash='dot', color=channel_color),
                     opacity=0.9,
                     name=f'{channel_name} (predicted)',
-                    legendgroup=f'Shot {shot_number} - Predicted',
-                    legendgrouptitle_text=f'Shot {shot_number} - Predicted',
+                    legendgroup=f'Shot {shot_sample_id} - Predicted',
+                    legendgrouptitle_text=f'Shot {shot_sample_id} - Predicted',
                     hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
-                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
+                    f"<em>Shot #{shot_sample_id}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
                 )
             )
         for channel_j in range(c_channels):
@@ -658,10 +660,10 @@ def multi_channel_lines_plotly(
                     line=dict(color=channel_color, width=4),
                     opacity=0.7,
                     name=f'{channel_name} (C)',
-                    legendgroup=f'Shot {shot_number} - C',
-                    legendgrouptitle_text=f'Shot {shot_number} - C',
+                    legendgroup=f'Shot {shot_sample_id} - C',
+                    legendgrouptitle_text=f'Shot {shot_sample_id} - C',
                     hovertemplate="<b>%{y:.5f}</b><br>t: %{x:,}<br><br>" +
-                    f"<em>Shot #{shot_number}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
+                    f"<em>Shot #{shot_sample_id}</em><br>Time span: {start_time:.4f}s-{end_time:.4f}s"
                 )
             )
     if buttons:
@@ -685,14 +687,13 @@ def multi_channel_lines_plotly(
                 'visible': not_target
             }])
         ]
-        for shot_i in range(num_samples):
-            shot_num = str(shot_numbers[shot_i].item())
+        for shot_sample_id in shot_ids:
             main_button_list.append(
                 dict(
+                    label=shot_sample_id,
                     args=[{
-                        "visible": [shot_num in trace.legendgroup for trace in fig.data]
+                        "visible": [shot_sample_id in trace.legendgroup for trace in fig.data]
                     }],
-                    label=shot_num,
                     method="update"
                 )
             )

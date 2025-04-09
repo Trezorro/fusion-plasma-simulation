@@ -239,15 +239,16 @@ class ShotFlowDS(data.Dataset):
         dir: str,
         file: str,
         cols: DictConfig,
+        train_shots: list[int],
+        test_shots: list[int],
         seq_length=200,
-        crop_margin=1000,
+        crop_margin=0,
         history_length: Optional[int] = 0,  # 0 or None, when no history conditioning is used.
-        random_start: bool | list[int] = True,
-        force_mean_zero=False,  # Deprecated: Causes division by zero if the window is constant.
+        allowed_start_indices: Optional[list[int]] = None,
         # overfitting helpers:
-        force_fixed_shot: Optional[int] = None,
         overfit_on_shots: Optional[list[int]] = None,
-        force_start: Optional[int] = None,
+        train=True,
+        pre_shuffle=True,
         **kwargs
     ):
         super().__init__()
@@ -256,35 +257,63 @@ class ShotFlowDS(data.Dataset):
         self.columns_X = list(cols.x)
         self.label = cols.get('label', None)
         self.seq_length = seq_length
-        self.history_length = history_length if history_length is not None else 0
-        self.crop_margin = crop_margin
-        assert self.crop_margin >= self.history_length, "crop_margin must be greater than or equal to history_length to provide enough context."
-        self.random_start = random_start
-        self.force_fixed_shot = force_fixed_shot
+        self.history_length = history_length or 0
+        self.crop_margin = crop_margin or 0
         self.overfit_on_shots = overfit_on_shots
-        self.force_start = force_start
-        assert random_start is not True or not force_start, "Cannot have random_start and force_start at the same time, unless random_start is a list of int options."
+        self.allowed_start_indices = allowed_start_indices
+        self.train = train
+        self.shot_numbers = train_shots if train else test_shots
+        self.pre_shuffle = pre_shuffle
+
+        assert self.crop_margin >= self.history_length, "crop_margin must be greater than or equal to history_length to provide enough context."
 
         self.load_and_filter_data()
         self.normalize_columns()
+        self.precompute_indices()
+
+    def precompute_indices(self):
+        """Precompute all viable sample indices for each shot."""
+        self.viable_indices = []
+        viable_shots = set()
+        if self.overfit_on_shots:
+            # Overfit on a specific set of shots
+            self.shot_numbers = self.overfit_on_shots
+        for shot_number in self.shot_numbers:
+            shot_data = self.data[self.data['ShotNum'] == shot_number]
+            shot_len = len(shot_data)
+            viable_start_max = shot_len - self.crop_margin - self.seq_length
+            if viable_start_max < self.crop_margin:
+                logger.warning(
+                    f"Shot {shot_number} is too short (T{shot_len}) for desired "
+                    f"seq_length {self.seq_length} and crop_margin {self.crop_margin}"
+                )
+                continue  # Skip this shot if it's too short
+            if self.allowed_start_indices:
+                # Use the allowed start indices if provided
+                for start_idx in self.allowed_start_indices:
+                    if self.crop_margin <= start_idx and start_idx + self.seq_length <= viable_start_max:
+                        self.viable_indices.append((shot_number, start_idx))
+                        viable_shots.add(shot_number)
+            else:
+                # Use all possible start indices within the viable range and crop margin
+                for start_idx in range(self.crop_margin, viable_start_max + 1):
+                    self.viable_indices.append((shot_number, start_idx))
+                    viable_shots.add(shot_number)
+        logger.info(f"Precomputed {len(self.viable_indices)} viable samples across all shots.")
+        logger.info(
+            f"Included {len(viable_shots)} shots of {len(self.shot_numbers)} specified, in the dataset."
+        )
+        self.shot_numbers = list(viable_shots)
+        if self.pre_shuffle:
+            random.shuffle(self.viable_indices)
 
     def load_and_filter_data(self):
         self.data = pd.read_parquet(self.file_path)
         # Reduce memory usage and quicker indexing:
         self.data['ShotNum'] = self.data['ShotNum'].astype(np.int32)
+        self.data = self.data[self.data['ShotNum'].isin(self.shot_numbers)]
+        # Fill NaNs with forward fill
         self.data = self.data.ffill()
-        # Filter out shots that are too short, i.e. less than seq_length + 2 * crop_margin or less than seq_length + force_start
-        if not self.force_fixed_shot:
-            if self.force_start:
-                # filter out shots that won't fit the forced start point
-                self.data = self.data.groupby('ShotNum').filter(
-                    lambda x: len(x) > self.seq_length + self.force_start  # type: ignore
-                )
-            else:
-                self.data = self.data.groupby('ShotNum').filter(
-                    lambda x: len(x) > self.seq_length + 2 * self.crop_margin
-                )
-        self.shot_numbers = self.data['ShotNum'].unique()
         logger.info(f"Using {len(self.shot_numbers)} shots from {self.file_path}")
 
     def normalize_columns(self):
@@ -304,34 +333,11 @@ class ShotFlowDS(data.Dataset):
             )
 
     def __len__(self):
-        return len(self.shot_numbers)
+        return len(self.viable_indices)
 
     def __getitem__(self, idx):
-        if self.force_fixed_shot and self.force_fixed_shot < len(self.shot_numbers):
-            idx = self.force_fixed_shot
-        elif self.overfit_on_shots:
-            pick = idx % len(self.overfit_on_shots)
-            idx = self.overfit_on_shots[pick]
-
-        shot_number = self.shot_numbers[idx]
-        shot_data = self.data[self.data['ShotNum'] == shot_number]  # indexed by time
-        shot_len = len(shot_data)  # Should be at minumum 5000 based on preprocessing
-        viable_start_max = shot_len - self.crop_margin - self.seq_length
-        assert viable_start_max > self.crop_margin, (
-            f"Shot {shot_number} is too short (T{shot_len}) for desired "
-            f"seq_length {self.seq_length} and crop_margin {self.crop_margin}"
-        )
-        if self.force_start:
-            start = self.force_start
-            if isinstance(self.random_start, Sequence):
-                start += random.choice(self.random_start)
-        elif self.random_start:
-            if isinstance(self.random_start, Sequence):
-                start = self.crop_margin + random.choice(self.random_start)
-            else:
-                start = random.randint(self.crop_margin, viable_start_max)
-        else:
-            start = self.crop_margin
+        shot_number, start = self.viable_indices[idx]
+        shot_data = self.data[self.data['ShotNum'] == shot_number]
         end = start + self.seq_length
         x = shot_data[self.columns_X].iloc[start:end].values.T
 
@@ -357,5 +363,5 @@ class ShotFlowDS(data.Dataset):
         if self.label:
             conditioning_input['label'] = shot_data[self.label].iloc[start:end].values.T
         assert not np.isnan(x).any(
-        ), "NaNs found in the output window. Often casued by division by zero in normalization."
-        return meta, conditioning_input, x  # prior, conditioning and X shapes: (variables, seq_length)
+        ), "NaNs found in the output window. Often caused by division by zero in normalization."
+        return meta, conditioning_input, x

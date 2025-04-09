@@ -55,13 +55,17 @@ if "skip_log_summary" not in C or not C["skip_log_summary"]:
 wandb_logger.watch(model, log="all", log_freq=50)
 logger.info("Model loaded, loading data.")
 DataSetClass = getattr(src.data_loaders, C.data.Class)
-data_set = DataSetClass(**C.data)
+train_set = DataSetClass(**C.data, train=True)
+val_set = DataSetClass(**C.data, train=False)
 
-train_set, val_set = data.random_split(data_set, [0.9, 0.1], generator=torch.Generator().manual_seed(42))
+# train_set, val_set = data.random_split(data_set, [0.9, 0.1], generator=torch.Generator().manual_seed(42))
 
 train_loader = data.DataLoader(train_set, batch_size=C.batch_size, shuffle=True)
-val_loader = data.DataLoader(val_set, batch_size=C.batch_size, shuffle=False)
-# val_loader.dataset.random_start = False  # TODO this doesn't work, wrong dataset attribute.
+val_loader = data.DataLoader(
+    val_set,
+    batch_size=C.batch_size,
+    shuffle=True,
+)
 
 logger.info("Data loaded, initializing trainer.")
 trainer = L.Trainer(
