@@ -275,9 +275,9 @@ def plot_flow_and_lines_plotly(
     prior_samples: torch.Tensor,
     generated_samples: torch.Tensor,
     trajectories: torch.Tensor,
+    meta: dict[str, torch.Tensor],
     n=30,
     title_base="",
-    size=5,  # Size of scatter plot points
     alpha=0.9,  # Transparency of scatter plot points
     **kwargs
 ):
@@ -296,6 +296,7 @@ def plot_flow_and_lines_plotly(
     Returns:
         None
     """
+    SIZE = 5  # Size of scatter plot points
     # select the first channel for everything
     prior_samples = prior_samples[:, 0, :]
     generated_samples = generated_samples[:, 0, :]
@@ -305,9 +306,10 @@ def plot_flow_and_lines_plotly(
     num_samples = min(n, num_samples)  # Number of trajectories to visualize
     data_list = [prior_samples, generated_samples, target_samples]
     FACET_LIST = ['Initial Points', 'Generated Samples', 'Target Data', 'Paths']
+    shot_numbers = meta["shot_number"]
     max_abs_value = torch.max(torch.abs(torch.cat(data_list)), 0)[0]
     global_max = max(max_abs_value[0], max_abs_value[1]) * 1.1  # Add some padding
-    color_scale = plt_colors.qualitative.Plotly
+    COLOR_SCALE = plt_colors.qualitative.Plotly
 
     fig = plotly_make_subplots(
         rows=2,
@@ -335,7 +337,7 @@ def plot_flow_and_lines_plotly(
                     y=data_list[facet_i][:, 1],
                     mode='markers',
                     marker=dict(
-                        size=size,
+                        size=SIZE,
                         opacity=alpha,  #color=color_list[facet_i]
                     ),
                     name=FACET_LIST[facet_i],
@@ -353,10 +355,19 @@ def plot_flow_and_lines_plotly(
                     go.Scatter(
                         x=path[:, 0],
                         y=path[:, 1],
-                        mode='lines',
+                        mode='lines+markers',
                         line=dict(color=colors.rgb2hex(LINE_COLOR), width=1),
+                        marker=dict(
+                            symbol='triangle-up-dot',
+                            size=6,
+                            angleref='previous',
+                            color=colors.rgb2hex(LINE_COLOR),
+                            standoff=3,
+                        ),
                         opacity=1,
-                        showlegend=False,
+                        name=f'Trajectory shot {shot_numbers[j]}',
+                        legendgroup=f'Shot {shot_numbers[j]}',
+                        showlegend=True,
                         yaxis='y1',
                         xaxis='x1',
                     ),
@@ -367,38 +378,31 @@ def plot_flow_and_lines_plotly(
             # Then plot start and end points for the SAME trajectories
             start_points = trajectories[0, :num_samples]  # Shape: [n_viz, num_features]
             end_points = trajectories[-1, :num_samples]  # Shape: [n_viz, num_features]
-            fig.add_trace(
-                go.Scatter(
-                    x=start_points[:, 0],
-                    y=start_points[:, 1],
-                    mode='markers',
-                    # marker=dict(size=size, opacity=1, color=SOURCE_COLOR),
-                    name='Source Points',
-                    yaxis='y1',
-                    xaxis='x1',
-                ),
-                row=1,
-                col=facet_i + 1
-            )
+
         fig.update_xaxes(dtick=0.5, row=1, col=facet_i + 1)
         fig.update_yaxes(dtick=0.5, row=1, col=facet_i + 1)
 
     # Plot each sample from generated_samples in a line plot against their corresponding target_samples
     for sample_i in range(num_samples):
         # Predicted rollouts:
+        group = f'Shot {shot_numbers[sample_i]}'
+        color = COLOR_SCALE[sample_i % len(COLOR_SCALE)]
+
         fig.add_trace(
             go.Scatter(
-                x=list(range(num_features)),
-                y=generated_samples[sample_i, :],
-                mode='lines',
-                line=dict(dash='dot', color=color_scale[sample_i]),
-                opacity=alpha,
-                name=f'Generated {sample_i+1}',
-                yaxis='y2',
-                xaxis='x2',
+                x=[start_points[sample_i, 0]],
+                y=[start_points[sample_i, 1]],
+                mode='markers',
+                # marker=dict(size=size, opacity=1, color=SOURCE_COLOR),
+                marker=dict(size=SIZE, opacity=1, color=color),
+                name='Source Point',
+                legendgroup=group,
+                legendgrouptitle_text=group,
+                yaxis='y1',
+                xaxis='x1',
             ),
-            row=2,
-            col=1
+            row=1,
+            col=4
         )
 
         # Plot current endpoints with the same color as the generated sample
@@ -407,36 +411,68 @@ def plot_flow_and_lines_plotly(
                 x=[end_points[sample_i, 0]],
                 y=[end_points[sample_i, 1]],
                 mode='markers',
-                marker=dict(size=size, opacity=1, color=color_scale[sample_i]),
-                name=f'Current Endpoint {sample_i+1}',
-                showlegend=False,
+                marker=dict(size=SIZE, opacity=1, color=color),
+                name='Endpoint',
+                showlegend=True,
+                legendgroup=group,
                 yaxis='y1',
                 xaxis='x1',
             ),
             row=1,
             col=4
         )
-
-        # Ground truth rollouts:
+        # Traces in bottom row:
         fig.add_trace(
             go.Scatter(
                 x=list(range(num_features)),
-                y=target_samples[sample_i, :],
+                y=generated_samples[sample_i, :],
                 mode='lines',
-                line=dict(color=colors.rgb2hex(TARGET_COLOR), width=2),
-                opacity=alpha * 0.5,
-                name=f'Target {sample_i+1}',
+                line=dict(dash='dot', color=color, width=0.5),
+                opacity=0.7,
+                name='Generated',
+                legendgroup=group,
                 yaxis='y2',
                 xaxis='x2',
             ),
             row=2,
             col=1
         )
-
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(num_features)),
+                y=prior_samples[sample_i, :],
+                mode='lines',
+                line=dict(dash='40, 2, 20, 2', color=color, width=2),
+                opacity=0.85,
+                name='Prior',
+                legendgroup=group,
+                yaxis='y2',
+                xaxis='x2',
+            ),
+            row=2,
+            col=1
+        )
+        # Ground truth rollouts:
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(num_features)),
+                y=target_samples[sample_i, :],
+                mode='lines',
+                line=dict(dash='solid', color=color, width=2),
+                opacity=1,
+                name=f'Target',
+                legendgroup=group,
+                yaxis='y2',
+                xaxis='x2',
+            ),
+            row=2,
+            col=1
+        )
+    fig.update_yaxes(showgrid=False, row=2, col=1)
     fig.update_layout(
-        title=title_base,
+        title=title_base + "Flow Priors and Targets",
         # height=800,
-        template='plotly_dark' if BG_THEME in ['black', 'dark'] else 'plotly_white'
+        template='plotly_dark',
     )
     if wandb.run.disabled:  # type: ignore
         fig.show()

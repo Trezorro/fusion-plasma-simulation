@@ -24,8 +24,11 @@ evaluation:
     # all other keys are passed as kwargs to the plot function
     # - key: 2d_flow_plot
     #   n: 64
-    # - key: line_flow_plot
-    #   n: 5
+    - key: line_flow_plot
+      n: 16
+    - key: multi_channel_lines
+      n: 16
+      buttons: true
     # Prominence histograms
     - key: histogram  # see histograms.py
       log_key: peak_histogram/FIR_core_count
@@ -151,9 +154,6 @@ evaluation:
       channel_name: Z_axis
       measure: base
       n: 64
-    - key: multi_channel_lines
-      n: 16
-      buttons: true
     - key: entropy_plot
       method: app_entropy
       log_key: approximate_entropy_plot
