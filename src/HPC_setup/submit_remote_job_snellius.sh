@@ -24,10 +24,10 @@ if [ "$#" -ne 1 ] || [ -z "$1" ]; then
     echo "To submit a new job, use: $0 <job_name>"
     echo "Will check the queue and sync results from snellius."
     # SSH into the main node, check the queue status, and run rsync
-    sync_slurms
     ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
         squeue $QUEUE_FORMAT
 EOF
+    sync_slurms
     exit 0
 fi
 

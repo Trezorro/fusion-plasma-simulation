@@ -1,18 +1,19 @@
 """Functions for evaluating and visualizing model performance."""
 #%%
-from typing import Any, Callable, Mapping
 import logging
+import time
+from typing import Any, Callable, Mapping
 from venv import logger
-from matplotlib import pyplot as plt
-import plotly.graph_objects as go
-import plotly
-from torch.utils import data
+
 import lightning as L
+import plotly
+import plotly.graph_objects as go
+from matplotlib import pyplot as plt
+from torch.utils import data
 
-import wandb
-
-import src.flow_plots as fp
 import src.entropy as entropy
+import src.flow_plots as fp
+import wandb
 from src.plotters.histograms import plot_peak_prominences_histogram
 
 PlotFunction = Callable[[Any], plt.Figure | go.Figure | wandb.Image]
@@ -80,7 +81,7 @@ class PlotsCallback(L.Callback):
                 commit=False
             )
 
-    def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
+    def on_validation_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
         # Skip for all other epochs
         if (
             trainer.current_epoch % self.val_every_n_epochs == 1
@@ -103,7 +104,7 @@ class PlotsCallback(L.Callback):
             val_metrics = {"val" + k: v for k, v in evaluation_output['metrics'].items()}  # Add prefix
             wandb.log(val_metrics | {"trainer/global_step": trainer.global_step}, commit=False)
 
-    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: L.LightningModule):
+    def on_train_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
         if self.train_every_n_epochs and (
             (trainer.current_epoch % self.train_every_n_epochs == 0) or
             trainer.current_epoch <= self.scrutinize_epochs
@@ -136,12 +137,10 @@ class TrainStepMonitor(L.Callback):
         self.train_steps = 0
         self.samples_seen = 0
 
-    def on_train_start(self, trainer: pl.Trainer, pl_module: L.LightningModule):
+    def on_train_start(self, trainer: L.Trainer, pl_module: L.LightningModule):
         self.start_time = time.time()
 
-    def on_train_batch_end(
-        self, trainer: pl.Trainer, pl_module: L.LightningModule, outputs, batch, batch_idx
-    ):
+    def on_train_batch_end(self, trainer: L.Trainer, pl_module: L.LightningModule, outputs, batch, batch_idx):
         self.train_steps += 1
         self.samples_seen += len(batch[2]) * pl_module.batch_rematch_factor
         elapsed_time = (time.time() - self.start_time) / 60.0
