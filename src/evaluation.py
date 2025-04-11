@@ -73,13 +73,7 @@ class PlotsCallback(L.Callback):
             log_key = params.pop("log_key", key)  # if log_key is present, use it instead of key
             n = params.pop("n", self.max_n)
             fig = plot_fn(**evaluation_output, n=n, title_base=title_base, **params)
-            wandb.log(
-                {
-                    f"{trainval}/{log_key}": wandb.Html(plotly.io.to_html(fig)),
-                    "trainer/global_step": global_step
-                },
-                commit=False
-            )
+            wandb.log({f"{trainval}/{log_key}": fig, "trainer/global_step": global_step}, commit=False)
 
     def on_validation_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
         # Skip for all other epochs

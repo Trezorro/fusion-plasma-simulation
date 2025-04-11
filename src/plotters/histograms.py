@@ -2,6 +2,7 @@
 
 #%% Imports
 from typing import Callable, List, Literal, Tuple
+import plotly
 import wandb
 import plotly.graph_objects as go
 import plotly.express as px
@@ -29,7 +30,7 @@ def plot_peak_prominences_histogram(
     n=64,
     title_base="",
     **kwargs,
-) -> go.Figure:
+):
     """
     Plot a histogram of peak measures for a given channel name.
 
@@ -162,4 +163,4 @@ def plot_peak_prominences_histogram(
     )
     if wandb.run.disabled:  # type: ignore
         fig.show()
-    return fig
+    return wandb.Html(plotly.io.to_html(fig))

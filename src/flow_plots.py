@@ -545,8 +545,6 @@ def multi_channel_lines_plotly(
         specs=[[{
             "secondary_y": True
         }]],
-        subplot_titles=[title_base],
-        # vertical_spacing=0.05,
     )
     fig.update_yaxes(
         range=(-1.5, None),
