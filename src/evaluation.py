@@ -11,8 +11,8 @@ import plotly.graph_objects as go
 from matplotlib import pyplot as plt
 from torch.utils import data
 
-import src.entropy as entropy
-import src.flow_plots as fp
+import src.plotters.plot_entropy as entropy
+import src.plotters.flow_plots as fp
 import wandb
 from src.plotters.histograms import plot_peak_prominences_histogram
 

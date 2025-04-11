@@ -39,7 +39,9 @@ LINE_COLOR = WONG_yellow
 plt.style.use('dark_background')
 
 
-def plot_distributions(dist1, dist2, title1="Distribution 1", title2="Distribution 2", alpha=0.8, show=True):
+def plot_distributions_mpl(
+    dist1, dist2, title1="Distribution 1", title2="Distribution 2", alpha=0.8, show=True
+):
     """Plot two distributions side by side
 
     By https://drscotthawley.github.io/blog/posts/FlowModels.html 
@@ -925,58 +927,3 @@ def add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, 
         ),
         secondary_y=True,
     )
-
-
-def add_label_traces(fig, labels, seq_length, history_length, shot_numbers):
-    """Add label traces to the plotly figure.
-
-    Args:
-        fig (go.Figure): The plotly figure to which the label traces will be added.
-        labels (list): List of labels for each shot.
-        seq_length (int): The length of the sequence.
-        history_length (int): The length of the history.
-        start_times (list): List of start times for each shot.
-        end_times (list): List of end times for each shot.
-        shot_numbers (list): List of shot numbers.
-
-    Returns:
-        None
-    """
-    # figure out, per shot, the start and end times of each consecutive mode
-    for shot_idx, shot_labels in enumerate(labels):
-        label_ranges = []
-        current_label = shot_labels[0]
-        start_idx = 0
-        for t in range(1, len(shot_labels)):
-            if shot_labels[t] != current_label:
-                label_ranges.append((current_label, -history_length + start_idx, -history_length + t))
-                current_label = shot_labels[t]
-                start_idx = t
-        # Add the last range
-        label_ranges.append((current_label, -history_length + start_idx, seq_length - 1))  # TODO
-        # Add scatter lines for each range
-        for label, start_time, end_time in label_ranges:
-            # fig.add_vrect(
-            #     x0=start_time,
-            #     x1=end_time,
-            #     line_width=0,
-            #     opacity=0.2,
-            #     fillcolor=plt_colors.qualitative.Plotly[int(label)],
-            #     annotation_text=f"{label} #{shot_numbers[shot_idx]}",
-            #     annotation_position="top left",
-            #     annotation_font_size=10,
-            #     annotation_font_color="black",
-            # )
-            fig.add_trace(
-                go.Scatter(
-                    x=[start_time, end_time],
-                    y=[0, 0],
-                    mode='lines',
-                    line=dict(color=plt_colors.qualitative.Plotly[int(label)], width=10),
-                    opacity=0.5,
-                    name=f'Shot #{shot_numbers[i]} - Label',
-                    legendgroup=f'Shot {shot_numbers[i]} - Label',
-                    legendgrouptitle_text=f'Shot {shot_numbers[i]} - Label',
-                    hovertemplate=f"Shot #{shot_numbers[i]}<br>Label: {labels[i]}"
-                )
-            )

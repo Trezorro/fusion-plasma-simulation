@@ -1,3 +1,6 @@
+"""Plotting functions for old Unet window prediction model and frequency domain Unet model.
+
+Not updated yet to work with the new evaluation callback pipeline."""
 import plotly.express as px
 from plotly.subplots import make_subplots
 import numpy as np
