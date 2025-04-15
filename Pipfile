@@ -25,6 +25,7 @@ omegaconf = "*"
 lightning = "*"
 pot = "*"
 antropy = "*"
+kaleido = "*"
 
 [dev-packages]
 jupyter = "*"

@@ -151,7 +151,7 @@ def plot_entropy(
     )  # Disable y-axis ticks for all subplots
     if wandb.run.disabled:  # type: ignore
         fig.show()
-    return fig.to_image(format="png", width=800, height=SUBPLOT_HEIGHT * n_channels)
+    return fig.to_image(format="png", width=800, height=SUBPLOT_HEIGHT * n_channels, engine='auto')
 
 
 def test_plot_multiple_entropies_on_target(
