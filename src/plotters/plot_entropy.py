@@ -20,7 +20,7 @@ def plot_entropy(
     group_names: Tuple[str, str] = ('predicted', 'target'),
     method="app_entropy",  # one of app_entropy, perm_entropy, spectral_entropy
     **kwargs
-) -> go.Image:
+) -> wandb.Image:
     """Plot the entropy of two groups of time series, with a horizontal subplot (range 0-1) for each channel.
 
     Args:
@@ -151,7 +151,9 @@ def plot_entropy(
     )  # Disable y-axis ticks for all subplots
     if wandb.run.disabled:  # type: ignore
         fig.show()
-    return fig.to_image(format="png", width=800, height=SUBPLOT_HEIGHT * n_channels, engine='auto')
+    return wandb.Image(
+        fig.to_image(format="png", width=800, height=SUBPLOT_HEIGHT * n_channels, engine='auto')
+    )
 
 
 def test_plot_multiple_entropies_on_target(
