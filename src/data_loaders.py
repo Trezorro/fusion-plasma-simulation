@@ -315,6 +315,9 @@ class ShotFlowDS(data.Dataset):
         # Fill NaNs with forward fill
         self.data = self.data.ffill()
         logger.info(f"Using {len(self.shot_numbers)} shots from {self.file_path}")
+        if "DML-r" in self.columns_X:
+            logger.info("Adding reversed DML to data.")
+            self.data["DML-r"] = self.data["DML"] * -1
 
     def normalize_columns(self):
         """Normalize within 0-1"""
