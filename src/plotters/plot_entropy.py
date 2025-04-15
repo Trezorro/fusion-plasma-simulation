@@ -1,13 +1,13 @@
+import io
+from PIL import Image
 from src.config import get_current_config
 from src.entropy import VALID_FUNCS, batch_entropy
-
 
 import numpy as np
 import plotly.graph_objects as go
 import torch
 import wandb
 from plotly.subplots import make_subplots
-
 
 from typing import Tuple
 
@@ -126,17 +126,18 @@ def plot_entropy(
     # Remove repeated x-axis titles for subplots
     title = f"{title_base} - {method_name}<br><sub>Mean Wd: {metrics[f'/error/{method}_wasserstein/mean']:0.5f}</sub>"
     fig.update_layout(
-        template='plotly_dark',
+        template='plotly_dark',  # list(pio.templates):
+        # = ['plotly', 'ggplot2', 'seaborn', 'simple_white', 'plotly_white', 'plotly_dark']
         title=title,
         # xaxis_title="Entropy",
         height=SUBPLOT_HEIGHT * n_channels,  # Adjust height based on the number of channels
         width=750,
         autosize=False,  # Disable autosizing for wandb
-        margin=dict(l=120, r=20, t=45, b=10),  # Increase left margin for titles
+        margin=dict(l=120, r=20, t=50, b=10),  # Increase left margin for titles
         # width=700,
-        title_x=0.5,
-        title_y=0.95,
-        title_xanchor='center',
+        # title_x=0.5,
+        # title_y=0.95,
+        title_xanchor='left',
         title_yanchor='top',
         hovermode="y",
         # shapes=midlines,
@@ -149,11 +150,12 @@ def plot_entropy(
     fig.update_yaxes(
         showgrid=True, zeroline=False, matches='y', showticklabels=False, range=[0, batch_size]
     )  # Disable y-axis ticks for all subplots
+    image_bytes = fig.to_image(format="png", engine='auto')
+    pil_image = Image.open(io.BytesIO(image_bytes))
     if wandb.run.disabled:  # type: ignore
-        fig.show()
-    return wandb.Image(
-        fig.to_image(format="png", width=800, height=SUBPLOT_HEIGHT * n_channels, engine='auto')
-    )
+        # show image
+        pil_image.show()
+    return wandb.Image(pil_image)
 
 
 def test_plot_multiple_entropies_on_target(
