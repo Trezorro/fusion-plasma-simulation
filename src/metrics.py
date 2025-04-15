@@ -1,5 +1,7 @@
 from typing import Tuple
-from collections import namedtuple
+from collections import namedtuple, abc
+import logging
+from venv import logger
 
 import numpy as np
 import torch
@@ -9,6 +11,8 @@ from scipy.stats import wasserstein_distance
 import src.entropy as entropy
 import wandb
 from src.config import get_current_config
+
+logger = logging.getLogger(__name__)
 """
 ## Absolute metrics (targets and predicted are both viable inputs on their own)
 - moments:
@@ -191,11 +195,22 @@ class PeakProps(
             "bases",  # Height at which the width is measured. Width is right_ip - left_ip.
             "left_ips",  # Left (interpolated) x positions of the peak base. 
             "right_ips",  # Right (interpolated) x positions of the peak base.
-        ]
+            # Optional properties:
+            "energy_delta",  # Energy difference between the peak and adjusted base.
+            "energy_base_x",  # Position of the base used to calculate the energy delta.
+            "pd_prominence",  # Peak prominence of matched PD peaks
+        ],
+        defaults=(None, None, None),
     )
 ):
     """
     A named tuple subclass to store peak properties with a factory method for creation.
+
+    Allows storage and retrieval of the properties of multiple peaks, from one trace, so that they can be 
+    compared to other arrays of peak properties easily.
+
+    Iteration over the PeakProps instance yields the properties in the order they are defined like a tuple.
+    Using the iter_peaks() method will iterate over the peaks in the arrays, returning a new PeakProps instance for each peak.
 
     Provides widths, length, and addition/subtraction operations for peak properties.
     Note: The addition operator concatenates the peak properties of two instances.
@@ -227,41 +242,63 @@ class PeakProps(
     def base(self):
         return self.bases
 
-    def __len__(self):
+    def num_peaks(self):
         """
         Returns the number of peaks.
         """
-        return len(self.X)
+        if isinstance(self.X, abc.Collection):
+            return len(self.X)
+        if self.X is None:
+            return 0
+        return 1
 
     def __repr__(self) -> str:
-        return f"<PeakProps n={len(self.X)} peaks>"
+        if self.X is None:
+            return "<PeakProps None>"
+        if not isinstance(self.X, abc.Collection):
+            return f"PeakProps{tuple(self)}"
+        return f"<PeakProps :" + ", ".join(
+            f'{f}[{len(v) if v is not None else None}]' for f, v in self.items()
+        ) + ">"
 
-    def __str__(self) -> str:
-        return f"<PeakProps n={len(self.X)} peaks>"
+    def items(self):
+        """
+        Returns the properties as a list of tuples.
+        """
+        return [(field, getattr(self, field)) for field in self._fields]
+
+    def _asdict(self):
+        """
+        Returns the properties as a dictionary.
+        """
+        return {field: getattr(self, field) for field in self._fields}
 
     def __getitem__(self, i):
         """
         Allows indexing into the PeakProps instance to get individual peak properties.
         """
-        return PeakProps(
-            X=self.X[i].item(),
-            Y=self.Y[i].item(),
-            prominences=self.prominences[i].item(),
-            bases=self.bases[i].item(),
-            left_ips=self.left_ips[i].item(),
-            right_ips=self.right_ips[i].item(),
-        )
-
-    def __iter__(self):
-        for i in range(len(self)):
-            yield PeakProps(
+        if type(i) is str:
+            return getattr(self, i)
+        if isinstance(self.X, abc.Collection):
+            # assuming all properties are the same length
+            return PeakProps(
                 X=self.X[i].item(),
                 Y=self.Y[i].item(),
                 prominences=self.prominences[i].item(),
                 bases=self.bases[i].item(),
                 left_ips=self.left_ips[i].item(),
                 right_ips=self.right_ips[i].item(),
+                energy_delta=self.energy_delta[i].item() if self.energy_delta is not None else None,
+                energy_base_x=self.energy_base_x[i].item() if self.energy_base_x is not None else None,
+                pd_prominence=self.pd_prominence[i].item() if self.pd_prominence is not None else None,
             )
+        return self
+
+    def iter_peaks(self):
+        if not isinstance(self.X, abc.Collection):
+            return self
+        for i in range(self.num_peaks()):
+            yield self[i]
 
     @classmethod
     def from_find_peaks(cls, trace, prominence=0.001, width=0, rel_height=1.0) -> "PeakProps":
@@ -269,6 +306,19 @@ class PeakProps(
         Factory method to create a PeakProps instance from the output of scipy's find_peaks.
         """
         peak_positions, props = find_peaks(trace, prominence=prominence, width=width, rel_height=rel_height)
+        # for every peak, find the trace minimum in the range of the peak width
+        peak_widths = props["widths"]
+        half_width = peak_widths / 2
+        window_l = (peak_positions - half_width).astype(np.int32)
+        window_r = np.ceil(peak_positions + half_width).astype(np.int32)
+        # Ensure the windows are within the bounds of the trace
+        window_l = np.clip(window_l, 0, len(trace) - 1)
+        window_r = np.clip(window_r, 0, len(trace) - 1)
+        # Find the minimum in the window for each peak
+        energy_base_pos = np.array(
+            [window_l[i] + trace[window_l[i]:window_r[i]].argmin(0) for i in range(len(peak_positions))]
+        )
+        energy_delta = trace[peak_positions] - trace[energy_base_pos]
         return cls(
             X=peak_positions,
             Y=trace[peak_positions].numpy(),
@@ -276,6 +326,8 @@ class PeakProps(
             bases=props["width_heights"],
             left_ips=props["left_ips"],
             right_ips=props["right_ips"],
+            energy_delta=energy_delta,
+            energy_base_x=energy_base_pos,
         )
 
     def __add__(self, other: "PeakProps") -> "PeakProps":
@@ -303,21 +355,21 @@ class PeakProps(
         SENTINEL_VALUE = -1.0
         if not isinstance(other, PeakProps):
             raise TypeError("Can only subtract PeakProps instances.")
-        if len(self) == 0 and len(other) == 0:
+        if self.num_peaks() == 0 and other.num_peaks() == 0:
             return PeakWasserstein(
                 height=0.0,
                 prominence=0.0,
                 base=0.0,
                 width=0.0,
             )
-        if len(self) == 0:
+        if self.num_peaks() == 0:
             return PeakWasserstein(
                 height=wasserstein_distance([SENTINEL_VALUE], other.Y),
                 prominence=wasserstein_distance([SENTINEL_VALUE], other.prominences),
                 base=wasserstein_distance([SENTINEL_VALUE], other.bases),
                 width=wasserstein_distance([SENTINEL_VALUE], other.widths),
             )
-        if len(other) == 0:
+        if other.num_peaks() == 0:
             return PeakWasserstein(
                 height=wasserstein_distance(self.Y, [SENTINEL_VALUE]),
                 prominence=wasserstein_distance(self.prominences, [SENTINEL_VALUE]),
@@ -344,12 +396,13 @@ def batch_get_peakprops(batch: torch.Tensor,
     Returns:
         list: A transposed list of PeakProps namedtuples for each time series in the batch. (C, B)
     """
+    logger.debug(f"Finding peaks in batch of shape {batch.shape}")
     peak_results = [
         [
             PeakProps.from_find_peaks(
-                sample[channel_idx], prominence=prominence, width=width, rel_height=rel_height
-            ) for sample in batch  # Iterate over the batch dimension (B)
-        ] for channel_idx in range(batch.shape[1])  # Iterate over the channel dimension (C)
+                channel_trace, prominence=prominence, width=width, rel_height=rel_height
+            ) for channel_trace in sample  # Iterate over the channel dimension (C)  
+        ] for sample in batch  # Iterate over the batch dimension (B)
     ]
     return peak_results
 
@@ -371,25 +424,28 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
     ]  # + count with pairwise mse and marginal wasserstein
     C = get_current_config()
     CHANNEL_NAMES = C.data.cols.x
-    BATCH_SIZE = pred.shape[0]
-    pred_peaks = batch_get_peakprops(pred)  # (C, B)
-    target_peaks = batch_get_peakprops(target)  # (C, B)
+    pred_peaks_batch = batch_get_peakprops(pred)  # (B, C)
+    target_peaks_batch = batch_get_peakprops(target)  # (B, C)
+    BATCH_SIZE = len(target_peaks_batch)
 
+    logger.debug(f"Analyzing peak distributions and calculating difference metrics for {BATCH_SIZE} samples")
     metrics_out = {}
-    for channel, pred_ch_samples, target_ch_samples in zip(CHANNEL_NAMES, pred_peaks, target_peaks):
+    for channel_i, channel_name in enumerate(CHANNEL_NAMES):
         pairwise_distances = {
-            f"/error/peak_{measure}/pairwise_wasserstein/{channel}": 0. for measure in MEASURES
+            f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}": 0. for measure in MEASURES
         }
         counts_target = []
         counts_pred = []
         marginal_dist_pred = {measure: [] for measure in MEASURES}
         marginal_dist_target = {measure: [] for measure in MEASURES}
-        for pred_sample, target_sample in zip(pred_ch_samples, target_ch_samples):
-            pair_wasserstein = pred_sample - target_sample  # Subtraction operator is overloaded for PeakProps
-            counts_pred.append(len(pred_sample))
-            counts_target.append(len(target_sample))
+        for sample_i in range(BATCH_SIZE):
+            pred_sample = pred_peaks_batch[sample_i][channel_i]
+            target_sample = target_peaks_batch[sample_i][channel_i]
+            pair_wasserstein = pred_sample - target_sample  # Subtraction operator is overloaded with wasserstein distance
+            counts_pred.append(pred_sample.num_peaks())
+            counts_target.append(target_sample.num_peaks())
             for measure in MEASURES:
-                pairwise_distances[f"/error/peak_{measure}/pairwise_wasserstein/{channel}"] += getattr(
+                pairwise_distances[f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}"] += getattr(
                     pair_wasserstein, measure
                 )
                 match measure:
@@ -408,25 +464,23 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
                     case _:
                         raise ValueError(f"Unknown measure: {measure}")
 
-        metrics_out[f"/error/peak_count/marginal_wasserstein/{channel}"] = wasserstein_distance(
+        metrics_out[f"/error/peak_count/marginal_wasserstein/{channel_name}"] = wasserstein_distance(
             counts_pred, counts_target
         )
-        metrics_out[f"/error/peak_count/pairwise_mse/{channel}"] = (
+        metrics_out[f"/error/peak_count/pairwise_mse/{channel_name}"] = (
             np.mean(np.power(np.array(counts_pred) - np.array(counts_target), 2))
         )
         # Average over the batch
         for measure in MEASURES:
-            pairwise_distances[f"/error/peak_{measure}/pairwise_wasserstein/{channel}"] /= len(
-                pred_ch_samples
-            )
-            metrics_out[f"/error/peak_{measure}/marginal_wasserstein/{channel}"] = wasserstein_distance(
+            pairwise_distances[f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}"] /= BATCH_SIZE
+            metrics_out[f"/error/peak_{measure}/marginal_wasserstein/{channel_name}"] = wasserstein_distance(
                 marginal_dist_pred[measure] or [-1 * BATCH_SIZE],
                 marginal_dist_target[measure] or [-1 * BATCH_SIZE],  # distance to a sentinel value
             )
 
         metrics_out.update(pairwise_distances)
     peak_features = {
-        "pred_peaks": pred_peaks,
-        "target_peaks": target_peaks,
+        "pred_peaks": pred_peaks_batch,
+        "target_peaks": target_peaks_batch,
     }
     return metrics_out, peak_features

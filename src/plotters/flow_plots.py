@@ -159,7 +159,7 @@ def plot_flow(
     return wandb.Image(fig)
 
 
-def plot_flow_and_lines(
+def plot_flow_and_lines_mpl(
     target_samples,
     prior_samples,
     generated_samples,
@@ -350,7 +350,7 @@ def plot_flow_and_lines_plotly(
                 col=facet_i + 1
             )
         else:
-            # Plot trajectory paths first
+            # Plot yellow arrow trajectory paths first
             for j in range(num_samples):
                 path = trajectories[:, j]  # Shape: [n_steps, num_features] (one sample)
                 fig.add_trace(
@@ -613,8 +613,8 @@ def multi_channel_lines_plotly(
             target_trace = target_samples[shot_i, channel_i, :].numpy()
 
             if peak_features:
-                pred_peak_features = peak_features['pred_peaks'][channel_i][shot_i]
-                target_peak_features = peak_features['target_peaks'][channel_i][shot_i]
+                pred_peak_features = peak_features['pred_peaks'][shot_i][channel_i]
+                target_peak_features = peak_features['target_peaks'][shot_i][channel_i]
                 # Find peaks and plot them
                 add_peak_markers(
                     fig,
@@ -799,13 +799,46 @@ def add_peak_markers(
     peak_y_markers = []
     peak_width_y_markers = []
     peak_width_x_markers = []
-    for peak in peak_features:
+    peak_energy_delta_y = []
+    peak_energy_delta_x = []
+    for peak in peak_features.iter_peaks():
         peak_x_markers.extend([peak.X, peak.X, None])  # None creates a break between lines
         peak_y_markers.extend([peak.bases, peak.Y, None])
         peak_width_y_markers.extend([peak.bases, peak.bases, None])
         peak_width_x_markers.extend([peak.left_ips, peak.right_ips, None])
+        peak_energy_delta_y.extend([peak.Y, peak.Y - peak.energy_delta, None])
+        peak_energy_delta_x.extend([peak.X, peak.energy_base_x, None])
 
 
+    fig.add_trace(  # Peak energy delta markers
+        go.Scatter(
+            x=peak_energy_delta_x,
+            y=peak_energy_delta_y,
+            mode='lines+markers',
+            line=dict(
+                color=channel_color,
+                dash="solid",
+                width=1,
+            ),
+            marker=dict(
+                            symbol='triangle-up-dot',
+                            size=6,
+                            angleref='previous',
+                color=channel_color,
+                            standoff=3,
+                opacity=0.8,
+                        ),
+            # marker=dict(
+            #     size=8,
+            #     symbol="triangle-down",
+            # ),
+            opacity=0.9,
+            name=f'{channel_name} (energy delta)',
+            legendgroup=f'Shot {shot_number} - Peaks {group}',
+            legendgrouptitle_text=f'Shot {shot_number} - Peaks {group}',
+            hovertemplate=f"<b>{group}</b><br>{hover_info_template}"
+        )
+    )
     fig.add_trace(  # Peak markers traces
                     go.Scatter(
                         x=peak_x_markers,

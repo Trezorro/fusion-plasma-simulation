@@ -15,7 +15,6 @@ logger.setLevel(logging.DEBUG)
 
 #%%
 
-import plotly.graph_objects as go
 # COLOR_SCALE = plotly.colors.sequential.Plasma
 COLOR_SCALE = ['#636EFA', '#00CC96', '#EF553B', "#999999"]
 
@@ -48,8 +47,8 @@ def plot_peak_prominences_histogram(
     C = get_current_config()
     channel_idx = C.data.cols.x.index(channel_name)
     history_length = C.data.history_length
-    pred_peaks = peak_features["pred_peaks"][channel_idx]
-    target_peaks = peak_features["target_peaks"][channel_idx]
+    pred_peaks = peak_features["pred_peaks"]
+    target_peaks = peak_features["target_peaks"]
     shot_numbers = meta["shot_number"]
     labels = conditioning_input['label'].numpy(
     )[:, history_length:]  # match the indexing of peak features (on the future window only)
@@ -66,7 +65,7 @@ def plot_peak_prominences_histogram(
                 {
                     "distribution": "Predicted",
                     "mode": mean_label_per_shot[shot_i],
-                    "value": len(pred_peaks[shot_i]),
+                    "value": pred_peaks[shot_i][channel_idx].num_peaks(),
                     "width": 0,
                     "shot_num": shot_num
                 }
@@ -75,13 +74,13 @@ def plot_peak_prominences_histogram(
                 {
                     "distribution": "Target",
                     "mode": mean_label_per_shot[shot_i],
-                    "value": len(target_peaks[shot_i]),
+                    "value": target_peaks[shot_i][channel_idx].num_peaks(),
                     "width": 0,
                     "shot_num": shot_num
                 }
             )
         else:  # prominence, width, base, height, with multiple peak samples per shot
-            for peak in pred_peaks[shot_i]:
+            for peak in pred_peaks[shot_i][channel_idx].iter_peaks():
                 data.append(
                     {
                         "distribution": "Predicted",
@@ -90,7 +89,7 @@ def plot_peak_prominences_histogram(
                         "shot_num": shot_num
                     }
                 )
-            for peak in target_peaks[shot_i]:
+            for peak in target_peaks[shot_i][channel_idx].iter_peaks():
                 data.append(
                     {
                         "distribution": "Target",
