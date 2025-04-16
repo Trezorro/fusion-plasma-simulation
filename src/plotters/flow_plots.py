@@ -1,5 +1,6 @@
 # @title Utility code: styles, functions, generators, visualization
 from typing import Optional
+import plotly
 import torch
 import wandb
 import numpy as np
@@ -1079,4 +1080,4 @@ def animated_trajectory_plotly(
     if wandb.run.disabled:  # type: ignore
         fig.show()
 
-    return fig
+    return wandb.Html(plotly.io.to_html(fig))
