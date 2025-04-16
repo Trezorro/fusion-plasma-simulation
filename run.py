@@ -74,7 +74,7 @@ trainer = L.Trainer(
     max_epochs=C["epochs"],
     logger=wandb_logger,
     # profiler='simple',
-
+    limit_train_batches=20,
     # num_sanity_val_steps=1,
     log_every_n_steps=1,
     check_val_every_n_epoch=1,  # May validate less often
