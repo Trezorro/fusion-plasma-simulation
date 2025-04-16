@@ -265,7 +265,7 @@ data:
     - ShotNum
     - time
     x: [
-            "FIR",  # density lijn Interferometer (not in my dataset)
+            # "FIR",  # density lijn Interferometer (not in my dataset)
             "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
             "PD",  # photodiode lijn op de divertor
             "DML",  # Magnetische respons  correleert met de energie in het plasma
@@ -273,7 +273,7 @@ data:
             "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
             "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
         ]
-    # c:
+    c:
       - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
       - gas_fringes  # Ingepompte gas
       - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
