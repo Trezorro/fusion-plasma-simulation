@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Optional, Tuple
 from collections import namedtuple, abc
 import logging
 from venv import logger
@@ -301,34 +301,70 @@ class PeakProps(
             yield self[i]
 
     @classmethod
-    def from_find_peaks(cls, trace, prominence=0.001, width=0, rel_height=1.0) -> "PeakProps":
+    def from_find_peaks(
+        cls,
+        trace,
+        prominence=0.001,
+        width=0,
+        rel_height=1.0,
+        pd_trace: Optional[torch.Tensor] = None
+    ) -> "PeakProps":
         """
         Factory method to create a PeakProps instance from the output of scipy's find_peaks.
         """
         peak_positions, props = find_peaks(trace, prominence=prominence, width=width, rel_height=rel_height)
         # for every peak, find the trace minimum in the range of the peak width
-        peak_widths = props["widths"]
-        half_width = peak_widths / 2
-        window_l = (peak_positions - half_width).astype(np.int32)
-        window_r = np.ceil(peak_positions + half_width).astype(np.int32)
-        # Ensure the windows are within the bounds of the trace
-        window_l = np.clip(window_l, 0, len(trace) - 1)
-        window_r = np.clip(window_r, 0, len(trace) - 1)
-        # Find the minimum in the window for each peak
-        energy_base_pos = np.array(
-            [window_l[i] + trace[window_l[i]:window_r[i]].argmin(0) for i in range(len(peak_positions))]
-        )
-        energy_delta = trace[peak_positions] - trace[energy_base_pos]
-        return cls(
-            X=peak_positions,
-            Y=trace[peak_positions].numpy(),
-            prominences=props["prominences"],
-            bases=props["width_heights"],
-            left_ips=props["left_ips"],
-            right_ips=props["right_ips"],
-            energy_delta=energy_delta,
-            energy_base_x=energy_base_pos,
-        )
+        if pd_trace is None:
+            return cls(
+                X=peak_positions,
+                Y=trace[peak_positions].numpy(),
+                prominences=props["prominences"],
+                bases=props["width_heights"],
+                left_ips=props["left_ips"],
+                right_ips=props["right_ips"]
+            )
+        else:  # This means that this is a DML signal and we should calculate the DML-PD energy relationship
+            peak_widths = props["widths"]
+            half_width = peak_widths / 2
+            window_l = (peak_positions - half_width).astype(np.int32)
+            window_r = np.ceil(peak_positions + half_width).astype(np.int32)
+            # If the next peak is even further away, we will extend the energy delta window to the next peak
+            right_neighbor_pos = np.append(peak_positions[1:], len(trace))
+            extended_window_r = np.max(np.vstack((window_r, right_neighbor_pos)), axis=0).astype(np.int32)
+            # Ensure the windows are within the bounds of the trace
+            window_l = np.clip(window_l, 0, len(trace) - 1)
+            extended_window_r = np.clip(extended_window_r, 0, len(trace))
+            # Find the minimum in the window for each peak. This is the assumed base energy position.
+            energy_base_pos = np.array(
+                [
+                    window_l[i] + trace[window_l[i]:extended_window_r[i]].argmin(0)
+                    for i in range(len(peak_positions))
+                ]
+            )
+            energy_delta = trace[peak_positions] - trace[energy_base_pos]
+            # get peaks from the pd_trace
+            pd_peak_positions, pd_props = find_peaks(
+                pd_trace, prominence=prominence, width=width, rel_height=rel_height
+            )
+            pd_prominence_sums = []
+            # sum up the PD prominences of peaks in the same window
+            for window in zip(window_l, extended_window_r):
+                # get the peaks in the window
+                pd_peaks_in_window = (pd_peak_positions >= window[0]) & (pd_peak_positions < window[1])
+                # sum up the prominences of the peaks in the window
+                pd_prominence_sums.append(np.sum(pd_props["prominences"][pd_peaks_in_window], axis=0))
+            pd_prominence_sums = np.array(pd_prominence_sums)
+            return cls(
+                X=peak_positions,
+                Y=trace[peak_positions].numpy(),
+                prominences=props["prominences"],
+                bases=props["width_heights"],
+                left_ips=props["left_ips"],
+                right_ips=props["right_ips"],
+                energy_delta=energy_delta,
+                energy_base_x=energy_base_pos,
+                pd_prominence=pd_prominence_sums,
+            )
 
     def __add__(self, other: "PeakProps") -> "PeakProps":
         """
@@ -384,10 +420,14 @@ class PeakProps(
         )
 
 
-def batch_get_peakprops(batch: torch.Tensor,
-                        prominence=0.001,
-                        width=0,
-                        rel_height=1.0) -> list[list[PeakProps]]:
+def batch_get_peakprops(
+    batch: torch.Tensor,
+    prominence=0.001,
+    width=0,
+    rel_height=1.0,
+    dml_channel_index=None,
+    pd_channel_index=None
+) -> list[list[PeakProps]]:
     """Find peaks in a batch of time series data.
 
     Args:
@@ -397,13 +437,36 @@ def batch_get_peakprops(batch: torch.Tensor,
         list: A transposed list of PeakProps namedtuples for each time series in the batch. (C, B)
     """
     logger.debug(f"Finding peaks in batch of shape {batch.shape}")
-    peak_results = [
-        [
-            PeakProps.from_find_peaks(
-                channel_trace, prominence=prominence, width=width, rel_height=rel_height
-            ) for channel_trace in sample  # Iterate over the channel dimension (C)  
-        ] for sample in batch  # Iterate over the batch dimension (B)
-    ]
+    if dml_channel_index is None or pd_channel_index is None:
+        peak_results = [
+            [
+                PeakProps.from_find_peaks(
+                    channel_trace, prominence=prominence, width=width, rel_height=rel_height
+                ) for channel_trace in sample  # Iterate over the channel dimension (C)  
+            ] for sample in batch  # Iterate over the batch dimension (B)
+        ]
+    else:
+        peak_results = []
+        for sample in batch:  # Iterate over the batch dimension (B)
+            sample_channel_results = []
+            peak_results.append(sample_channel_results)
+            for channel_i, trace in enumerate(sample):
+                if channel_i == dml_channel_index:  # For dml channel, we want to calculate the energy delta
+                    sample_channel_results.append(
+                        PeakProps.from_find_peaks(
+                            trace,
+                            prominence=prominence,
+                            width=width,
+                            rel_height=rel_height,
+                            pd_trace=sample[pd_channel_index]
+                        )
+                    )
+                else:
+                    sample_channel_results.append(
+                        PeakProps.from_find_peaks(
+                            trace, prominence=prominence, width=width, rel_height=rel_height
+                        )
+                    )
     return peak_results
 
 
@@ -424,9 +487,38 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
     ]  # + count with pairwise mse and marginal wasserstein
     C = get_current_config()
     CHANNEL_NAMES = C.data.cols.x
-    pred_peaks_batch = batch_get_peakprops(pred)  # (B, C)
-    target_peaks_batch = batch_get_peakprops(target)  # (B, C)
+    dml_channel_index = CHANNEL_NAMES.index("DML") if "DML" in CHANNEL_NAMES else None
+    pd_channel_index = CHANNEL_NAMES.index("PD") if "PD" in CHANNEL_NAMES else None
+    pred_peaks_batch = batch_get_peakprops(
+        pred, dml_channel_index=dml_channel_index, pd_channel_index=pd_channel_index
+    )  # (B, C)
+    target_peaks_batch = batch_get_peakprops(
+        target, dml_channel_index=dml_channel_index, pd_channel_index=pd_channel_index
+    )  # (B, C)
     BATCH_SIZE = len(target_peaks_batch)
+
+    # plot results of dml delta vs pd prominence
+    if dml_channel_index is not None and pd_channel_index is not None:
+        dml_peaks = [sample[dml_channel_index] for sample in pred_peaks_batch]
+        import plotly.express as px
+        dml_peaks = [peak for sample in dml_peaks for peak in sample.iter_peaks()]
+        sample_nums = [[i] * peaks.num_peaks() for i, peaks in enumerate(dml_peaks)]
+        sample_nums = [item for sublist in sample_nums for item in sublist]
+        fig = px.scatter(
+            x=[peak.pd_prominence for peak in dml_peaks],
+            y=[peak.energy_delta for peak in dml_peaks],
+            color=sample_nums,
+            opacity=0.5,
+            title="DML energy delta vs PD prominence",
+            labels={
+                "x": "PD prominence",
+                "y": "DML energy delta"
+            },
+            color_discrete_sequence=px.colors.qualitative.Plotly,
+            # show color as discrete traces in legend
+        )
+        fig.show()
+
 
     logger.debug(f"Analyzing peak distributions and calculating difference metrics for {BATCH_SIZE} samples")
     metrics_out = {}

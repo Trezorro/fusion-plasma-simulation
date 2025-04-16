@@ -37,6 +37,8 @@
             },
             "args": [
                 "epochs=11"
+                "evaluation.n_steps=2",
+                "skip_log_summary=True",
             ],
             "justMyCode": false
             
