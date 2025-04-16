@@ -181,7 +181,11 @@ PeakWasserstein = namedtuple(
         "prominence",
         "base",  # Height at which the width is measured. Width is right_ip - left_ip.
         "width",
-    ]
+        "energy_delta",  # Energy difference between the peak and adjusted base of DML.
+        "pd_prominence",  # Peak prominence of matched PD peaks
+        "energy_ratio",  # Ratio of the energy delta to the pd prominence.
+    ],
+    defaults=(None, None, None)
 )
 
 
@@ -224,6 +228,15 @@ class PeakProps(
         Calculate the widths of the peaks based on left and right interpolated positions.
         """
         return self.right_ips - self.left_ips
+
+    @property
+    def energy_ratio(self):
+        """
+        Calculate the ratio of the PD prominence to the energy delta.
+        """
+        if self.pd_prominence is None or self.energy_delta is None:
+            return None
+        return self.pd_prominence / self.energy_delta
 
     # Measure Aliases:
     @property
@@ -367,7 +380,7 @@ class PeakProps(
             )
 
     def __add__(self, other: "PeakProps") -> "PeakProps":
-        """
+        """Didnt get used.
         Overload the addition operator to combine two PeakProps instances.
         """
         if not isinstance(other, PeakProps):
@@ -391,6 +404,12 @@ class PeakProps(
         SENTINEL_VALUE = -1.0
         if not isinstance(other, PeakProps):
             raise TypeError("Can only subtract PeakProps instances.")
+        energy_delta_w = pd_prominence_w = energy_ratio_w = None
+        if self.energy_delta is not None and other.energy_delta is not None:
+            # special case for wassersteins between DML peaks
+            energy_delta_w = wasserstein_distance(self.energy_delta, other.energy_delta)
+            pd_prominence_w = wasserstein_distance(self.pd_prominence, other.pd_prominence)
+            energy_ratio_w = wasserstein_distance(self.energy_ratio, other.energy_ratio)
         if self.num_peaks() == 0 and other.num_peaks() == 0:
             return PeakWasserstein(
                 height=0.0,
@@ -417,6 +436,9 @@ class PeakProps(
             prominence=wasserstein_distance(self.prominences, other.prominences),
             base=wasserstein_distance(self.bases, other.bases),
             width=wasserstein_distance(self.widths, other.widths),
+            energy_delta=energy_delta_w,
+            pd_prominence=pd_prominence_w,
+            energy_ratio=energy_ratio_w
         )
 
 
@@ -479,7 +501,7 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
         - /error/peak_{measure}/marginal_wasserstein/<channelname>: The wasserstein distance between the target and predicted distributions of that measure, per channel.
 
          """
-    MEASURES = [
+    BASE_MEASURES = [
         "height",
         "prominence",
         "base",
@@ -498,45 +520,29 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
     BATCH_SIZE = len(target_peaks_batch)
 
     # plot results of dml delta vs pd prominence
-    if dml_channel_index is not None and pd_channel_index is not None:
-        dml_peaks = [sample[dml_channel_index] for sample in pred_peaks_batch]
-        import plotly.express as px
-        dml_peaks = [peak for sample in dml_peaks for peak in sample.iter_peaks()]
-        sample_nums = [[i] * peaks.num_peaks() for i, peaks in enumerate(dml_peaks)]
-        sample_nums = [item for sublist in sample_nums for item in sublist]
-        fig = px.scatter(
-            x=[peak.pd_prominence for peak in dml_peaks],
-            y=[peak.energy_delta for peak in dml_peaks],
-            color=sample_nums,
-            opacity=0.5,
-            title="DML energy delta vs PD prominence",
-            labels={
-                "x": "PD prominence",
-                "y": "DML energy delta"
-            },
-            color_discrete_sequence=px.colors.qualitative.Plotly,
-            # show color as discrete traces in legend
-        )
-        fig.show()
-
+    # if dml_channel_index is not None and pd_channel_index is not None:
+    #     plot_delta_prominence_scatter(dml_channel_index, pred_peaks_batch)
 
     logger.debug(f"Analyzing peak distributions and calculating difference metrics for {BATCH_SIZE} samples")
     metrics_out = {}
     for channel_i, channel_name in enumerate(CHANNEL_NAMES):
+        measures = BASE_MEASURES
+        if channel_name == "DML":
+            measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
         pairwise_distances = {
-            f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}": 0. for measure in MEASURES
+            f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}": 0. for measure in measures
         }
         counts_target = []
         counts_pred = []
-        marginal_dist_pred = {measure: [] for measure in MEASURES}
-        marginal_dist_target = {measure: [] for measure in MEASURES}
+        marginal_dist_pred = {measure: [] for measure in measures}
+        marginal_dist_target = {measure: [] for measure in measures}
         for sample_i in range(BATCH_SIZE):
             pred_sample = pred_peaks_batch[sample_i][channel_i]
             target_sample = target_peaks_batch[sample_i][channel_i]
             pair_wasserstein = pred_sample - target_sample  # Subtraction operator is overloaded with wasserstein distance
             counts_pred.append(pred_sample.num_peaks())
             counts_target.append(target_sample.num_peaks())
-            for measure in MEASURES:
+            for measure in measures:
                 pairwise_distances[f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}"] += getattr(
                     pair_wasserstein, measure
                 )
@@ -553,6 +559,15 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
                     case "width":
                         marginal_dist_pred[measure].extend(pred_sample.widths)
                         marginal_dist_target[measure].extend(target_sample.widths)
+                    case "energy_delta":
+                        marginal_dist_pred[measure].extend(pred_sample.energy_delta)
+                        marginal_dist_target[measure].extend(target_sample.energy_delta)
+                    case "pd_prominence":
+                        marginal_dist_pred[measure].extend(pred_sample.pd_prominence)
+                        marginal_dist_target[measure].extend(target_sample.pd_prominence)
+                    case "energy_ratio":
+                        marginal_dist_pred[measure].extend(pred_sample.energy_ratio)
+                        marginal_dist_target[measure].extend(target_sample.energy_ratio)
                     case _:
                         raise ValueError(f"Unknown measure: {measure}")
 
@@ -563,7 +578,7 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
             np.mean(np.power(np.array(counts_pred) - np.array(counts_target), 2))
         )
         # Average over the batch
-        for measure in MEASURES:
+        for measure in measures:
             pairwise_distances[f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}"] /= BATCH_SIZE
             metrics_out[f"/error/peak_{measure}/marginal_wasserstein/{channel_name}"] = wasserstein_distance(
                 marginal_dist_pred[measure] or [-1 * BATCH_SIZE],
@@ -576,3 +591,25 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
         "target_peaks": target_peaks_batch,
     }
     return metrics_out, peak_features
+
+
+def plot_delta_prominence_scatter(dml_channel_index, pred_peaks_batch):
+    dml_peaks = [sample[dml_channel_index] for sample in pred_peaks_batch]
+    import plotly.express as px
+    dml_peaks = [peak for sample in dml_peaks for peak in sample.iter_peaks()]
+    sample_nums = [[i] * peaks.num_peaks() for i, peaks in enumerate(dml_peaks)]
+    sample_nums = [item for sublist in sample_nums for item in sublist]
+    fig = px.scatter(
+        x=[peak.energy_delta for peak in dml_peaks],
+        y=[peak.pd_prominence for peak in dml_peaks],
+        color=sample_nums,
+        opacity=0.5,
+        title="DML energy delta vs PD prominence",
+        labels={
+            "x": "DML energy delta",
+            "y": "PD prominence",
+        },
+        color_discrete_sequence=px.colors.qualitative.Plotly,
+        # show color as discrete traces in legend
+    )
+    fig.show()

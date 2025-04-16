@@ -31,6 +31,21 @@ evaluation:
       buttons: true
     # Prominence histograms
     - key: histogram  # see histograms.py
+      log_key: peak_histogram/dml_energy_delta
+      channel_name: DML
+      measure: energy_delta
+      n: 64
+    - key: histogram  # see histograms.py
+      log_key: peak_histogram/dml_pd_prominence
+      channel_name: DML
+      measure: pd_prominence
+      n: 64
+    - key: histogram  # see histograms.py
+      log_key: peak_histogram/dml_pd_ratio
+      channel_name: DML
+      measure: energy_ratio
+      n: 64
+    - key: histogram  # see histograms.py
       log_key: peak_histogram/FIR_core_count
       channel_name: FIR_core
       measure: count
