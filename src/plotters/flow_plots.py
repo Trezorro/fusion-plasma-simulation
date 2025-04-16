@@ -549,7 +549,7 @@ def multi_channel_lines_plotly(
         }]],
     )
     fig.update_yaxes(
-        range=(-1.5, None),
+        range=(-1.1, 1.1),
         secondary_y=False,
     )
     fig.update_xaxes(
@@ -795,6 +795,7 @@ def add_peak_markers(
     channel_color,
     channel_name,
 ):
+    do_plot_energy_delta = peak_features.energy_base_x is not None
     peak_x_markers = []
     peak_y_markers = []
     peak_width_y_markers = []
@@ -806,39 +807,40 @@ def add_peak_markers(
         peak_y_markers.extend([peak.bases, peak.Y, None])
         peak_width_y_markers.extend([peak.bases, peak.bases, None])
         peak_width_x_markers.extend([peak.left_ips, peak.right_ips, None])
-        peak_energy_delta_y.extend([peak.Y, peak.Y - peak.energy_delta, None])
-        peak_energy_delta_x.extend([peak.X, peak.energy_base_x, None])
+        if do_plot_energy_delta:
+            peak_energy_delta_y.extend([peak.Y, peak.Y - peak.energy_delta, None])
+            peak_energy_delta_x.extend([peak.X, peak.energy_base_x, None])
 
-
-    fig.add_trace(  # Peak energy delta markers
-        go.Scatter(
-            x=peak_energy_delta_x,
-            y=peak_energy_delta_y,
-            mode='lines+markers',
-            line=dict(
-                color=channel_color,
-                dash="solid",
-                width=1,
-            ),
-            marker=dict(
-                            symbol='triangle-up-dot',
-                            size=6,
-                            angleref='previous',
-                color=channel_color,
-                            standoff=3,
-                opacity=0.8,
-                        ),
-            # marker=dict(
-            #     size=8,
-            #     symbol="triangle-down",
-            # ),
-            opacity=0.9,
-            name=f'{channel_name} (energy delta)',
-            legendgroup=f'Shot {shot_number} - Peaks {group}',
-            legendgrouptitle_text=f'Shot {shot_number} - Peaks {group}',
-            hovertemplate=f"<b>{group}</b><br>{hover_info_template}"
+    if do_plot_energy_delta:
+        fig.add_trace(  # Peak energy delta markers
+            go.Scatter(
+                x=peak_energy_delta_x,
+                y=peak_energy_delta_y,
+                mode='lines+markers',
+                line=dict(
+                    color=channel_color,
+                    dash="solid",
+                    width=1,
+                ),
+                marker=dict(
+                                symbol='triangle-up-dot',
+                                size=6,
+                                angleref='previous',
+                    color=channel_color,
+                                standoff=3,
+                    opacity=0.8,
+                            ),
+                # marker=dict(
+                #     size=8,
+                #     symbol="triangle-down",
+                # ),
+                opacity=0.7,
+                name=f'{channel_name} (energy delta)',
+                legendgroup=f'Shot {shot_number} - Peaks {group}',
+                legendgrouptitle_text=f'Shot {shot_number} - Peaks {group}',
+                hovertemplate=f"<b>{group}</b><br>{hover_info_template}"
+            )
         )
-    )
     fig.add_trace(  # Peak markers traces
                     go.Scatter(
                         x=peak_x_markers,
