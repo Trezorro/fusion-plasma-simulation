@@ -24,8 +24,8 @@ evaluation:
     # all other keys are passed as kwargs to the plot function
     # - key: 2d_flow_plot
     #   n: 64
-    - key: line_flow_plot
-      n: 16
+    - key: animated_traces
+      n: 5
     - key: multi_channel_lines
       n: 16
       buttons: true

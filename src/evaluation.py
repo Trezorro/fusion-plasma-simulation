@@ -43,6 +43,7 @@ class PlotsCallback(L.Callback):
         # 'spectogram_plot': get_and_plot_predictions, # TODO update interface
         '2d_flow_plot': fp.plot_flow,
         'line_flow_plot': fp.plot_flow_and_lines_plotly,
+        'animated_traces': fp.animated_trajectory_plotly,
         'multi_channel_lines': fp.multi_channel_lines_plotly,
         'entropy_plot': entropy.plot_entropy,
         'histogram': plot_peak_prominences_histogram,

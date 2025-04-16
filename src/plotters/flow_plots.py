@@ -962,3 +962,121 @@ def add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, 
         ),
         secondary_y=True,
     )
+
+
+def animated_trajectory_plotly(
+    meta: dict[str, torch.Tensor],
+    trajectories: torch.Tensor,
+    n=5,
+    title_base="",
+    subtitle="",  # Subtitle for the plot
+    **kwargs
+):
+    """Create an animated line plot showing trajectories over time.
+
+    Args:
+        meta (dict): Dictionary containing metadata about the samples.
+        trajectories (torch.Tensor): Trajectories, shape: [n_steps, num_samples, num_channels, num_timepoints].
+        n (int, optional): Number of traces to visualize. Defaults to 5.
+        title_base (str, optional): Base title for the plot. Defaults to "".
+        subtitle (str, optional): Subtitle for the plot. Defaults to "".
+    """
+    C = get_current_config()
+    n_steps, num_samples, n_channels, num_timepoints = trajectories.size()
+    CHANNEL_NAMES = C.data.cols.x
+    n_channels = len(CHANNEL_NAMES)
+    num_samples = min(n, num_samples)  # Limit the number of traces to visualize
+    COLOR_SCALE = plt_colors.qualitative.Plotly
+
+    # Initialize the figure with the first frame's data
+    fig = go.Figure()
+
+    for sample_i in range(num_samples):
+        for channel_i in range(n_channels):
+            channel_color = COLOR_SCALE[((n_channels * sample_i) + channel_i) % len(COLOR_SCALE)]
+            channel_name = CHANNEL_NAMES[channel_i]
+
+            # Add the initial trace for each sample and channel
+            fig.add_trace(
+                go.Scatter(
+                    x=np.arange(num_timepoints),
+                    y=trajectories[0, sample_i, channel_i, :].numpy(),
+                    mode='lines',
+                    line=dict(color=channel_color, width=2),
+                    name=f'{channel_name} (Sample {sample_i + 1})',
+                    legendgroup=f'Sample {sample_i + 1} - {channel_name}',
+                )
+            )
+
+    # Create frames for the animation
+    frames = []
+    for step in range(n_steps):
+        frame_data = []
+        for sample_i in range(num_samples):
+            for channel_i in range(n_channels):
+                frame_data.append(
+                    go.Scatter(
+                        y=trajectories[step, sample_i, channel_i, :].numpy(),
+                        # x=np.arange(num_timepoints),
+                    )
+                )
+        frames.append(
+            go.Frame(data=frame_data, traces=list(range(num_samples * n_channels)), name=f"Step {step}")
+        )
+
+    # Add play/pause buttons and slider
+    updatemenus = [
+        dict(
+            type="buttons",
+            showactive=False,
+            buttons=[
+                dict(
+                    label="Play",
+                    method="animate",
+                    args=[None, dict(frame=dict(duration=500, redraw=False), fromcurrent=True)],
+                ),
+                dict(
+                    label="Pause",
+                    method="animate",
+                    args=[[None], dict(frame=dict(duration=0, redraw=False), mode="immediate")],
+                ),
+            ],
+        )
+    ]
+
+    sliders = [
+        dict(
+            steps=[
+                dict(
+                    method="animate",
+                    args=[[f"Step {step}"],
+                          dict(mode="immediate", frame=dict(duration=500, redraw=False))],
+                    label=f"{step + 1}",
+                ) for step in range(n_steps)
+            ],
+            active=0,
+            transition=dict(duration=100),
+            x=0,
+            y=0,
+            currentvalue=dict(font=dict(size=12), prefix="Step: ", visible=True, xanchor="left"),
+            len=.8,
+        )
+    ]
+
+    # Update layout
+    fig.update_layout(
+        title=title_base + (f"<br><sub>{subtitle}</sub>" if subtitle else ""),
+        xaxis=dict(title="Timepoints", range=[0, num_timepoints - 1]),
+        yaxis=dict(title="Value", range=[-1.1, 1.1]),
+        template='plotly_dark',
+        updatemenus=updatemenus,
+        sliders=sliders,
+    )
+
+    # Add frames to the figure
+    fig.update(frames=frames)
+
+    if wandb.run.disabled:  # type: ignore
+        fig.show()
+
+    return fig
