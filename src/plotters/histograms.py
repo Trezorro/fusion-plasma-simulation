@@ -113,12 +113,13 @@ def plot_peak_prominences_histogram(
 
         marginal_metric = f"/error/peak_{measure}/marginal_wasserstein/{channel_name}"
         pairwise_metric = f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}"
-
+    marginal_wasserstein_value = metrics.get(marginal_metric, -1)
+    pairwise_metric_value = metrics.get(pairwise_metric, -1)
     subtitle = (
         f"<br><sub>{n} shot samples: {total_target_peaks} target peaks, "
         f"{total_pred_peaks} predicted peaks &nbsp;&nbsp;&nbsp;&nbsp;"
-        f"Marginal Wd: {metrics[marginal_metric]:.4f}, "
-        f"Pairwise {'MSE' if measure == 'count' else 'Wd'}: {metrics[pairwise_metric]:.4f}"
+        f"Marginal Wd: {marginal_wasserstein_value:.4f}, "
+        f"Pairwise {'MSE' if measure == 'count' else 'Wd'}: {pairwise_metric_value:.4f}"
         "</sub>"
     )
     logger.debug(f"Visualized shots: {n}")
