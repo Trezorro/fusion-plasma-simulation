@@ -19,6 +19,7 @@ run = wandb.init(
     # mode="offline",
 )
 C = get_current_config()
+RUN_NAME = wandb.run.name
 logger.info("Run initialized, importing torch and lightning.")
 
 import torch
@@ -26,6 +27,8 @@ from torch.utils import data
 import lightning as L
 import lightning.pytorch.callbacks as pl_callbacks
 from lightning.pytorch.loggers import WandbLogger
+
+torch.cuda.memory._record_memory_history()
 
 logger.info("Torch and lightning imported, importing src modules.")
 
@@ -92,6 +95,12 @@ logger.info("Starting training with first validation...")
 # trainer.validate(model=model, dataloaders=val_loader)
 logger.info("Starting model fit...")
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+logger.info("Finished training. Dumping CUDA memory snapshot...")
+torch.cuda.memory._dump_snapshot(filename='output/memory_trace.pickle')
+# memory_artifact = wandb.Artifact("memory_trace", type="profiling")
+# memory_artifact.add_file("output/memory_trace.pickle")
+wandb.log_artifact('output/memory_trace.pickle', type="profiling", name=RUN_NAME + "/memory_trace")
+
 logger.info("Starting final validation...")
 trainer.test(model=model, dataloaders=val_loader)
 logger.info("Finished training and testing. Goodbye.")
