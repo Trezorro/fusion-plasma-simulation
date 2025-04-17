@@ -129,6 +129,8 @@ class PlotsCallback(L.Callback):
             train_metrics = {"train" + k: v for k, v in evaluation_output['metrics'].items()}  # Add prefix
             wandb.log(train_metrics | {"trainer/global_step": trainer.global_step}, commit=False)
 
+    def on_train_epoch_start(self, trainer: L.Trainer, pl_module: L.LightningModule):
+        logger.info(f" =========== Starting training for EPOCH {trainer.current_epoch}=========== ")
 
 class TrainStepMonitor(L.Callback):
     """Logs the number of train steps and train steps per minute to wandb."""

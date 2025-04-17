@@ -76,6 +76,7 @@ trainer = L.Trainer(
     profiler='simple',
     limit_train_batches=20,
     limit_val_batches=10,
+    benchmark=True,
     # num_sanity_val_steps=1,
     log_every_n_steps=1,
     check_val_every_n_epoch=1,  # May validate less often
