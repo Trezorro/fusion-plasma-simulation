@@ -122,8 +122,9 @@ def plot_peak_prominences_histogram(
         f"Pairwise {'MSE' if measure == 'count' else 'Wd'}: {pairwise_metric_value:.4f}"
         "</sub>"
     )
-    logger.debug(f"Visualized shots: {n}")
-    logger.debug(f"Total target peaks: {total_target_peaks}, total predicted peaks: {total_pred_peaks}")
+    logger.debug(
+        f"Visualized shots: {n} Total target peaks: {total_target_peaks}, total predicted peaks: {total_pred_peaks}"
+    )
     heavy_render = total_pred_peaks + total_target_peaks > 1000
 
     fig = px.histogram(

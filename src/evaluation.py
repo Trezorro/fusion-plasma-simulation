@@ -62,7 +62,9 @@ class PlotsCallback(L.Callback):
         if not self.max_n and self.plot_functions:
             self.max_n = max([func_c.get("n", 0) for func_c in self.plot_functions])
         elif not self.max_n:
-            logger.warning("No plot functions specified and no max n.")
+            logger.warning(
+                "No plot functions specified and no max n. Defaulting to 0. Set max_n in config to change this."
+            )
 
     def call_plot_functions(self, evaluation_output: dict, trainval: str, global_step: int, title_base: str):
         if not self.plot_functions:
@@ -73,16 +75,20 @@ class PlotsCallback(L.Callback):
             params = func_c.copy()
             log_key = params.pop("log_key", key)  # if log_key is present, use it instead of key
             n = params.pop("n", self.max_n)
+            logger.debug(
+                f"Calling plot function {key} with params {params} and n={n}. Will log as {log_key}."
+            )
             fig = plot_fn(**evaluation_output, n=n, title_base=title_base, **params)
             wandb.log({f"{trainval}/{log_key}": fig, "trainer/global_step": global_step}, commit=False)
 
     def on_validation_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
+        logger.debug(f"on_validation_epoch_end called at epoch {trainer.current_epoch}")
         # Skip for all other epochs
         if (
             trainer.current_epoch % self.val_every_n_epochs == 1
         ) or trainer.current_epoch <= self.scrutinize_epochs:
             # Generate images
-            logger.info(f"Generating validation plots for EPOCH {trainer.current_epoch}")
+            logger.info(f"Evaluating model for EPOCH {trainer.current_epoch} on validation data.")
             data_set = trainer.val_dataloaders.dataset
             batch = next(
                 iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
@@ -100,11 +106,12 @@ class PlotsCallback(L.Callback):
             wandb.log(val_metrics | {"trainer/global_step": trainer.global_step}, commit=False)
 
     def on_train_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
+        logger.debug(f"on_train_epoch_end called at epoch {trainer.current_epoch}")
         if self.train_every_n_epochs and (
             (trainer.current_epoch % self.train_every_n_epochs == 0) or
             trainer.current_epoch <= self.scrutinize_epochs
         ):
-            logger.info(f"Generating training plots for EPOCH {trainer.current_epoch}")
+            logger.info(f"Evaluating model for EPOCH {trainer.current_epoch} on train data.")
             # Generate images
             data_set = trainer.train_dataloader.dataset
             batch = next(
