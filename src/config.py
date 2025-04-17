@@ -47,7 +47,7 @@ def load_config_from_file(name='main', as_omega=False) -> dict | omegaconf.DictC
     if as_omega:
         return conf
     conf = OmegaConf.to_object(conf)
-    logger.info(f"Configuration:\n{pformat(conf)}")
+    logger.info(f"Configuration:\n{pformat(conf, compact=True, sort_dicts=False, width=160)}")
     if not type(conf) == dict:
         raise ValidationError("Configuration was not in dict style. Got: " + repr(conf))
     return dict(conf)
