@@ -164,8 +164,8 @@ def plot_peak_prominences_histogram(
         violingroupgap=0,
         violinmode='overlay',
         title=dict(font=dict(size=18)),
-        width=1000,  # Increase plot width
-        height=700,  # Increase plot height
+        width=1300,  # Increase plot width
+        height=910,  # Increase plot height
     )
     fig.for_each_annotation(
         lambda a: a.update(text=f"<b>{a.text.split('=')[1]}</b>") if '=' in a.text else None
