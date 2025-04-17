@@ -198,8 +198,8 @@ model:
     prior: 'normal'  # normal, copy, brownian, levy
     ot_method: null  # null to disable
     ot_replace: true  # Default false
-    batch_rematch_factor: 2  # Default 1
-    step_every_nth_match: 2  # Default 1 # TODO
+    batch_rematch_factor: 1  # Default 1
+    step_every_nth_match: 1  # Default 1 # TODO
     gradient_clip_val: ${ gradient_clip_val }
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
