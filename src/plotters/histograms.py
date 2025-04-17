@@ -1,14 +1,17 @@
 """Histograms of distributions such as the peak prominence, peak width, etc."""
 
 #%% Imports
-from typing import Callable, List, Literal, Tuple
-import plotly
-import wandb
-import plotly.graph_objects as go
-import plotly.express as px
-from src.config import get_current_config
 import logging
+from typing import Callable, List, Literal, Tuple
+
 import pandas as pd
+import plotly
+import plotly.express as px
+import plotly.graph_objects as go
+
+import wandb
+from src.config import get_current_config
+from src.plotters.helpers import as_wandb_image
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -159,9 +162,16 @@ def plot_peak_prominences_histogram(
         margin=dict(l=20, r=20, t=120, b=20),
         violingap=0,
         violingroupgap=0,
-        violinmode='overlay'
-        #     xaxis=dict(matches='x'),  # Link x-axis hovering between facets
+        violinmode='overlay',
+        title=dict(font=dict(size=18)),
+        width=1000,  # Increase plot width
+        height=700,  # Increase plot height
     )
-    if wandb.run.disabled:  # type: ignore
-        fig.show()
-    return wandb.Html(plotly.io.to_html(fig))
+    fig.for_each_annotation(
+        lambda a: a.update(text=f"<b>{a.text.split('=')[1]}</b>") if '=' in a.text else None
+    )
+    wandb_image = as_wandb_image(fig, format="png", show=wandb.run.disabled)
+    return wandb_image
+
+
+# %%

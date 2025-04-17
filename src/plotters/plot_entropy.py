@@ -1,15 +1,15 @@
-import io
-from PIL import Image
-from src.config import get_current_config
-from src.entropy import VALID_FUNCS, batch_entropy
+from typing import Tuple
 
 import numpy as np
+import plotly
 import plotly.graph_objects as go
 import torch
-import wandb
 from plotly.subplots import make_subplots
 
-from typing import Tuple
+import wandb
+from src.config import get_current_config
+from src.entropy import VALID_FUNCS, batch_entropy
+from src.plotters.helpers import as_wandb_image
 
 
 def plot_entropy(
@@ -150,12 +150,8 @@ def plot_entropy(
     fig.update_yaxes(
         showgrid=True, zeroline=False, matches='y', showticklabels=False, range=[0, batch_size]
     )  # Disable y-axis ticks for all subplots
-    image_bytes = fig.to_image(format="png", engine='auto')
-    pil_image = Image.open(io.BytesIO(image_bytes))
-    if wandb.run.disabled:  # type: ignore
-        # show image
-        pil_image.show()
-    return wandb.Image(pil_image)
+    wandb_image = as_wandb_image(fig, format="png", show=wandb.run.disabled)
+    return wandb_image
 
 
 def test_plot_multiple_entropies_on_target(
