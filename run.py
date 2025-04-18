@@ -27,6 +27,7 @@ from torch.utils import data
 import lightning as L
 import lightning.pytorch.callbacks as pl_callbacks
 from lightning.pytorch.loggers import WandbLogger
+from lightning.pytorch.callbacks import DeviceStatsMonitor
 
 torch.cuda.memory._record_memory_history()
 
@@ -77,7 +78,7 @@ trainer = L.Trainer(
     max_epochs=C["epochs"],
     logger=wandb_logger,
     profiler='simple',
-    limit_train_batches=200,
+    limit_train_batches=20,
     limit_val_batches=10,
     benchmark=True,
     # num_sanity_val_steps=1,
@@ -88,7 +89,8 @@ trainer = L.Trainer(
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
         PlotsCallback(C.evaluation),
         pl_callbacks.LearningRateMonitor(logging_interval='epoch'),
-        TrainStepMonitor()
+        TrainStepMonitor(),
+        DeviceStatsMonitor()
     ]
 )
 logger.info("Starting training with first validation...")
