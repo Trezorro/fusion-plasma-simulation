@@ -101,7 +101,7 @@ logger.info("Finished training. Dumping CUDA memory snapshot...")
 torch.cuda.memory._dump_snapshot(filename='output/memory_trace.pickle')
 # memory_artifact = wandb.Artifact("memory_trace", type="profiling")
 # memory_artifact.add_file("output/memory_trace.pickle")
-wandb.log_artifact('output/memory_trace.pickle', type="profiling", name=RUN_NAME + "/memory_trace")
+wandb.log_artifact('output/memory_trace.pickle', type="profiling", name=RUN_NAME + ".memory_trace.prof")
 
 logger.info("Starting final validation...")
 trainer.test(model=model, dataloaders=val_loader)
