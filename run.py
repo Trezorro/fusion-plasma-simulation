@@ -59,7 +59,7 @@ wandb_logger = WandbLogger(
     log_model="all",
     experiment=run,
     save_dir="output/models/",  # where to save the model checkpoints, will get lighting_logs/ appended
-    checkpoint_name=current_date + '--' + RUN_NAME,  # name of the wandb artifact
+    checkpoint_name=dated_run_name,  # name of the wandb artifact
 )
 
 ModelClass = getattr(src.models, C.model.Class)
@@ -141,15 +141,17 @@ if torch.cuda.is_available():
 # trainer.test(model=model, dataloaders=val_loader)
 logger.info("Finished training and testing.")
 
-run.finish()
-
-logger.info("Run finished, deleting artifacts.")
+logger.info("Run finished, deleting redundant artifacts.")
 api = wandb.Api()
 
 artifacts = api.run(run.path).logged_artifacts()
 for art in artifacts:
-    if "best" not in art.aliases or "latest" not in art.aliases:
-        logger.warning("Deleting %s", art.name)
-        art.delete(delete_aliases=True)
+    if art.type == "model":
+        if len(art.aliases) == 0 or not ("best" in art.aliases or "latest" in art.aliases):
+            logger.warning("Deleting %s", art.name)
+            art.delete()
+        else:
+            logger.info("Keeping %s \n with aliases %s", art.name, art.aliases)
 
 logger.info("Goodbye!")
+run.finish()

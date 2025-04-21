@@ -7,7 +7,7 @@ features:
   - speed_monitor
   - FIX_conditioning_input_matching
 
-epochs: 3
+epochs: 10
 batch_size: 128
 patience: 10
 gradient_clip_val: 10  # in testing, lower values did not help prevent loss explosions. This is just a safeguard
