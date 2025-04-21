@@ -10,10 +10,11 @@ import wandb
 from src.config import get_current_config, load_config_from_file
 
 conf = load_config_from_file('fm_toy')
+PROJECT = "flowtoy"
 run = wandb.init(
     name=conf.get("run_name", None),
     tags=conf.get("tags", None),
-    project="flowtoy",
+    project=PROJECT,
     config=conf,
     # dir="./output/wandb",
     # mode="offline",
@@ -24,6 +25,7 @@ logger.debug(
 )
 C = get_current_config()
 RUN_NAME = wandb.run.name
+RUN_ID = wandb.run.id
 
 logger.info("Run initialized, importing torch and lightning.")
 import torch
@@ -57,7 +59,7 @@ wandb_logger = WandbLogger(
     log_model="all",
     experiment=run,
     save_dir="output/models/",  # where to save the model checkpoints, will get lighting_logs/ appended
-    checkpoint_name=current_date + '--' + RUN_NAME,
+    checkpoint_name=current_date + '--' + RUN_NAME,  # name of the wandb artifact
 )
 
 ModelClass = getattr(src.models, C.model.Class)
@@ -114,8 +116,8 @@ trainer = L.Trainer(
         ModelCheckpoint(
             monitor="loss/val",
             mode="min",
-            dirpath="output/models/" + dated_run_name,
-            filename=dated_run_name + '-E{epoch:02d}-step={step}-{loss/val:.2f}',
+            dirpath="output/models/" + dated_run_name,  # lightning_logs by default
+            filename=dated_run_name + '-Epoch={epoch:02d}-step={step}-val_loss={loss/val:.2f}',
             auto_insert_metric_name=False
         ),
         TrainStepMonitor(),
@@ -135,7 +137,19 @@ if torch.cuda.is_available():
     torch.cuda.memory._dump_snapshot(filename=memory_trace_file)
     logger.info("CUDA memory snapshot dumped at %s", memory_trace_file)
 
-logger.info("Starting final validation...")
-trainer.test(model=model, dataloaders=val_loader)
-logger.info("Finished training and testing. Goodbye.")
+# logger.info("Starting final validation...")
+# trainer.test(model=model, dataloaders=val_loader)
+logger.info("Finished training and testing.")
+
 run.finish()
+
+logger.info("Run finished, deleting artifacts.")
+api = wandb.Api()
+
+artifacts = api.run(run.path).logged_artifacts()
+for art in artifacts:
+    if "best" not in art.aliases or "latest" not in art.aliases:
+        logger.warning("Deleting %s", art.name)
+        art.delete(delete_aliases=True)
+
+logger.info("Goodbye!")
