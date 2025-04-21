@@ -45,11 +45,14 @@ echo "Version: $(python --version 2>&1)"
 
 # Export wandb env variable
 git checkout tags/$1
-export WANDB_DIR="~/fusion-plasma-simulation/output"
 export WANDB_NOTES=$(git log -n 5 --pretty=format:"%B (%h - %ar) %N")
-export WANDB_CACHE_DIR="~/fusion-plasma-simulation/output/wandb/cache"
-export WANDB_DATA_DIR="~/fusion-plasma-simulation/output/wandb/data"
-export WANDB_ARTIFACT_DIR="~/fusion-plasma-simulation/output/wandb/artifacts"
+
+BASE_DIR="/scratch-local/mtresoor/fusion-plasma-simulation"
+# export WANDB_DIR="~/fusion-plasma-simulation/output"
+# export WANDB_CACHE_DIR="~/fusion-plasma-simulation/output/wandb/cache"
+# export WANDB_DATA_DIR="~/fusion-plasma-simulation/output/wandb/data"
+# export WANDB_ARTIFACT_DIR="~/fusion-plasma-simulation/output/wandb/artifacts"
+
 # Run the Python script
 echo "---------------- JOB START ----------------"
 srun python run.py run_name=$1
