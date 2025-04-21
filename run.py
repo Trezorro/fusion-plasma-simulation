@@ -19,8 +19,8 @@ run = wandb.init(
     # mode="offline",
 )
 logger.debug(
-    "Wandb dirs: \n  main: %s, \n  data dir: %s, \n  artifacts: %s", wandb.run.dir, wandb.env.get_data_dir(),
-    wandb.env.get_artifact_dir()
+    "Wandb dirs: \n  main: %s, \n  data dir: %s, \n  artifacts: %s", wandb.env.get_dir(),
+    wandb.env.get_data_dir(), wandb.env.get_artifact_dir()
 )
 C = get_current_config()
 RUN_NAME = wandb.run.name
@@ -131,6 +131,7 @@ memory_trace_file = f'output/{RUN_NAME}_memory_trace.pickle'
 torch.cuda.memory._dump_snapshot(filename=memory_trace_file)
 memory_artifact = wandb.Artifact("memory_trace", type="profiling")
 memory_artifact.add_file(memory_trace_file)
+run.log_artifact(memory_artifact)
 logger.debug("Memory trace artifact created and file added.")
 
 # logger.info("Starting final validation...")
