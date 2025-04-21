@@ -49,6 +49,7 @@ export WANDB_DIR="~/fusion-plasma-simulation/output"
 export WANDB_NOTES=$(git log -n 5 --pretty=format:"%B (%h - %ar) %N")
 export WANDB_CACHE_DIR="~/fusion-plasma-simulation/output/wandb/cache"
 export WANDB_DATA_DIR="~/fusion-plasma-simulation/output/wandb/data"
+export WANDB_ARTIFACT_DIR="~/fusion-plasma-simulation/output/wandb/artifacts"
 # Run the Python script
 echo "---------------- JOB START ----------------"
 srun python run.py run_name=$1

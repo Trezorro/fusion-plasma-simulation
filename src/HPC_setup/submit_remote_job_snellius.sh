@@ -69,8 +69,10 @@ echo "Code updated, SLURM job '$JOB_NAME' submitted, and Git tag '$JOB_NAME' cre
 
 
 sleep 1
-echo "Syncing results from HPC in 10 seconds..."
-sleep 10
+sync_slurms
+
+echo "Syncing results from HPC in 5 seconds..."
+sleep 5
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     squeue $QUEUE_FORMAT
 EOF
@@ -86,11 +88,22 @@ EOF
 echo "-----------------------------------------------------------"
 sync_slurms
 echo "-----------------------------------------------------------"
+
+echo "Syncing results from HPC in 5 seconds..."
+sleep 5
+echo "-----------------------------------------------------------"
+sync_slurms
+echo "-----------------------------------------------------------"
 echo "Syncing results from HPC in 5 seconds..."
 sleep 5
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     squeue $QUEUE_FORMAT
 EOF
+echo "-----------------------------------------------------------"
+sync_slurms
+echo "-----------------------------------------------------------"
+echo "Syncing results from HPC in 5 seconds..."
+sleep 5
 echo "-----------------------------------------------------------"
 sync_slurms
 echo "-----------------------------------------------------------"
