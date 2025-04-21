@@ -195,7 +195,7 @@ evaluation:
 model: 
   Class: FlowModule
   params:
-    prior: 'normal'  # normal, copy, brownian, levy
+    prior: 'levy'  # normal, copy, brownian, levy
     ot_method: null  # null to disable
     ot_replace: true  # Default false
     batch_rematch_factor: 1  # Default 1
