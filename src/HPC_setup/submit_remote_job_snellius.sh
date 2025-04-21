@@ -16,7 +16,13 @@ sync_slurms() {
     RSYNC_OUTPUT=$(rsync -avzv $REMOTE_SLURM_DIR $LOCAL_HPC_PATH)
     # Filter and format the output
     echo "Updated files:"
-    echo "$RSYNC_OUTPUT" | grep '\.out' | grep -v 'is uptodate' | awk -v LOCAL_HPC_PATH="$LOCAL_HPC_PATH" '{print LOCAL_HPC_PATH $1}'
+    UPDATED_FILES=$(echo "$RSYNC_OUTPUT" | grep '\.out' | grep -v 'is uptodate' | awk -v LOCAL_HPC_PATH="$LOCAL_HPC_PATH" '{print LOCAL_HPC_PATH $1}')
+    for FILE in $UPDATED_FILES; do
+        if grep -q "View" "$FILE"; then
+            echo "File: $FILE"
+            grep "View" "$FILE"
+        fi
+    done
 }
 
 # Check if a job name argument is provided

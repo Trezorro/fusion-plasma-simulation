@@ -36,8 +36,9 @@
                 "WANDB_NOTES": "debugging",
             },
             "args": [
-                "epochs=5",
+                "epochs=1",
                 "evaluation.n_steps=2",
+                "evaluation.plot_functions=null",
                 "skip_log_summary=True",
                 "batch_size=16",
                 "model.params.batch_rematch_factor=1",
