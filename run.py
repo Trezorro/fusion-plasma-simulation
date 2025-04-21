@@ -52,11 +52,12 @@ metrics.define_error_metrics("train")
 wandb.define_metric("loss/train", summary="min")
 wandb.define_metric("loss/val", summary="min")
 current_date: str = datetime.now().strftime("%Y-%m-%d")
+dated_run_name = current_date + '-' + RUN_NAME
 wandb_logger = WandbLogger(
     log_model="all",
     experiment=run,
     save_dir="output/models/",  # where to save the model checkpoints, will get lighting_logs/ appended
-    checkpoint_name=current_date + '-' + RUN_NAME,
+    checkpoint_name=current_date + '--' + RUN_NAME,
 )
 
 ModelClass = getattr(src.models, C.model.Class)
@@ -77,7 +78,7 @@ train_loader = data.DataLoader(train_set, batch_size=C.batch_size, shuffle=True)
 val_loader = data.DataLoader(
     val_set,
     batch_size=C.batch_size,
-    shuffle=True,
+    shuffle=False,
 )
 
 logger.info("Data loaded, initializing trainer.")
@@ -110,7 +111,13 @@ trainer = L.Trainer(
         PlotsCallback(C.evaluation),
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
         pl_callbacks.LearningRateMonitor(logging_interval='epoch'),
-        ModelCheckpoint(monitor="loss/val", mode="min"),
+        ModelCheckpoint(
+            monitor="loss/val",
+            mode="min",
+            dirpath="output/models/" + dated_run_name,
+            filename=dated_run_name + '-E{epoch:02d}-step={step}-{loss/val:.2f}',
+            auto_insert_metric_name=False
+        ),
         TrainStepMonitor(),
         DeviceStatsMonitor()
     ]
