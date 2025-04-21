@@ -24,20 +24,7 @@ logger.debug(
 )
 C = get_current_config()
 RUN_NAME = wandb.run.name
-# Save the configuration to a pickle file
-import pickle
 
-logger.info("Saving configuration to pickle file.")
-config_pickle_path = "output/config.pkl"
-with open(config_pickle_path, "wb") as f:
-    pickle.dump(conf, f)
-logger.info("Creating W&B artifact for configuration.")
-# Upload the configuration pickle file as a W&B artifact
-config_artifact = wandb.Artifact("config", type="configuration")
-config_artifact.add_file(config_pickle_path)
-logger.debug("Config artifact created and file added.")
-run.log_artifact(config_artifact)
-logger.info("Configuration saved and artifact created.")
 logger.info("Run initialized, importing torch and lightning.")
 import torch
 from torch.utils import data
@@ -46,11 +33,14 @@ import lightning.pytorch.callbacks as pl_callbacks
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import DeviceStatsMonitor, ModelCheckpoint
 
-torch.cuda.memory._record_memory_history()
+if torch.cuda.is_available():
+    logger.info("CUDA is available, logging GPU memory.")
+    torch.cuda.memory._record_memory_history()
 
 logger.info("Torch and lightning imported, importing src modules.")
 
 from src.evaluation import PlotsCallback, TrainStepMonitor
+from datetime import datetime
 import src.models
 import src.data_loaders
 import src.metrics as metrics
@@ -61,10 +51,12 @@ metrics.define_error_metrics("val")
 metrics.define_error_metrics("train")
 wandb.define_metric("loss/train", summary="min")
 wandb.define_metric("loss/val", summary="min")
+current_date: str = datetime.now().strftime("%Y-%m-%d")
 wandb_logger = WandbLogger(
     log_model="all",
     experiment=run,
-    save_dir="output/models/",
+    save_dir="output/models/",  # where to save the model checkpoints, will get lighting_logs/ appended
+    checkpoint_name=current_date + '-' + RUN_NAME,
 )
 
 ModelClass = getattr(src.models, C.model.Class)
@@ -127,17 +119,16 @@ logger.info("Starting training with first validation...")
 # trainer.validate(model=model, dataloaders=val_loader)echo $WANDB_DATA_DIR
 logger.info("Starting model fit...")
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-logger.info("Finished training. Dumping CUDA memory snapshot...")
-memory_trace_file = f'output/traces/{RUN_NAME}_memory_trace.pickle'
-torch.cuda.memory._dump_snapshot(filename=memory_trace_file)
-logger.info("CUDA memory snapshot dumped at %s", memory_trace_file)
-# memory_artifact = wandb.Artifact("memory_trace", type="profiling")
-# memory_artifact.add_file(memory_trace_file)
-# run.log_artifact(memory_artifact)
-# logger.debug("Memory trace artifact created and file added.")
+logger.info("Finished training.")
+wandb_logger.experiment.unwatch(model)
+
+if torch.cuda.is_available():
+    logger.info("Dumping CUDA memory snapshot...")
+    memory_trace_file = f'output/traces/{RUN_NAME}_memory_trace.pickle'
+    torch.cuda.memory._dump_snapshot(filename=memory_trace_file)
+    logger.info("CUDA memory snapshot dumped at %s", memory_trace_file)
 
 logger.info("Starting final validation...")
 trainer.test(model=model, dataloaders=val_loader)
 logger.info("Finished training and testing. Goodbye.")
-wandb_logger.experiment.unwatch(model)
 run.finish()

@@ -43,6 +43,12 @@
         "type": "shell",
         "command": "bash src/HPC_setup/submit_remote_job_snellius.sh",
         "problemMatcher": []
+      },
+      {
+        "label": "Sync traces",
+        "type": "shell",
+        "command": "rsync -avzv mtresoor@snellius.surf.nl:/home/mtresoor/fusion-plasma-simulation/output/traces output/snellius/traces",
+        "problemMatcher": []
       }
     ],
   "inputs": [
