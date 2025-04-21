@@ -15,8 +15,12 @@ run = wandb.init(
     tags=conf.get("tags", None),
     project="flowtoy",
     config=conf,
-    dir="./output/wandb",
+    # dir="./output/wandb",
     # mode="offline",
+)
+logger.debug(
+    "Wandb dirs: main: %s, data dir: %s, staging: %s", wandb.run.dir, wandb.util.get_data_dir(),
+    wandb.util.get_staging_dir()
 )
 C = get_current_config()
 RUN_NAME = wandb.run.name
@@ -42,7 +46,7 @@ import lightning.pytorch.callbacks as pl_callbacks
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import DeviceStatsMonitor
 
-# torch.cuda.memory._record_memory_history()
+torch.cuda.memory._record_memory_history()
 
 logger.info("Torch and lightning imported, importing src modules.")
 
@@ -123,9 +127,11 @@ logger.info("Starting training with first validation...")
 logger.info("Starting model fit...")
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 logger.info("Finished training. Dumping CUDA memory snapshot...")
-# torch.cuda.memory._dump_snapshot(filename='output/memory_trace.pickle')
-# memory_artifact = wandb.Artifact("memory_trace", type="profiling")
-# memory_artifact.add_file("output/memory_trace.pickle")
+memory_trace_file = f'output/{RUN_NAME}_memory_trace.pickle'
+torch.cuda.memory._dump_snapshot(filename=memory_trace_file)
+memory_artifact = wandb.Artifact("memory_trace", type="profiling")
+memory_artifact.add_file(memory_trace_file)
+logger.debug("Memory trace artifact created and file added.")
 
 # logger.info("Starting final validation...")
 # trainer.test(model=model, dataloaders=val_loader)
