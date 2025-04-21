@@ -31,7 +31,8 @@ logger.info("Creating W&B artifact for configuration.")
 # Upload the configuration pickle file as a W&B artifact
 config_artifact = wandb.Artifact("config", type="configuration")
 config_artifact.add_file(config_pickle_path)
-wandb.log_artifact(config_artifact)
+logger.debug("Config artifact created and file added.")
+run.log_artifact(config_artifact)
 logger.info("Configuration saved and artifact created.")
 logger.info("Run initialized, importing torch and lightning.")
 import torch
