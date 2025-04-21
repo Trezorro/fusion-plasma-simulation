@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 from matplotlib import pyplot as plt
 from torch.utils import data
 
+import src.plotters.plot_animations
 import src.plotters.plot_entropy as entropy
 import src.plotters.flow_plots as fp
 import wandb
@@ -43,7 +44,7 @@ class PlotsCallback(L.Callback):
         # 'spectogram_plot': get_and_plot_predictions, # TODO update interface
         '2d_flow_plot': fp.plot_flow,
         'line_flow_plot': fp.plot_flow_and_lines_plotly,
-        'animated_traces': fp.animated_trajectory_plotly,
+        'animated_traces': src.plotters.plot_animations.animated_trajectory_plotly,
         'multi_channel_lines': fp.multi_channel_lines_plotly,
         'entropy_plot': entropy.plot_entropy,
         'histogram': plot_peak_prominences_histogram,
@@ -132,6 +133,7 @@ class PlotsCallback(L.Callback):
     def on_train_epoch_start(self, trainer: L.Trainer, pl_module: L.LightningModule):
         logger.info(f" =========== Starting training for EPOCH {trainer.current_epoch}=========== ")
 
+
 class TrainStepMonitor(L.Callback):
     """Logs the number of train steps and train steps per minute to wandb."""
 
@@ -145,6 +147,7 @@ class TrainStepMonitor(L.Callback):
         self.start_time = time.time()
 
     def on_train_batch_end(self, trainer: L.Trainer, pl_module: L.LightningModule, outputs, batch, batch_idx):
+        # TODO: check if some reference is kept open here, leaking memory
         self.train_steps += 1
         self.samples_seen += len(batch[2]) * pl_module.batch_rematch_factor
         elapsed_time = (time.time() - self.start_time) / 60.0
