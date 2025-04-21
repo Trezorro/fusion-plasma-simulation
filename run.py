@@ -44,7 +44,7 @@ from torch.utils import data
 import lightning as L
 import lightning.pytorch.callbacks as pl_callbacks
 from lightning.pytorch.loggers import WandbLogger
-from lightning.pytorch.callbacks import DeviceStatsMonitor
+from lightning.pytorch.callbacks import DeviceStatsMonitor, ModelCheckpoint
 
 torch.cuda.memory._record_memory_history()
 
@@ -62,9 +62,9 @@ metrics.define_error_metrics("train")
 wandb.define_metric("loss/train", summary="min")
 wandb.define_metric("loss/val", summary="min")
 wandb_logger = WandbLogger(
-    log_model=False,
+    log_model="all",
     experiment=run,
-    save_dir="output/",
+    save_dir="output/models/",
 )
 
 ModelClass = getattr(src.models, C.model.Class)
@@ -115,26 +115,29 @@ trainer = L.Trainer(
     check_val_every_n_epoch=1,  # May validate less often
     # gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
     callbacks=[
-        pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
         PlotsCallback(C.evaluation),
+        pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
         pl_callbacks.LearningRateMonitor(logging_interval='epoch'),
+        ModelCheckpoint(monitor="loss/val", mode="min"),
         TrainStepMonitor(),
         DeviceStatsMonitor()
     ]
 )
 logger.info("Starting training with first validation...")
-# trainer.validate(model=model, dataloaders=val_loader)
+# trainer.validate(model=model, dataloaders=val_loader)echo $WANDB_DATA_DIR
 logger.info("Starting model fit...")
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 logger.info("Finished training. Dumping CUDA memory snapshot...")
-memory_trace_file = f'output/{RUN_NAME}_memory_trace.pickle'
+memory_trace_file = f'output/traces/{RUN_NAME}_memory_trace.pickle'
 torch.cuda.memory._dump_snapshot(filename=memory_trace_file)
-memory_artifact = wandb.Artifact("memory_trace", type="profiling")
-memory_artifact.add_file(memory_trace_file)
-run.log_artifact(memory_artifact)
-logger.debug("Memory trace artifact created and file added.")
+logger.info("CUDA memory snapshot dumped at %s", memory_trace_file)
+# memory_artifact = wandb.Artifact("memory_trace", type="profiling")
+# memory_artifact.add_file(memory_trace_file)
+# run.log_artifact(memory_artifact)
+# logger.debug("Memory trace artifact created and file added.")
 
-# logger.info("Starting final validation...")
-# trainer.test(model=model, dataloaders=val_loader)
+logger.info("Starting final validation...")
+trainer.test(model=model, dataloaders=val_loader)
 logger.info("Finished training and testing. Goodbye.")
+wandb_logger.experiment.unwatch(model)
 run.finish()
