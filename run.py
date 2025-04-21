@@ -19,8 +19,8 @@ run = wandb.init(
     # mode="offline",
 )
 logger.debug(
-    "Wandb dirs: main: %s, data dir: %s, staging: %s", wandb.run.dir, wandb.util.get_data_dir(),
-    wandb.util.get_staging_dir()
+    "Wandb dirs: \n  main: %s, \n  data dir: %s, \n  artifacts: %s", wandb.run.dir, wandb.env.get_data_dir(),
+    wandb.env.get_artifact_dir()
 )
 C = get_current_config()
 RUN_NAME = wandb.run.name
