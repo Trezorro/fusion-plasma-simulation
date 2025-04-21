@@ -47,7 +47,7 @@ echo "Version: $(python --version 2>&1)"
 git checkout tags/$1
 export WANDB_DIR="~/fusion-plasma-simulation/output"
 export WANDB_NOTES=$(git log -n 5 --pretty=format:"%B (%h - %ar) %N")
-
+export WANDB_CACHE_DIR="~/fusion-plasma-simulation/output/output/wandb/cache"
 # Run the Python script
 echo "---------------- JOB START ----------------"
 srun python run.py run_name=$1

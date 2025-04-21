@@ -101,7 +101,7 @@ trainer = L.Trainer(
     enable_progress_bar=wandb.run.disabled,
     max_epochs=C["epochs"],
     logger=wandb_logger,
-    profiler='simple',
+    # profiler='simple',
     limit_train_batches=10,
     limit_val_batches=10,
     benchmark=True,
@@ -125,8 +125,8 @@ logger.info("Finished training. Dumping CUDA memory snapshot...")
 # torch.cuda.memory._dump_snapshot(filename='output/memory_trace.pickle')
 # memory_artifact = wandb.Artifact("memory_trace", type="profiling")
 # memory_artifact.add_file("output/memory_trace.pickle")
-wandb.log_artifact('output/memory_trace.pickle', type="profiling", name=RUN_NAME + ".memory_trace.prof")
 
 # logger.info("Starting final validation...")
 # trainer.test(model=model, dataloaders=val_loader)
 logger.info("Finished training and testing. Goodbye.")
+run.finish()
