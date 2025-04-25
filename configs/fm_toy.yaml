@@ -6,6 +6,7 @@ features:
   - true_condition_concat
   - speed_monitor
   - FIX_conditioning_input_matching
+  - learning_rate_scheduler
 
 epochs: 10
 batch_size: 128
@@ -188,7 +189,7 @@ evaluation:
 model: 
   Class: FlowModule
   params:
-    prior: 'levy'  # normal, copy, brownian, levy
+    prior: 'resample'  # normal, copy, brownian, levy
     ot_method: null  # null to disable
     ot_replace: true  # Default false
     batch_rematch_factor: 1  # Default 1

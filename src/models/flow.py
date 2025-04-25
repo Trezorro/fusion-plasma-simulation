@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 import lightning as L
 from lightning.pytorch.core.optimizer import LightningOptimizer
 import numpy as np
@@ -38,7 +38,7 @@ class FlowModule(L.LightningModule):
         ConditionalUNet=ConditionalUNet,
     )
     SAMPLE_RATE = 10_000  # Hz
-    PRIOR_OPTIONS = ["normal", "copy", "brownian", "levy"]
+    PRIOR_OPTIONS = ["normal", "levy", "resample", "brownian", "copy"]
 
     def __init__(
         self,
@@ -46,7 +46,7 @@ class FlowModule(L.LightningModule):
         model_params: Optional[DictConfig | dict] = None,
         loss: str = "MSELoss",
         optimizer_params: Optional[DictConfig | dict] = None,
-        prior: str = "normal",
+        prior: Literal["normal", "levy", "resample", "brownian", "copy"] = "normal",
         ot_method: Optional[str] = None,
         ot_replace: bool = False,
         batch_rematch_factor: int = 1,
@@ -188,6 +188,11 @@ class FlowModule(L.LightningModule):
             case "levy":
                 x_last = conditioning_inputs['x_history'][:, :, -1]
                 prior_samples = self.generate_levy_jump_process(x_last, seq_length)
+            case "resample":
+                assert 'x_history' in conditioning_inputs, "x_history must be in conditioning for prior='resample'"
+                # in case the x_history is longer than the target_samples, crop to seq_length
+                history = conditioning_inputs['x_history'].to(self.device)
+                prior_samples = self.generate_history_resample(history, seq_length)
             case _:
                 raise ValueError(f"Invalid prior: {self.prior}")
         return prior_samples
@@ -234,6 +239,21 @@ class FlowModule(L.LightningModule):
         jump_diff = jumps * jump_values
         x_t = x_last.unsqueeze(-1) + torch.cumsum(jump_diff, dim=-1)
         return x_t
+
+    def generate_history_resample(self, history, target_seq_length):
+        """Generate a prior by sampling from the history values.
+        This is used for the 'resample' prior option.
+
+        Parameters:
+        history (torch.Tensor): History samples of shape (N, C, H), where N = batch size, C = number of channels,
+            H = history length.
+        target_seq_length (int): Number of time steps in the target sequence."""
+        N, C, H = history.shape
+        # Randomly sample indices from the history
+        indices = torch.randint(0, H, (N, C, target_seq_length), device=self.device)
+        # Gather the samples from the history
+        prior_samples = history.gather(2, indices)
+        return prior_samples
 
     test_step = validation_step
 
