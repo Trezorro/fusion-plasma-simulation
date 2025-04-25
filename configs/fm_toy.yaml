@@ -184,14 +184,7 @@ evaluation:
 
 
 # model: model.yaml # To be replaced by respective yaml file content
-# hidden_features: int = 128,
-#         activation: nn.Module = nn.GELU(),
-#         norm: bool = False,
-#         ch_mults=(2, 2, 2, 2),
-#         is_attn=(False, False, False, False),
-#         mid_attn: bool = False,
-#         n_blocks: int = 2,
-#         use1x1: bool = False,
+
 model: 
   Class: FlowModule
   params:

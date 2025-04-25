@@ -96,7 +96,7 @@ def moments(batched_time_series: torch.Tensor):
     mean = torch.mean(batched_time_series, -1, keepdim=True)
     diffs = batched_time_series - mean
     var = torch.mean(torch.pow(diffs, 2), -1, keepdim=True)
-    std = torch.pow(var, 0.5)
+    std = torch.pow(var, 0.5) + 1e-8
     zscores = diffs / std
     skews = torch.mean(torch.pow(zscores, 3.0), -1, keepdim=True)
     kurtoses = torch.mean(torch.pow(zscores, 4.0), -1, keepdim=True) - 3.0
