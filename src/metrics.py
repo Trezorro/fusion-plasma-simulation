@@ -328,6 +328,7 @@ class PeakProps(
         peak_positions, props = find_peaks(trace, prominence=prominence, width=width, rel_height=rel_height)
         # for every peak, find the trace minimum in the range of the peak width
         if pd_trace is None:
+            # For non-DML signals, we only need the peak positions and properties
             return cls(
                 X=peak_positions,
                 Y=trace[peak_positions].numpy(),
@@ -335,6 +336,19 @@ class PeakProps(
                 bases=props["width_heights"],
                 left_ips=props["left_ips"],
                 right_ips=props["right_ips"]
+            )
+        elif len(peak_positions) == 0:
+            # If no peaks are found, return empty PeakProps
+            return cls(
+                X=np.array([]),
+                Y=np.array([]),
+                prominences=np.array([]),
+                bases=np.array([]),
+                left_ips=np.array([]),
+                right_ips=np.array([]),
+                energy_delta=np.array([]),
+                energy_base_x=np.array([]),
+                pd_prominence=np.array([]),
             )
         else:  # This means that this is a DML signal and we should calculate the DML-PD energy relationship
             peak_widths = props["widths"]
@@ -354,7 +368,7 @@ class PeakProps(
                     for i in range(len(peak_positions))
                 ]
             )
-            energy_delta = trace[peak_positions] - trace[energy_base_pos]
+            energy_delta = (trace[peak_positions] - trace[energy_base_pos]).numpy()
             # get peaks from the pd_trace
             pd_peak_positions, pd_props = find_peaks(
                 pd_trace, prominence=prominence, width=width, rel_height=rel_height
@@ -401,36 +415,50 @@ class PeakProps(
         If one of the instances is empty, the distance is calculated against a sentinel value. Since 
         If both instances are empty, the distance is 0.
         """
-        SENTINEL_VALUE = -1.0
         if not isinstance(other, PeakProps):
             raise TypeError("Can only subtract PeakProps instances.")
-        energy_delta_w = pd_prominence_w = energy_ratio_w = None
-        if self.energy_delta is not None and other.energy_delta is not None:
-            # special case for wassersteins between DML peaks
-            energy_delta_w = wasserstein_distance(self.energy_delta, other.energy_delta)
-            pd_prominence_w = wasserstein_distance(self.pd_prominence, other.pd_prominence)
-            energy_ratio_w = wasserstein_distance(self.energy_ratio, other.energy_ratio)
+        do_enery_calculation = True
+        if self.energy_delta is None or other.energy_delta is None:
+            # Non dml channel, we are not interested in the energy delta properties and will keep it None
+            energy_delta_w = pd_prominence_w = energy_ratio_w = None
+            do_enery_calculation = False
+
         if self.num_peaks() == 0 and other.num_peaks() == 0:
+            # energy poperties will be None if they dont matter, and empty array if they do
             return PeakWasserstein(
                 height=0.0,
                 prominence=0.0,
                 base=0.0,
                 width=0.0,
+                energy_delta=0.0,
+                pd_prominence=0.0,
+                energy_ratio=0.0,
             )
         if self.num_peaks() == 0:
             return PeakWasserstein(
-                height=wasserstein_distance([SENTINEL_VALUE], other.Y),
-                prominence=wasserstein_distance([SENTINEL_VALUE], other.prominences),
-                base=wasserstein_distance([SENTINEL_VALUE], other.bases),
-                width=wasserstein_distance([SENTINEL_VALUE], other.widths),
+                height=np.mean(other.Y),
+                prominence=np.mean(other.prominences),
+                base=np.mean(other.bases),
+                width=np.mean(other.widths),
+                energy_delta=np.mean(other.energy_delta) if do_enery_calculation else None,
+                pd_prominence=np.mean(other.pd_prominence) if do_enery_calculation else None,
+                energy_ratio=np.mean(other.energy_ratio) if do_enery_calculation else None,
             )
         if other.num_peaks() == 0:
             return PeakWasserstein(
-                height=wasserstein_distance(self.Y, [SENTINEL_VALUE]),
-                prominence=wasserstein_distance(self.prominences, [SENTINEL_VALUE]),
-                base=wasserstein_distance(self.bases, [SENTINEL_VALUE]),
-                width=wasserstein_distance(self.widths, [SENTINEL_VALUE]),
+                height=np.mean(self.Y),
+                prominence=np.mean(self.prominences),
+                base=np.mean(self.bases),
+                width=np.mean(self.widths),
+                energy_delta=np.mean(self.energy_delta) if do_enery_calculation else None,
+                pd_prominence=np.mean(self.pd_prominence) if do_enery_calculation else None,
+                energy_ratio=np.mean(self.energy_ratio) if do_enery_calculation else None,
             )
+        if do_enery_calculation:
+            # special case for wassersteins between DML peaks
+            energy_delta_w = wasserstein_distance(self.energy_delta, other.energy_delta)
+            pd_prominence_w = wasserstein_distance(self.pd_prominence, other.pd_prominence)
+            energy_ratio_w = wasserstein_distance(self.energy_ratio, other.energy_ratio)
         return PeakWasserstein(
             height=wasserstein_distance(self.Y, other.Y),
             prominence=wasserstein_distance(self.prominences, other.prominences),

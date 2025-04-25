@@ -7,6 +7,7 @@ logger.setLevel(logging.DEBUG)
 logging.getLogger('src').setLevel(logging.DEBUG)
 logger.info("Starting run.py with wandb init.")
 import wandb
+import wandb.env
 from src.config import get_current_config, load_config_from_file
 
 conf = load_config_from_file('fm_toy')
