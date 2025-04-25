@@ -4,9 +4,10 @@
 *.pdf
 
 wandb/
+artifacts/
 output/*
 !output/.gitkeep
-
+lightning_logs/
 # Python specific
 __pycache__/
 *.pyc
