@@ -2,6 +2,7 @@
 from omegaconf import OmegaConf, ValidationError
 import omegaconf
 import wandb
+import wandb.apis
 from pprint import pformat
 import logging
 
@@ -9,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 # TODO: define generalized includes, instead of just looking for model with string. Include data too.
 # TODO: Need to decide how to specify data and model in the config structure.
+
+PROJECT = "flowtoy"
+ENTITY = "tresoor"
 
 
 def print_types(value, level=0):
@@ -47,10 +51,14 @@ def load_config_from_file(name='main', as_omega=False) -> dict | omegaconf.DictC
     if as_omega:
         return conf
     conf = OmegaConf.to_object(conf)
-    logger.info(f"Configuration:\n{pformat(conf, compact=True, sort_dicts=False, width=160)}")
+    logger.info(f"Configuration:\n{pretty_config(conf)}")
     if not type(conf) == dict:
         raise ValidationError("Configuration was not in dict style. Got: " + repr(conf))
     return dict(conf)
+
+
+def pretty_config(conf):
+    return pformat(conf, compact=True, sort_dicts=False, width=160)
 
 
 def update_model_input_channels(conf):
@@ -72,3 +80,36 @@ def get_current_config():
     conf = OmegaConf.create(dict(wandb.config))
     convert_lists(conf)
     return conf
+
+
+def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.public.Run | None:
+    """
+    Find a run by ID or name and load it.
+    Args:
+        find_run (str): The ID or name of the run to find.
+        project (str): The name of the project.
+        entity (str): The entity name.
+    """
+    api = wandb.Api(overrides={"entity": entity, "project": project})
+    try:
+        run = api.run(find_run)
+        logger.debug("Found run by ID=%s", find_run)
+    except wandb.errors.CommError as e:
+        logger.debug("Could not find run by ID (%s). Will try by name.", find_run)
+        runs = api.runs(filters={"display_name": find_run},)
+        if len(runs) == 1:
+            run = runs[0]
+            logger.debug("Found run by name (%s)", find_run)
+        elif len(runs) > 1:
+            logger.warning("Found multiple runs with the same name (%s)", find_run)
+            for r in runs:
+                logger.warning("Run ID: %s  Date: %s", r.id, r.created_at)
+        else:
+            logger.error("No runs found with name %s", find_run)
+            run = None
+    if run is not None:
+        RUN_ID = run.id
+        RUN_NAME = run.name
+        print(f" ✅ Run ID: {RUN_ID}, Run Name: {RUN_NAME}\n Created at: {run.created_at}")
+        print(f"   Run URL: {run.url}")
+    return run
