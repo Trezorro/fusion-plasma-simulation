@@ -112,6 +112,7 @@ class FlowModule(L.LightningModule):
                 opt.step()
                 opt.zero_grad()
         total_loss /= self.batch_rematch_factor
+
         self.log("loss/train", total_loss, prog_bar=True)
 
     def batch_match(self, batch, batch_idx, match_i=0):
@@ -138,6 +139,13 @@ class FlowModule(L.LightningModule):
         loss = self.loss(pred_velocity, velocity)
         self.log("loss/val", loss, prog_bar=True)
         return loss
+
+    def on_validation_epoch_end(self):
+        # single scheduler
+        lr_sched = self.lr_schedulers()
+        # If the selected scheduler is a ReduceLROnPlateau scheduler.
+        if isinstance(lr_sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
+            lr_sched.step(self.trainer.callback_metrics["loss/val"])
 
     @torch.no_grad()
     def interpolate_samples(self, batch):
@@ -388,7 +396,7 @@ class FlowModule(L.LightningModule):
                     # rate after every epoch/step.
                     "frequency": 1,
                     # Metric to to monitor for schedulers like `ReduceLROnPlateau`
-                    "monitor": "loss/train",
+                    "monitor": "loss/val",
                     # If set to `True`, will enforce that the value specified 'monitor'
                     # is available when the scheduler is updated, thus stopping
                     # training if not found. If set to `False`, it will only produce a warning
