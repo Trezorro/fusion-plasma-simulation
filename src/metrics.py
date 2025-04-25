@@ -67,15 +67,20 @@ val/predictions/moments/mean
 # wandb.define_metric("val/freq_target_batch_input_variance_ratio", summary="max")
 #### -- New Metrics -- ####
 
-METRIC_NAMES = ["mean", "var", "skew", "kurtosis"]
+MOMENT_NAMES = ["mean", "var", "skew", "kurtosis"]
 
 
 def define_error_metrics(main_prefix: str):
     # wandb.define_metric("val/error/magnitude_mean_mse", summary="min")
     C = get_current_config()
-    for metric_name in METRIC_NAMES:
-        wandb.define_metric(f"{main_prefix}/error/magnitude_{metric_name}_mse", summary='min')
-        wandb.define_metric(f"{main_prefix}/error/diff_{metric_name}_mse", summary='min')
+    for metric_name in MOMENT_NAMES:
+        for channel_name in C.data.cols.x:
+            wandb.define_metric(
+                f"{main_prefix}/error/magnitude_{metric_name}_mse/{channel_name}", summary='min'
+            )
+            wandb.define_metric(f"{main_prefix}/error/diff_{metric_name}_mse/{channel_name}", summary='min')
+        wandb.define_metric(f"{main_prefix}/error/magnitude_{metric_name}_mse/mean", summary='min')
+        wandb.define_metric(f"{main_prefix}/error/diff_{metric_name}_mse/mean", summary='min')
     for entropy_method in entropy.VALID_FUNCS.keys():
         for channel_name in C.data.cols.x:
             wandb.define_metric(f"{main_prefix}/error/{entropy_method}_mse/{channel_name}", summary='min')
@@ -118,6 +123,46 @@ def get_moments_errors(pred: torch.Tensor, target: torch.Tensor):
         for (time_agg, vpredict), (_, vtarget) in zip(first_diff_pred.items(), first_diff_target.items())
     }
     return {**mag_out, **first_diff_out}
+
+
+def get_moments_errors_per_channel(pred: torch.Tensor, target: torch.Tensor):
+    """Return a dict with the sample moment metrics:
+
+    Per channel, but we also add a mean value for each metric, averaged over all channels.
+
+    - /error/magnitude_mean_mse/<channelname>: The mean squared error between the paired target and predicted mean, per channel.
+    - /error/magnitude_var_mse/<channelname>: The mean squared error between the paired target and predicted variance, per channel.
+    - /error/magnitude_skew_mse/<channelname>: The mean squared error between the paired target and predicted skewness, per channel.
+    - /error/magnitude_kurtosis_mse/<channelname>: The mean squared error between the paired target and predicted kurtosis, per channel. 
+    - /error/diff_mean_mse/<channelname>: The mean squared error between the paired target and predicted first difference mean, per channel.
+    - /error/diff_var_mse/<channelname>: The mean squared error between the paired target and predicted first difference variance, per channel.
+    - /error/diff_skew_mse/<channelname>: The mean squared error between the paired target and predicted first difference skewness, per channel.
+    - /error/diff_kurtosis_mse/<channelname>: The mean squared error between the paired target and predicted first difference kurtosis, per channel.
+    """
+    C = get_current_config()
+    channel_names = C.data.cols.x
+    mse = lambda x, y: torch.mean(torch.pow(x - y, 2))
+    magnitudes_pred = moments(pred)  # mean, var, skew, kurtosis, each of shape (B, C)
+    magnitudes_target = moments(target)
+    first_diff_pred = moments(first_difference(pred))
+    first_diff_target = moments(first_difference(target))
+    metrics = {}
+    for moment in MOMENT_NAMES:
+        for i, channel_name in enumerate(channel_names):
+            metrics[f"/error/magnitude_{moment}_mse/{channel_name}"] = mse(
+                magnitudes_pred[moment][:, i], magnitudes_target[moment][:, i]
+            ).item()
+            metrics[f"/error/diff_{moment}_mse/{channel_name}"] = mse(
+                first_diff_pred[moment][:, i], first_diff_target[moment][:, i]
+            ).item()
+        # Calculate the mean of the metrics over all channels
+        metrics[f"/error/magnitude_{moment}_mse/mean"] = np.mean(
+            [metrics[f"/error/magnitude_{moment}_mse/{channel_name}"] for channel_name in channel_names]
+        )
+        metrics[f"/error/diff_{moment}_mse/mean"] = np.mean(
+            [metrics[f"/error/diff_{moment}_mse/{channel_name}"] for channel_name in channel_names]
+        )
+    return metrics
 
 
 def get_entropy_metrics(pred: torch.Tensor, target: torch.Tensor):
