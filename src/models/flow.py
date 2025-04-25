@@ -272,7 +272,7 @@ class FlowModule(L.LightningModule):
             save_trajectories=True
         )
         # Metrics
-        metrics_out = metrics.get_moments_errors(generated_samples, target_samples)
+        metrics_out = metrics.get_moments_errors_per_channel(generated_samples, target_samples)
         self.model.train()  # Reset model to training mode
 
         meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
