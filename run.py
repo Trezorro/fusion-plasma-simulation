@@ -121,7 +121,6 @@ trainer = L.Trainer(
             auto_insert_metric_name=False
         ),
         TrainStepMonitor(),
-        DeviceStatsMonitor()
     ]
 )
 logger.info("Starting training with first validation...")
