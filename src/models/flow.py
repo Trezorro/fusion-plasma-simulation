@@ -417,10 +417,6 @@ class FlowModule(L.LightningModule):
                     "frequency": 1,
                     # Metric to to monitor for schedulers like `ReduceLROnPlateau`
                     "monitor": "loss/val",
-                    # If set to `True`, will enforce that the value specified 'monitor'
-                    # is available when the scheduler is updated, thus stopping
-                    # training if not found. If set to `False`, it will only produce a warning
-                    "strict": True,
                     # If using the `LearningRateMonitor` callback to monitor the
                     # learning rate progress, this keyword can be used to specify
                     # a custom logged name
