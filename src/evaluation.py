@@ -6,9 +6,9 @@ from typing import Any, Callable, Mapping
 from venv import logger
 
 import lightning as L
-import plotly
 import plotly.graph_objects as go
 from matplotlib import pyplot as plt
+import torch
 from torch.utils import data
 
 import src.plotters.plot_animations
@@ -76,18 +76,16 @@ class PlotsCallback(L.Callback):
             params = func_c.copy()
             log_key = params.pop("log_key", key)  # if log_key is present, use it instead of key
             n = params.pop("n", self.max_n)
-            logger.debug(
-                f"Calling plot function {key} with params {params} and n={n}. Will log as {log_key}."
-            )
+            logger.debug(f"Calling plot function {key} with params {params} and n={n}. Will log as {log_key}.")
             fig = plot_fn(**evaluation_output, n=n, title_base=title_base, **params)
             wandb.log({f"{trainval}/{log_key}": fig, "trainer/global_step": global_step}, commit=False)
 
     def on_validation_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
         logger.debug(f"on_validation_epoch_end called at epoch {trainer.current_epoch}")
         # Skip for all other epochs
-        if (
-            trainer.current_epoch % self.val_every_n_epochs == 1
-        ) or trainer.current_epoch <= self.scrutinize_epochs:
+        if (trainer.current_epoch % self.val_every_n_epochs == 1) or trainer.current_epoch <= self.scrutinize_epochs:
+            if torch.cuda.is_available():
+                logger.info(torch.cuda.memory_summary(device=None, abbreviated=False))
             # Generate images
             logger.info(f"Evaluating model for EPOCH {trainer.current_epoch} on validation data.")
             data_set = trainer.val_dataloaders.dataset
