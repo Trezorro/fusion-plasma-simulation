@@ -47,6 +47,7 @@ class FlowModule(L.LightningModule):
         loss: str = "MSELoss",
         optimizer_params: Optional[DictConfig | dict] = None,
         prior: Literal["normal", "levy", "resample", "brownian", "copy"] = "normal",
+        prior_sigma: float = 0.3,
         ot_method: Optional[str] = None,
         ot_replace: bool = False,
         batch_rematch_factor: int = 1,
@@ -63,6 +64,7 @@ class FlowModule(L.LightningModule):
         self.model = self.MODEL_OPTIONS[model](**model_params)  # type: ignore
         self.loss = self.LOSS_OPTIONS[loss]()
         self.prior = prior
+        self.prior_sigma = prior_sigma
         self.step_fn = self.fwd_euler_step
         self.ot_method = ot_method
         self.ot_sampler = OTPlanSampler(method=ot_method, reg=0.05) if ot_method else None
@@ -84,17 +86,14 @@ class FlowModule(L.LightningModule):
             " be unbalanced."
         )
         logger.info(
-            "Will do %d matches per batch, stepping every %d, so %d steps per batch.",
-            self.batch_rematch_factor, self.step_every_nth_match,
-            self.batch_rematch_factor // self.step_every_nth_match
+            "Will do %d matches per batch, stepping every %d, so %d steps per batch.", self.batch_rematch_factor,
+            self.step_every_nth_match, self.batch_rematch_factor // self.step_every_nth_match
         )
         assert self.prior in self.PRIOR_OPTIONS, f"Invalid prior: {self.prior}"
-        assert (
-            self.prior == "normal" or self.ot_method is None
-        ), "OT sampling only supported with fully random prior"
-        assert ('position_sequence' in self.model_params.conditioning) == (
-            self.model_params["positional_encoding"] is not None
-        ), ("Positional encoding must be configured for position_sequence conditioning")
+        assert (self.prior == "normal" or self.ot_method is None), "OT sampling only supported with fully random prior"
+        assert ('position_sequence' in self.model_params.conditioning
+               ) == (self.model_params["positional_encoding"]
+                     is not None), ("Positional encoding must be configured for position_sequence conditioning")
 
     def forward(self, x, t, conditioning=None):
         return self.model(x, t, conditioning=conditioning)
@@ -171,13 +170,13 @@ class FlowModule(L.LightningModule):
         return t, samples_at_t, target_velocity, conditioning_inputs
 
     def get_prior_samples(self, conditioning_inputs, target_size: torch.Size):
-        assert type(target_size) == torch.Size and 2 <= len(
+        assert type(
             target_size
-        ) <= 5, "target_size must be a torch.Size with 2-5 dimensions"
+        ) == torch.Size and 2 <= len(target_size) <= 5, "target_size must be a torch.Size with 2-5 dimensions"
         seq_length = target_size[2]
         match self.prior:
             case "normal":
-                prior_samples = torch.randn(target_size, device=self.device)
+                prior_samples = torch.randn(target_size, device=self.device) * self.prior_sigma + 0.5
             case "copy":
                 assert 'x_history' in conditioning_inputs, "x_history must be in conditioning for prior='copy'"
                 # in case the x_history is longer than the target_samples, crop to seq_length
@@ -214,11 +213,11 @@ class FlowModule(L.LightningModule):
         torch.Tensor: Brownian motion trajectory of shape (N, C, seq_length).
         """
         N, C = x_last.shape
-        dB = self.sqrt_dt * torch.randn((N, C, seq_length), device=self.device)
+        dB = self.sqrt_dt * torch.randn((N, C, seq_length), device=self.device) * self.prior_sigma
         x_t = x_last.unsqueeze(-1) + torch.cumsum(dB, dim=-1)
         return x_t
 
-    def generate_levy_jump_process(self, x_last, seq_length, jump_prob=0.01, jump_scale=0.5):
+    def generate_levy_jump_process(self, x_last, seq_length, jump_prob=0.01):
         """Generate a Lévy jump process trajectory.
 
         The Lévy jump process is stationary for long periods and jumps to random levels
@@ -235,7 +234,7 @@ class FlowModule(L.LightningModule):
         """
         N, C = x_last.shape
         jumps = torch.rand((N, C, seq_length), device=self.device) < jump_prob  # Jump mask
-        jump_values = jump_scale * torch.randn((N, C, seq_length), device=self.device)  # Random jump values
+        jump_values = self.prior_sigma * torch.randn((N, C, seq_length), device=self.device)  # Random jump values
         jump_diff = jumps * jump_values
         x_t = x_last.unsqueeze(-1) + torch.cumsum(jump_diff, dim=-1)
         return x_t
