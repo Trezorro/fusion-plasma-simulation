@@ -1,11 +1,11 @@
 {
     "yapf.args": [
         "--style", 
-        "{based_on_style: google, indent_width: 4, column_limit: 110, DEDENT_CLOSING_BRACKETS: True}"
+        "{based_on_style: google, indent_width: 4, column_limit: 120, DEDENT_CLOSING_BRACKETS: True}"
     ],
     "editor.rulers": [
         {
-            "column": 110,
+            "column": 120,
             "color": "#8e111182"
         }
     ],

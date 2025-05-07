@@ -36,9 +36,9 @@ import lightning.pytorch.callbacks as pl_callbacks
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import DeviceStatsMonitor, ModelCheckpoint
 
-if torch.cuda.is_available():
-    logger.info("CUDA is available, logging GPU memory.")
-    torch.cuda.memory._record_memory_history()
+# if torch.cuda.is_available():
+#     logger.info("CUDA is available, logging GPU memory.")
+#     torch.cuda.memory._record_memory_history()
 
 logger.info("Torch and lightning imported, importing src modules.")
 
@@ -132,14 +132,14 @@ trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loa
 logger.info("Finished training.")
 wandb_logger.experiment.unwatch(model)
 
-if torch.cuda.is_available():
-    logger.info("Dumping CUDA memory snapshot...")
-    memory_trace_file = f'output/traces/{RUN_NAME}_memory_trace.pickle'
-    torch.cuda.memory._dump_snapshot(filename=memory_trace_file)
-    logger.info("CUDA memory snapshot dumped at %s", memory_trace_file)
+# if torch.cuda.is_available():
+#     logger.info("Dumping CUDA memory snapshot...")
+#     memory_trace_file = f'output/traces/{RUN_NAME}_memory_trace.pickle'
+#     torch.cuda.memory._dump_snapshot(filename=memory_trace_file)
+#     logger.info("CUDA memory snapshot dumped at %s", memory_trace_file)
 
-# logger.info("Starting final validation...")
-# trainer.test(model=model, dataloaders=val_loader)
+logger.info("Starting final validation...")
+trainer.test(model=model, dataloaders=val_loader)
 logger.info("Finished training and testing.")
 
 logger.info("Run finished, deleting redundant artifacts.")
