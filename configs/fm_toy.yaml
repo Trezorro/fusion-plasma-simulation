@@ -270,14 +270,14 @@ data:
             "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
             "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
         ]
-    # c:
-    #   - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
-    #   - gas_fringes  # Ingepompte gas
-    #   - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
-    #   - ECRH  # magnetron.
-    #   - a_minor  # reel gemeten plasma shape a k d (horizontale radius
-    #   - KAPPA
-    #   - DELTA  # linkerbovenhoek naar links vanuit hetmidden
+    c:
+      - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
+      - gas_fringes  # Ingepompte gas
+      - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
+      - ECRH  # magnetron.
+      - a_minor  # reel gemeten plasma shape a k d (horizontale radius
+      - KAPPA
+      - DELTA  # linkerbovenhoek naar links vanuit hetmidden
     label: LHD_label
   test_shots: [53623, 57013, 57094, 57732, 60813, 60814, 61028, 61237, 63306, 63878, 64365, 64386, 64393, 64678, 64686, 64770, 64857, 65481, 67112, 68631, 68697, 69514, 73368, 73631, 73935, 75264, 76304, 76702, 77089, 77193, 77196, 77409, 77595, 77598, 77599, 77602, 77604]
   train_shots: [26386, 29511, 30043, 30197, 30225, 30262, 30268, 30290, 30310, 31211, 31554, 31650, 31718, 31807, 31839, 32191, 32195, 32592, 32716, 32911, 33188, 33271, 33281, 33459, 33567, 33942, 34010, 34309, 42197, 42514, 43454, 45103, 45105, 46853, 47962, 48580, 52302, 53601, 53625, 53627, 53629, 56662, 57000, 57009, 57010, 57011, 57024, 57026, 57077, 57081, 57093, 57095, 57103, 57218, 57622, 57623, 57624, 57706, 57715, 57751, 58182, 58460, 59061, 59064, 59065, 59066, 59073, 59076, 59825, 60097, 60275, 60812, 60830, 60992, 60995, 61000, 61005, 61009, 61010, 61021, 61038, 61039, 61042, 61043, 61044, 61055, 61057, 61058, 61060, 61242, 61246, 61254, 61260, 61274, 61275, 61277, 61279, 61281, 61608, 61609, 61630, 61631, 61702, 61703, 61711, 61712, 61713, 61714, 61716, 61719, 62744, 63229, 63230, 63232, 63234, 63236, 63238, 63240, 63242, 63244, 63246, 63250, 63298, 63300, 63302, 63308, 63310, 63843, 63847, 63849, 63853, 63877, 63879, 63880, 63882, 63887, 63888, 63920, 63923, 63943, 63944, 63945, 64060, 64067, 64327, 64335, 64336, 64338, 64340, 64342, 64363, 64364, 64366, 64367, 64368, 64369, 64370, 64371, 64372, 64373, 64374, 64376, 64378, 64389, 64392, 64647, 64648, 64658, 64659, 64662, 64666, 64670, 64675, 64680, 64774, 64820, 64855, 64858, 64859, 64911, 64912, 64913, 64914, 64915, 64916, 64917, 64918, 64919, 64923, 64924, 65253, 65280, 65281, 65282, 65283, 65285, 65288, 65317, 65318, 65319, 65320, 65321, 65322, 65336, 65482, 65487, 65557, 65561, 65564, 65566, 66494, 67182, 67186, 68268, 68628, 69127, 69129, 69133, 69512, 69515, 70777, 71208, 73330, 73367, 73632, 73927, 73929, 73931, 73934, 73936, 74498, 74916, 75263, 75265, 76322, 77092, 77411, 77426]
