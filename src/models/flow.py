@@ -144,7 +144,7 @@ class FlowModule(L.LightningModule):
         lr_sched = self.lr_schedulers()
         # If the selected scheduler is a ReduceLROnPlateau scheduler.
         if isinstance(lr_sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
-            lr_sched.step(self.trainer.callback_metrics["loss/val"])
+            lr_sched.step(self.trainer.callback_metrics["loss/train"])
 
     @torch.no_grad()
     def interpolate_samples(self, batch):
