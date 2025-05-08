@@ -139,7 +139,7 @@ class FlowModule(L.LightningModule):
         self.log("loss/val", loss, prog_bar=True)
         return loss
 
-    def on_validation_epoch_end(self):
+    def on_train_epoch_end(self):
         # single scheduler
         lr_sched = self.lr_schedulers()
         # If the selected scheduler is a ReduceLROnPlateau scheduler.
