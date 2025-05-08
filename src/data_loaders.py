@@ -2,6 +2,7 @@ from typing import Optional, Sequence
 import numpy as np
 from omegaconf import DictConfig
 import pandas as pd
+import torch
 from torch.utils import data
 import random
 from src.data_generators import create_gaussian_data, create_square_data, create_spiral_data, create_heart_data, create_two_gaussians_data, create_smiley_data
@@ -35,14 +36,12 @@ class ShotWindowDataset(data.Dataset):
         self.force_mean_zero = force_mean_zero
 
         self.data = pd.read_parquet(self.file_path)
-        self.data['ShotNum'] = self.data['ShotNum'].astype(
-            np.int32
-        )  # Reduce memory usage and quicker indexing
+        self.data['ShotNum'] = self.data['ShotNum'].astype(np.int32)  # Reduce memory usage and quicker indexing
         self.shot_numbers = self.data['ShotNum'].unique()
         self.min = self.data[self.columns_C + self.columns_X].min()
         self.max = self.data[self.columns_C + self.columns_X].max()
-        self.data[self.columns_C + self.columns_X] = (self.data[self.columns_C + self.columns_X] -
-                                                      self.min) / (self.max - self.min)
+        self.data[self.columns_C +
+                  self.columns_X] = (self.data[self.columns_C + self.columns_X] - self.min) / (self.max - self.min)
 
     def __len__(self):
         return len(self.shot_numbers)
@@ -179,6 +178,7 @@ class DummyDataSet(data.Dataset):
 
 
 class SourceTargetDS(data.Dataset):
+    """Just for testing flow matching with simple 2d data sets."""
 
     DISTRIBUTION_OPTIONS = {
         'gaussian': create_gaussian_data,
@@ -300,9 +300,7 @@ class ShotFlowDS(data.Dataset):
                     self.viable_indices.append((shot_number, start_idx))
                     viable_shots.add(shot_number)
         logger.info(f"Precomputed {len(self.viable_indices)} viable samples across all shots.")
-        logger.info(
-            f"Included {len(viable_shots)} shots of {len(self.shot_numbers)} specified, in the dataset."
-        )
+        logger.info(f"Included {len(viable_shots)} shots of {len(self.shot_numbers)} specified, in the dataset.")
         self.shot_numbers = list(viable_shots)
         if self.pre_shuffle:
             random.shuffle(self.viable_indices)
@@ -330,41 +328,65 @@ class ShotFlowDS(data.Dataset):
         for column in self.data.columns:
             col_data = self.data[column]
             logger.info(
-                "Column '%-15s': min=%-11.4f max=%-11.4f mean=%-11.4f std=%-11.4f nans=%-10d", column,
-                col_data.min(), col_data.max(), col_data.mean(), col_data.std(),
+                "Column '%-15s': min=%-11.4f max=%-11.4f mean=%-11.4f std=%-11.4f nans=%-10d", column, col_data.min(),
+                col_data.max(), col_data.mean(), col_data.std(),
                 col_data.isna().sum()
             )
+
+    def denormalize(self, x: np.ndarray | torch.Tensor):
+        """Makes a copy of the input and denormalizes it from [0,1] to original."""
+        max_vals_x = self.max[self.columns_X].values[..., np.newaxis]
+        min_vals_x = self.min[self.columns_X].values[..., np.newaxis]
+        if isinstance(x, torch.Tensor):
+            x = x.clone()
+        elif isinstance(x, np.ndarray):
+            x = x.copy()
+        else:
+            raise TypeError(f"Unsupported type {type(x)}. Expected np.ndarray or torch.Tensor.")
+        x = (x * (max_vals_x - min_vals_x)) + min_vals_x
+        return x
 
     def __len__(self):
         return len(self.viable_indices)
 
-    def __getitem__(self, idx):
-        shot_number, start = self.viable_indices[idx]
+    def get_full_history(self, shot_number: int, start_i: float) -> np.ndarray:
+        """Get the full history of a shot up to the start index."""
         shot_data = self.data[self.data['ShotNum'] == shot_number]
-        end = start + self.seq_length
-        x = shot_data[self.columns_X].iloc[start:end].values.T
+        full_history = shot_data[self.columns_X].iloc[:start_i].values.T
+        return full_history
 
+    def __getitem__(self, idx):
+        shot_number, start_i = self.viable_indices[idx]
+        shot_data = self.data[self.data['ShotNum'] == shot_number]
+        end_i = start_i + self.seq_length
+        x = shot_data[self.columns_X].iloc[start_i:end_i].values.T
         meta = {
             'shot_number': shot_number,
-            'start': shot_data.index[start],
-            'end': shot_data.index[end],
+            'start': shot_data.index[start_i],  # future window start time
+            'end': shot_data.index[end_i],  # future window end time
+            # 'full_history': full_history,  # full history of the shot up until the start of the future window
+            'full_history_start': shot_data.index[0],  # shots don't always start at time 0
+            'start_i': start_i,
+            'end_i': end_i,
+            # history end is the start of the current window
         }
         conditioning_input = {}
 
         if self.history_length:  # if we are conditioning on X history
-            history_start = start - self.history_length
+            history_start = start_i - self.history_length
             assert history_start >= 0, "Not enough history data available."
             meta['history_start'] = shot_data.index[history_start]
-            history_end = start
-            x_history = shot_data[self.columns_X].iloc[history_start:history_end].values.T
+            meta['history_start_i'] = history_start
+            history_end_i = start_i
+            x_history = shot_data[self.columns_X].iloc[history_start:history_end_i].values.T
             conditioning_input['x_history'] = x_history
-            start = history_start
+            start_i = history_start
 
-        conditioning_input['position_sequence'] = shot_data.index[start:end].values.astype(np.float32)
+        conditioning_input['position_sequence'] = shot_data.index[start_i:end_i].values.astype(np.float32)
         if self.columns_C:
-            conditioning_input['c'] = shot_data[self.columns_C].iloc[start:end].values.T
+            conditioning_input['c'] = shot_data[self.columns_C].iloc[start_i:end_i].values.T
         if self.label:
-            conditioning_input['label'] = shot_data[self.label].iloc[start:end].values.T
+            conditioning_input['label'] = shot_data[self.label].iloc[start_i:end_i].values.T
         assert not np.isnan(x).any(
         ), "NaNs found in the output window. Often caused by division by zero in normalization."
         return meta, conditioning_input, x

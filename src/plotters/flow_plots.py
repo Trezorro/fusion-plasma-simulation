@@ -3,7 +3,6 @@ from typing import Optional
 import torch
 import wandb
 import numpy as np
-from scipy.signal import find_peaks
 from matplotlib import gridspec
 from matplotlib import colors
 
@@ -39,9 +38,7 @@ LINE_COLOR = WONG_yellow
 plt.style.use('dark_background')
 
 
-def plot_distributions_mpl(
-    dist1, dist2, title1="Distribution 1", title2="Distribution 2", alpha=0.8, show=True
-):
+def plot_distributions_mpl(dist1, dist2, title1="Distribution 1", title2="Distribution 2", alpha=0.8, show=True):
     """Plot two distributions side by side
 
     By https://drscotthawley.github.io/blog/posts/FlowModels.html 
@@ -119,12 +116,7 @@ def plot_flow(
         ax[i].set_ylim([-global_max_2d, global_max_2d])
         if i < 3:  # non-trajectory plots
             ax[i].scatter(
-                data_list[i][:, 0],
-                data_list[i][:, 1],
-                s=size,
-                alpha=alpha,
-                label=label_list[i],
-                color=color_list[i]
+                data_list[i][:, 0], data_list[i][:, 1], s=size, alpha=alpha, label=label_list[i], color=color_list[i]
             )
         else:
             # Plot trajectory paths first
@@ -136,20 +128,10 @@ def plot_flow(
             start_points = trajectories[0, :n_viz]  # Shape: [n_viz, num_features]
             end_points = trajectories[-1, :n_viz]  # Shape: [n_viz, num_features]
             ax[3].scatter(
-                start_points[:, 0],
-                start_points[:, 1],
-                color=SOURCE_COLOR,
-                s=size,
-                alpha=1,
-                label='Source Points'
+                start_points[:, 0], start_points[:, 1], color=SOURCE_COLOR, s=size, alpha=1, label='Source Points'
             )
             ax[3].scatter(
-                end_points[:, 0],
-                end_points[:, 1],
-                color=PRED_COLOR,
-                s=size,
-                alpha=1,
-                label='Current Endpoints'
+                end_points[:, 0], end_points[:, 1], color=PRED_COLOR, s=size, alpha=1, label='Current Endpoints'
             )
             ax[3].legend()
     plt.tight_layout()
@@ -231,21 +213,9 @@ def plot_flow_and_lines_mpl(
             start_points = trajectories[0, :num_samples]  # Shape: [n_viz, num_features]
             end_points = trajectories[-1, :num_samples]  # Shape: [n_viz, num_features]
             ax.scatter(
-                start_points[:, 0],
-                start_points[:, 1],
-                color=SOURCE_COLOR,
-                s=size,
-                alpha=1,
-                label='Source Points'
+                start_points[:, 0], start_points[:, 1], color=SOURCE_COLOR, s=size, alpha=1, label='Source Points'
             )
-            ax.scatter(
-                end_points[:, 0],
-                end_points[:, 1],
-                color=PRED_COLOR,
-                s=size,
-                alpha=1,
-                label='Current Endpoints'
-            )
+            ax.scatter(end_points[:, 0], end_points[:, 1], color=PRED_COLOR, s=size, alpha=1, label='Current Endpoints')
             ax.legend()
 
     # Plot each sample from generated_samples in a line plot against their corresponding target_samples
@@ -489,6 +459,8 @@ def multi_channel_lines_plotly(
     conditioning_input: dict[str, torch.Tensor],
     peak_features: Optional[dict] = None,
     show_c: bool = True,
+    surr_labels_target: Optional[torch.Tensor] = None,
+    surr_labels_pred: Optional[torch.Tensor] = None,
     n=5,
     title_base="",
     subtitle="",  # Subtitle for the plot
@@ -553,10 +525,7 @@ def multi_channel_lines_plotly(
         secondary_y=False,
     )
     fig.update_xaxes(
-        range=(-history_length, seq_length),
-        showticklabels=True,
-        title_text="Time steps (0.1ms/step)",
-        showgrid=True
+        range=(-history_length, seq_length), showticklabels=True, title_text="Time steps (0.1ms/step)", showgrid=True
     )
     fig.update_layout(
         title=title_base + (f"<br><sub>{subtitle}</sub>" if subtitle else ""),
@@ -605,7 +574,29 @@ def multi_channel_lines_plotly(
         shot_i_labels = labels[shot_i]
 
         if label_bars:
-            add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, shot_sample_id)
+            add_mode_bars(fig, history_length, seq_length, num_samples, shot_i_labels, shot_i, shot_sample_id)
+            if surr_labels_pred is not None:
+                add_mode_bars(
+                    fig,
+                    history_length,
+                    seq_length,
+                    num_samples,
+                    surr_labels_pred[shot_i],
+                    shot_i,
+                    shot_sample_id,
+                    group='predicted',
+                )
+            if surr_labels_target is not None:
+                add_mode_bars(
+                    fig,
+                    history_length,
+                    seq_length,
+                    num_samples,
+                    surr_labels_target[shot_i],
+                    shot_i,
+                    shot_sample_id,
+                    group='target',
+                )
         # Plot target samples
         for channel_i in range(n_channels):
             channel_color = COLOR_SCALE[((n_channels * shot_i) + channel_i) % len(COLOR_SCALE)]
@@ -707,15 +698,9 @@ def multi_channel_lines_plotly(
         not_predicted = [not trace.legendgroup.endswith('Predicted') for trace in fig.data]
         not_target = [not trace.legendgroup.endswith('Target') for trace in fig.data]
         main_button_list = [
-            dict(
-                label='All Shots',
-                method='update',
-                args=[{
-                    'visible': [True] * len(fig.data)
-                }, {
-                    'title': 'All'
-                }]
-            ),
+            dict(label='All Shots', method='update', args=[{
+                'visible': [True] * len(fig.data)
+            }]),
             dict(label='Targets', method='update', args=[{
                 'visible': not_predicted
             }]),
@@ -892,10 +877,12 @@ def add_peak_markers(
                 )
 
 
-def add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, shot_number):
+def add_mode_bars(fig, history_length, seq_length, num_samples, shot_labels, shot_i, shot_number, group: str = 'human'):
     BAR_WIDTH = 25
     MODE_COLORS = ["grey", "lightskyblue", "orange", "red"]
     MODE_NAMES = ["Unknown", "L", "D", "H"]
+    GROUP_Y = {'human': 0, 'target': (BAR_WIDTH + num_samples) * 1, 'predicted': (BAR_WIDTH + num_samples) * 2}
+    bar_y_placement = GROUP_Y[group] + shot_i
     fig.update_yaxes(
         range=(-BAR_WIDTH / 2, (BAR_WIDTH + num_samples) * 8),
         showticklabels=False,
@@ -903,7 +890,6 @@ def add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, 
         fixedrange=True,
         showgrid=False
     )
-    shot_labels = labels[shot_i]
     spans = []
     modes = []
     custom_data = []
@@ -928,7 +914,7 @@ def add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, 
     fig.add_trace(
         go.Bar(
             x=(-history_length, 0),
-            y=(shot_i, shot_i),
+            y=(bar_y_placement, bar_y_placement),
             orientation='h',
             marker=dict(
                 color="black",
@@ -944,21 +930,21 @@ def add_mode_bars(fig, history_length, seq_length, num_samples, labels, shot_i, 
     fig.add_trace(
         go.Bar(
             x=spans,
-            y=(shot_i,) * len(spans),
+            y=(bar_y_placement,) * len(spans),
             width=BAR_WIDTH,
             orientation='h',
             marker=dict(
                 color=colors,
-                opacity=0.5,
+                opacity=0.5 if group == 'human' else 0.4,
             ),
             hovertemplate=
             "Mode: %{customdata[3]}<br>Shot #%{customdata[0]}<br>Time steps: %{customdata[1]} - %{customdata[2]}<br>(%{x} steps)",
             customdata=custom_data,
             showlegend=True,  # Bar chart does not need a separate legend
-            name=f'Shot #{shot_number} - Modes',
+            name=f'Shot #{shot_number} - {group} Labels',
             # hoverinfo=['skip'] + ['all'] * (len(spans) - 1),  # Disable hover for this trace
             legendgroup=f'Shot {shot_number} - Modes',
-            # legendgrouptitle_text=f'Shot {shot_number} - Modes',
+            legendgrouptitle_text=f'Shot {shot_number} - Modes',
         ),
         secondary_y=True,
     )
