@@ -1,10 +1,12 @@
-from typing import Optional, Sequence
+from typing import List, Optional, Sequence
 import numpy as np
 from omegaconf import DictConfig
 import pandas as pd
 import torch
 from torch.utils import data
 import random
+
+import wandb
 from src.data_generators import create_gaussian_data, create_square_data, create_spiral_data, create_heart_data, create_two_gaussians_data, create_smiley_data
 import logging
 
@@ -323,6 +325,12 @@ class ShotFlowDS(data.Dataset):
         self.min = self.data[target_cols].min()
         self.max = self.data[target_cols].max()
         self.data[target_cols] = (self.data[target_cols] - self.min) / (self.max - self.min)
+        # Prepare these for denormalize method (used for downstream models):
+        self.max_vals_x: np.ndarray = self.max[self.columns_X].values[..., np.newaxis]
+        self.min_vals_x: np.ndarray = self.min[self.columns_X].values[..., np.newaxis]
+
+        # log the min and max of the target cols to wandb config
+        wandb.config['data']['stats'] = {'min': self.min.to_dict(), 'max': self.max.to_dict()}
 
         # Summarize statistics per column
         for column in self.data.columns:
@@ -335,25 +343,43 @@ class ShotFlowDS(data.Dataset):
 
     def denormalize(self, x: np.ndarray | torch.Tensor):
         """Makes a copy of the input and denormalizes it from [0,1] to original."""
-        max_vals_x = self.max[self.columns_X].values[..., np.newaxis]
-        min_vals_x = self.min[self.columns_X].values[..., np.newaxis]
         if isinstance(x, torch.Tensor):
             x = x.clone()
         elif isinstance(x, np.ndarray):
-            x = x.copy()
+            x = torch.tensor(x)
         else:
             raise TypeError(f"Unsupported type {type(x)}. Expected np.ndarray or torch.Tensor.")
-        x = (x * (max_vals_x - min_vals_x)) + min_vals_x
+        x = (x * (self.max_vals_x - self.min_vals_x)) + self.min_vals_x
         return x
 
     def __len__(self):
         return len(self.viable_indices)
 
-    def get_full_history(self, shot_number: int, start_i: float) -> np.ndarray:
-        """Get the full history of a shot up to the start index."""
-        shot_data = self.data[self.data['ShotNum'] == shot_number]
-        full_history = shot_data[self.columns_X].iloc[:start_i].values.T
-        return full_history
+    def get_full_history(self, shot_number: int | Sequence[int],
+                         start_i: int | Sequence[int]) -> np.ndarray | List[np.ndarray]:
+        """Get the full history of a shot up to the start index.
+
+        Supports both scalar input as well as batched input. Returns (*input shape, T).
+        """
+        if isinstance(shot_number, (Sequence, torch.Tensor)) and isinstance(start_i, (Sequence, torch.Tensor)):
+            assert len(shot_number) == len(
+                start_i
+            ), f"shot_number and start_i must have the same length. Got {len(shot_number)} and {len(start_i)}."
+            shots = shot_number
+            starts = start_i
+            histories = []
+            for shot, start in zip(shots, starts):
+                shot_data = self.data[self.data['ShotNum'] == shot]
+                full_history = shot_data[self.columns_X].iloc[:start].values.T
+                histories.append(full_history)
+            return histories
+        elif isinstance(shot_number, int) and isinstance(start_i, int):
+            shot_data = self.data[self.data['ShotNum'] == shot_number]
+            return shot_data[self.columns_X].iloc[:start_i].values.T
+        else:
+            raise TypeError(
+                f"Unsupported type {type(shot_number)=} and {type(start_i)=}. Expected int or Sequence[int]."
+            )
 
     def __getitem__(self, idx):
         shot_number, start_i = self.viable_indices[idx]
