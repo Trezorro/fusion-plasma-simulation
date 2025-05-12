@@ -330,8 +330,8 @@ class ShotFlowDS(data.Dataset):
         self.min_vals_x: np.ndarray = self.min[self.columns_X].values[..., np.newaxis]
 
         # log the min and max of the target cols to wandb config
-        wandb.config['data']['stats'] = {'min': self.min.to_dict(), 'max': self.max.to_dict()}
-
+        stats_key = 'stats_' + ("train" if self.train else "val")
+        wandb.run.config['data'] |= {stats_key: {'min': self.min.to_dict(), 'max': self.max.to_dict()}}
         # Summarize statistics per column
         for column in self.data.columns:
             col_data = self.data[column]

@@ -84,6 +84,7 @@ def define_error_metrics(main_prefix: str):
     for entropy_method in entropy.VALID_FUNCS.keys():
         for channel_name in C.data.cols.x:
             wandb.define_metric(f"{main_prefix}/error/{entropy_method}_mse/{channel_name}", summary='min')
+            wandb.define_metric(f"{main_prefix}/error/{entropy_method}_msd/{channel_name}", summary='min')
             wandb.define_metric(f"{main_prefix}/error/{entropy_method}_mae/{channel_name}", summary='min')
             wandb.define_metric(
                 f"{main_prefix}/error/{entropy_method}_wasserstein/{channel_name}", summary='min'
