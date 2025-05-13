@@ -459,8 +459,8 @@ def multi_channel_lines_plotly(
     conditioning_input: dict[str, torch.Tensor],
     peak_features: Optional[dict] = None,
     show_c: bool = True,
-    surr_labels_target: Optional[torch.Tensor] = None,
     surr_labels_pred: Optional[torch.Tensor] = None,
+    surr_labels_target: Optional[torch.Tensor] = None,
     n=5,
     title_base="",
     subtitle="",  # Subtitle for the plot

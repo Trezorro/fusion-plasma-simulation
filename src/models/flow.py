@@ -4,6 +4,7 @@ import lightning as L
 from lightning.pytorch.core.optimizer import LightningOptimizer
 import numpy as np
 import torch
+import torch.utils.data
 import torchinfo
 import torchmetrics
 import wandb
@@ -13,6 +14,7 @@ from src.models.flow_nets import VelocityNet
 from src.models.unet_conditional import ConditionalUNet
 from src.optimal_transport import OTPlanSampler
 import src.metrics as metrics
+from src.evaluate_modes import generate_surrogate_labels
 
 import logging
 from tqdm import tqdm
@@ -128,9 +130,6 @@ class FlowModule(L.LightningModule):
             logger.debug("velocity: %s\n pred_velocity:%s", summary_str(velocity), summary_str(pred_velocity))
             logger.debug("Shots: %s", batch[0]['shot_number'])
         return loss
-
-    def on_after_backward(self) -> None:
-        pass
 
     def validation_step(self, batch, batch_idx):
         t, samples_at_t, velocity, conditioning_input = self.interpolate_samples(batch)
@@ -257,7 +256,9 @@ class FlowModule(L.LightningModule):
     test_step = validation_step
 
     @torch.inference_mode()
-    def evaluate(self, batch: tuple[dict, dict, torch.Tensor], n_steps=50, warp_fn=None):
+    def evaluate(
+        self, batch: tuple[dict, dict, torch.Tensor], data_set: torch.utils.data.Dataset, n_steps=50, warp_fn=None
+    ):
         """Evaluates the model on a given batch of data. Batch will be moved to the correct device.
 
         The model is set to evaluation mode, and the generated samples are compared to the target samples. 
@@ -306,6 +307,11 @@ class FlowModule(L.LightningModule):
             (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
             device='cpu'  # type: ignore
         )
+        # surrogate labels
+        surr_labels_pred, surr_labels_target = generate_surrogate_labels(
+            meta, generated_samples, target_samples, data_set=data_set
+        )
+        # TODO do metric calculation elsewhere
         metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
         peak_metrics, peak_features = metrics.get_peak_metrics(generated_samples, target_samples)
         return dict(
@@ -317,6 +323,8 @@ class FlowModule(L.LightningModule):
             trajectories=trajectories,
             metrics=metrics_out | peak_metrics,
             peak_features=peak_features,
+            surr_labels_pred=surr_labels_pred,
+            surr_labels_target=surr_labels_target
         )
 
     @staticmethod
