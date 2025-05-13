@@ -1,7 +1,6 @@
 from typing import Optional, Tuple
 from collections import namedtuple, abc
 import logging
-from venv import logger
 
 import numpy as np
 import torch
