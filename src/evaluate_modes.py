@@ -13,6 +13,10 @@ from scipy.interpolate import interp1d
 
 from src.models.LDH_model import FNOLSTM
 from src.config import get_current_config
+import logging
+
+logger = logging.getLogger(__name__)
+from tqdm import tqdm
 
 # %%
 # global model settings
@@ -116,7 +120,7 @@ def get_mode_predictions(pd_rollout: torch.Tensor, timeline: np.ndarray, history
 def generate_surrogate_labels(meta, generated_samples, target_samples, data_set):
     """Dataset is needed for get history and denormalization."""
     C = get_current_config()
-    shot_numbers = meta['shot_number']
+    shot_numbers = meta['shot_number'].cpu()
     prediction_window_starts_idx = meta['start_i']
     PD_index = C.data.cols.x.index("PD")
     history_length = C.data.history_length
@@ -125,7 +129,15 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_set)
     generated_samples_denorm = data_set.denormalize(generated_samples.to('cpu'))
     surr_labels_target = []
     surr_labels_pred = []
-    for i, shot_num in enumerate(shot_numbers):
+    logger.info("Generating surrogate labels for batch of %d samples", len(shot_numbers))
+
+    for i, shot_num in enumerate(
+        tqdm(
+            shot_numbers,
+            disable=torch.cuda.is_available(),
+            desc="Getting surrogate labels ",
+        )
+    ):
         full_history_raw = data_set.get_full_history(shot_num.item(), prediction_window_starts_idx[i].item())
         full_history = data_set.denormalize(full_history_raw)  # type: ignore
         target_pd_rollout = torch.concat((full_history, target_samples_denorm[i]), dim=-1)[PD_index]  # type: ignore

@@ -117,7 +117,7 @@ class PlotsCallback(L.Callback):
                 iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
             )  # this can be in general function
             logger.debug("Calling evaluate for train data.")
-            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps)
+            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps, data_set=data_set)
             logger.debug("Evaluation done. Calling plotters.")
             title_base = f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
             self.call_plot_functions(evaluation_output, "train", trainer.global_step, title_base)
