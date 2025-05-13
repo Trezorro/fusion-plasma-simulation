@@ -63,6 +63,8 @@ def normalize_input_multichannel(sig, signal_list, stats):
 def pred_sample_slidingwindow(model, t, x, device, tw, stride, offset_pred, i_start=0):
     model.eval()
     x = x.to(device)
+    if x.dim() == 2:
+        x = x.unsqueeze(0)  # add the Batch dimension if it isn't there
     model.to(device)
     hidden = None
     i_max = x.shape[-1] - tw + 1  # max index for the sliding window
@@ -73,11 +75,11 @@ def pred_sample_slidingwindow(model, t, x, device, tw, stride, offset_pred, i_st
         i_e = k + tw  # end index
         i_time = k + tw - 1 - offset_pred
         with torch.no_grad():
-            y_pred, hidden = model(x[:, i_s:i_e].unsqueeze(0), hidden)
+            y_pred, hidden = model(x[:, :, i_s:i_e], hidden)
         y_times.append(t[i_time])
 
-        y_preds.append(y_pred.squeeze(0))
-    y_preds = torch.stack(y_preds).argmax(dim=1).to('cpu')
+        y_preds.append(y_pred)
+    y_preds = torch.stack(y_preds, dim=1).argmax(dim=-1).to('cpu')
     y_times = torch.tensor(y_times, device='cpu')
 
     return y_times, y_preds
@@ -96,13 +98,20 @@ def clean_labels(label_t, surr_labels, history_length, seq_length):
     return resampled_series
 
 
-def get_mode_predictions(pd_rollout: torch.Tensor, timeline: np.ndarray, history_length=0, seq_length=64):
+def get_mode_predictions(
+    pd_rollout_pred: torch.Tensor,
+    pd_rollout_target: torch.Tensor,
+    timeline: np.ndarray,
+    history_length=0,
+    seq_length=64
+):
     """Get interpolated mode predictions ranging from 1 to 3 for the range from provided timeline around -history_length to + seq_length."""
     # dim should be (N, T)
+    x = torch.stack((pd_rollout_pred, pd_rollout_target))
     COLNAME = 'PD'
-    normalized_rollout = (pd_rollout - stats_PD[COLNAME]["mean"]) / stats_PD[COLNAME]["sd"]
-    if normalized_rollout.dim() == 1:
-        normalized_rollout = normalized_rollout.unsqueeze(0)  # add the input channels dimension back
+    normalized_rollout = (x - stats_PD[COLNAME]["mean"]) / stats_PD[COLNAME]["sd"]
+    if normalized_rollout.dim() == 2:
+        normalized_rollout = normalized_rollout.unsqueeze(1)  # add the input channels dimension back
 
     t_out, y_out = pred_sample_slidingwindow(
         model_PD,
@@ -114,7 +123,14 @@ def get_mode_predictions(pd_rollout: torch.Tensor, timeline: np.ndarray, history
         offset_pred=OFFSET_PRED,
         i_start=0
     )
-    return clean_labels(label_t=t_out, surr_labels=y_out, history_length=history_length, seq_length=seq_length)
+    y_out_pred, y_out_target = y_out.unbind(0)
+    surr_labels_pred = clean_labels(
+        label_t=t_out, surr_labels=y_out_pred, history_length=history_length, seq_length=seq_length
+    )
+    surr_labels_target = clean_labels(
+        label_t=t_out, surr_labels=y_out_target, history_length=history_length, seq_length=seq_length
+    )
+    return surr_labels_pred, surr_labels_target
 
 
 def generate_surrogate_labels(meta, generated_samples, target_samples, data_set):
@@ -127,8 +143,8 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_set)
     seq_length = C.data.seq_length
     target_samples_denorm = data_set.denormalize(target_samples.to('cpu'))
     generated_samples_denorm = data_set.denormalize(generated_samples.to('cpu'))
-    surr_labels_target = []
     surr_labels_pred = []
+    surr_labels_target = []
     logger.info("Generating surrogate labels for batch of %d samples", len(shot_numbers))
 
     for i, shot_num in enumerate(
@@ -144,15 +160,18 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_set)
         predicted_pd_rollout = torch.concat((full_history, generated_samples_denorm[i]),
                                             dim=-1)[PD_index]  # type: ignore
         idx_timeline = np.arange(-prediction_window_starts_idx[i], seq_length)
-        surr_labels_target.append(
-            get_mode_predictions(target_pd_rollout, idx_timeline, history_length, seq_length=seq_length).values
+        surr_labels_pred_i, surr_labels_target_i = get_mode_predictions(
+            pd_rollout_pred=predicted_pd_rollout,
+            pd_rollout_target=target_pd_rollout,
+            timeline=idx_timeline,
+            history_length=history_length,
+            seq_length=seq_length
         )
-        surr_labels_pred.append(
-            get_mode_predictions(predicted_pd_rollout, idx_timeline, history_length, seq_length=seq_length).values
-        )
+        surr_labels_pred.append(surr_labels_pred_i.values)
+        surr_labels_target.append(surr_labels_target_i.values)
 
-    surr_labels_target = np.stack(surr_labels_target)
     surr_labels_pred = np.stack(surr_labels_pred)
+    surr_labels_target = np.stack(surr_labels_target)
     return surr_labels_pred, surr_labels_target
 
 
