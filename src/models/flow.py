@@ -272,12 +272,12 @@ class FlowModule(L.LightningModule):
         )
         surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=int)
         surr_labels_target = torch.tensor(surr_labels_target, device=self.device, dtype=int)
-        self.dice_metric(surr_labels_pred, surr_labels_target)
+
         # Metrics
         logger.debug("sur_labels shape: %s", surr_labels_pred.shape)
 
         metrics_out = self.test_metrics(generated_samples, target_samples)
-
+        metrics_out['/dice'] = self.dice_metric(surr_labels_pred, surr_labels_target)
         self.log_dict(metrics.prefix_metrics(metrics_out, 'test'), prog_bar=True, on_step=True, on_epoch=False)
 
     def on_test_epoch_end(self):
