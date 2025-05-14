@@ -265,8 +265,15 @@ class FlowModule(L.LightningModule):
             prior_samples, conditioning_input=conditioning_input, n_steps=flow_steps, save_trajectories=False
         )  # type: ignore
         # Metrics
-        metrics_out = self.train_metrics(generated_samples, target_samples)
-        self.log_dict(metrics_out, prog_bar=True)
+        metrics_out = self.test_metrics(generated_samples, target_samples)
+
+        self.log_dict(metrics.prefix_metrics(metrics_out, 'test'), prog_bar=True, on_step=True, on_epoch=False)
+
+    def on_test_epoch_end(self):
+        epoch_metrics = metrics.prefix_metrics(self.test_metrics.compute(), 'test')
+        self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
+        self.test_metrics.reset()
+
 
     @torch.inference_mode()
     def evaluate(

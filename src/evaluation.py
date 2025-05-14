@@ -15,6 +15,7 @@ import src.plotters.plot_animations
 import src.plotters.plot_entropy as entropy
 import src.plotters.flow_plots as fp
 import wandb
+from src.metrics import prefix_metrics
 from src.plotters.histograms import plot_peak_prominences_histogram
 
 PlotFunction = Callable[[Any], plt.Figure | go.Figure | wandb.Image]
@@ -112,10 +113,7 @@ class PlotsCallback(L.Callback):
             title_base = f"{wandb.run.name} |  Epoch <b>{trainer.current_epoch}</b>"
             self.call_plot_functions(evaluation_output, "val", trainer.global_step, title_base)
             logger.debug("Plotters done.")
-            assert all(
-                [k.startswith("/") for k in evaluation_output['metrics']]
-            ), "Metric keys returned by subset agnostic model should start with /"
-            val_metrics = {"val" + k: v for k, v in evaluation_output['metrics'].items()}  # Add prefix
+            val_metrics = prefix_metrics(evaluation_output['metrics'], prefix='val')  # Add prefix
             wandb.log(val_metrics | {"trainer/global_step": trainer.global_step}, commit=False)
 
     def on_train_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
@@ -135,10 +133,7 @@ class PlotsCallback(L.Callback):
             title_base = f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
             self.call_plot_functions(evaluation_output, "train", trainer.global_step, title_base)
             logger.debug("Plotters done.")
-            assert all(
-                [k.startswith("/") for k in evaluation_output['metrics']]
-            ), "Metric keys returned by subset agnostic model should start with /"
-            train_metrics = {"train" + k: v for k, v in evaluation_output['metrics'].items()}  # Add prefix
+            train_metrics = prefix_metrics(evaluation_output['metrics'], prefix='train')  # Add prefix
             wandb.log(train_metrics | {"trainer/global_step": trainer.global_step}, commit=False)
 
     def on_train_epoch_start(self, trainer: L.Trainer, pl_module: L.LightningModule):

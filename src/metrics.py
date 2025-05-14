@@ -93,6 +93,14 @@ def define_error_metrics(main_prefix: str):
         wandb.define_metric(f"{main_prefix}/error/{entropy_method}_wasserstein/mean", summary='min')
 
 
+def prefix_metrics(metric_dict, prefix='test'):
+    assert all(
+        [k.startswith("/") for k in metric_dict]
+    ), "Metric keys returned by subset agnostic model should start with /"
+    val_metrics = {prefix + k: v for k, v in metric_dict.items()}
+    return val_metrics
+
+
 def first_difference(batched_time_series: torch.Tensor):
     return batched_time_series[:, :, 1:] - batched_time_series[:, :, :-1]
 
