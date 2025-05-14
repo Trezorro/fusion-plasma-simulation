@@ -264,7 +264,14 @@ class FlowModule(L.LightningModule):
         generated_samples: torch.Tensor = self.integrate_path(
             prior_samples, conditioning_input=conditioning_input, n_steps=flow_steps, save_trajectories=False
         )  # type: ignore
+        data_module = self.trainer.datamodule
+        surr_labels_pred, surr_labels_target = generate_surrogate_labels(
+            *self.transfer_batch_to_device((meta, generated_samples, target_samples), 'cpu', 0),
+            data_module=data_module
+        )
+
         # Metrics
+        logger.debug("sur_labels shape: %s", surr_labels_pred.shape)
         metrics_out = self.test_metrics(generated_samples, target_samples)
 
         self.log_dict(metrics.prefix_metrics(metrics_out, 'test'), prog_bar=True, on_step=True, on_epoch=False)
