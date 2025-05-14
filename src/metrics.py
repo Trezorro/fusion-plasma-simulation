@@ -103,9 +103,9 @@ def moments(batched_time_series: torch.Tensor):
     var = torch.mean(torch.pow(diffs, 2), -1, keepdim=True)
     std = torch.pow(var, 0.5) + 1e-8
     zscores = diffs / std
-    skews = torch.mean(torch.pow(zscores, 3.0), -1, keepdim=True)
-    kurtoses = torch.mean(torch.pow(zscores, 4.0), -1, keepdim=True) - 3.0
-    return dict(mean=mean, var=var, skew=skews, kurtosis=kurtoses)
+    skews = torch.mean(torch.pow(zscores, 3.0), -1, keepdim=False)
+    kurtoses = torch.mean(torch.pow(zscores, 4.0), -1, keepdim=False) - 3.0
+    return dict(mean=mean.squeeze(), var=var.squeeze(), skew=skews, kurtosis=kurtoses)
 
 
 def get_moments_errors(pred: torch.Tensor, target: torch.Tensor):
@@ -315,9 +315,7 @@ class PeakProps(
             return "<PeakProps None>"
         if not isinstance(self.X, abc.Collection):
             return f"PeakProps{tuple(self)}"
-        return f"<PeakProps :" + ", ".join(
-            f'{f}[{len(v) if v is not None else None}]' for f, v in self.items()
-        ) + ">"
+        return f"<PeakProps :" + ", ".join(f'{f}[{len(v) if v is not None else None}]' for f, v in self.items()) + ">"
 
     def items(self):
         """
@@ -360,12 +358,7 @@ class PeakProps(
 
     @classmethod
     def from_find_peaks(
-        cls,
-        trace,
-        prominence=0.001,
-        width=0,
-        rel_height=1.0,
-        pd_trace: Optional[torch.Tensor] = None
+        cls, trace, prominence=0.001, width=0, rel_height=1.0, pd_trace: Optional[torch.Tensor] = None
     ) -> "PeakProps":
         """
         Factory method to create a PeakProps instance from the output of scipy's find_peaks.
@@ -408,10 +401,7 @@ class PeakProps(
             extended_window_r = np.clip(extended_window_r, 0, len(trace))
             # Find the minimum in the window for each peak. This is the assumed base energy position.
             energy_base_pos = np.array(
-                [
-                    window_l[i] + trace[window_l[i]:extended_window_r[i]].argmin(0)
-                    for i in range(len(peak_positions))
-                ]
+                [window_l[i] + trace[window_l[i]:extended_window_r[i]].argmin(0) for i in range(len(peak_positions))]
             )
             energy_delta = (trace[peak_positions] - trace[energy_base_pos]).numpy()
             # get peaks from the pd_trace
@@ -535,10 +525,10 @@ def batch_get_peakprops(
     if dml_channel_index is None or pd_channel_index is None:
         peak_results = [
             [
-                PeakProps.from_find_peaks(
-                    channel_trace, prominence=prominence, width=width, rel_height=rel_height
-                ) for channel_trace in sample  # Iterate over the channel dimension (C)  
-            ] for sample in batch  # Iterate over the batch dimension (B)
+                PeakProps.from_find_peaks(channel_trace, prominence=prominence, width=width, rel_height=rel_height)
+                for channel_trace in sample  # Iterate over the channel dimension (C)  
+            ]
+            for sample in batch  # Iterate over the batch dimension (B)
         ]
     else:
         peak_results = []
@@ -558,9 +548,7 @@ def batch_get_peakprops(
                     )
                 else:
                     sample_channel_results.append(
-                        PeakProps.from_find_peaks(
-                            trace, prominence=prominence, width=width, rel_height=rel_height
-                        )
+                        PeakProps.from_find_peaks(trace, prominence=prominence, width=width, rel_height=rel_height)
                     )
     return peak_results
 
@@ -602,9 +590,7 @@ def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, di
         measures = BASE_MEASURES
         if channel_name == "DML":
             measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
-        pairwise_distances = {
-            f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}": 0. for measure in measures
-        }
+        pairwise_distances = {f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}": 0. for measure in measures}
         counts_target = []
         counts_pred = []
         marginal_dist_pred = {measure: [] for measure in measures}
@@ -686,3 +672,50 @@ def plot_delta_prominence_scatter(dml_channel_index, pred_peaks_batch):
         # show color as discrete traces in legend
     )
     fig.show()
+
+
+import torchmetrics
+
+
+class MomentsErrorsMetric(torchmetrics.Metric):
+    full_state_update = False  # metric state of one batch is independent of the state of other batches
+
+    def __init__(self):
+        super().__init__()
+        C = get_current_config()
+        self.channel_names = C.data.cols.x
+        for moment in MOMENT_NAMES:
+            self.add_state(f"magnitude_{moment}", default=torch.zeros(len(self.channel_names)), dist_reduce_fx="sum")
+            self.add_state(f"diff_{moment}", default=torch.zeros(len(self.channel_names)), dist_reduce_fx="sum")
+        self.add_state("count", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def update(self, pred: torch.Tensor, target: torch.Tensor):
+        magnitudes_pred = moments(pred)
+        magnitudes_target = moments(target)
+        first_diff_pred = moments(first_difference(pred))
+        first_diff_target = moments(first_difference(target))
+
+        for moment in MOMENT_NAMES:
+            self.add_to_state(
+                f"magnitude_{moment}",
+                torch.sum(torch.pow(magnitudes_pred[moment] - magnitudes_target[moment], 2), dim=0)
+            )
+            self.add_to_state(
+                f"diff_{moment}", torch.sum(torch.pow(first_diff_pred[moment] - first_diff_target[moment], 2), dim=0)
+            )
+        self.count += pred.size(0)
+
+    def add_to_state(self, state_name: str, new_value):
+        setattr(self, state_name, getattr(self, state_name) + new_value)
+
+    def compute(self):
+        metrics = {}
+        for moment in MOMENT_NAMES:
+            magnitude_mean = getattr(self, f"magnitude_{moment}") / self.count.float()
+            diff_mean = getattr(self, f"diff_{moment}") / self.count.float()
+            for i, channel_name in enumerate(self.channel_names):
+                metrics[f"/error/magnitude_{moment}_mse/{channel_name}"] = magnitude_mean[i].item()
+                metrics[f"/error/diff_{moment}_mse/{channel_name}"] = diff_mean[i].item()
+            metrics[f"/error/magnitude_{moment}_mse/mean"] = magnitude_mean.mean().item()
+            metrics[f"/error/diff_{moment}_mse/mean"] = diff_mean.mean().item()
+        return metrics

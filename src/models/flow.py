@@ -2,16 +2,13 @@ from functools import partial
 from typing import Any, Literal, Optional
 import lightning as L
 from lightning.pytorch.core.optimizer import LightningOptimizer
-import numpy as np
 import torch
-import torch.utils.data
 import torchinfo
 import torchmetrics
 from torchmetrics.segmentation import DiceScore
 import wandb
 from omegaconf import DictConfig
 
-from src.models.flow_nets import VelocityNet
 from src.models.unet_conditional import ConditionalUNet
 from src.optimal_transport import OTPlanSampler
 import src.metrics as metrics
@@ -21,6 +18,8 @@ import logging
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+
+FLOW_STEPS = 150 if torch.cuda.is_available() else 6
 
 
 class FlowModule(L.LightningModule):
@@ -78,6 +77,7 @@ class FlowModule(L.LightningModule):
         self._validate_configuration()
         self.automatic_optimization = False
         self.register_buffer("sqrt_dt", torch.sqrt(torch.tensor(1 / self.SAMPLE_RATE)))
+        self.init_metrics()
 
     def _validate_configuration(self):
         assert self.batch_rematch_factor > 0 and type(
@@ -254,9 +254,19 @@ class FlowModule(L.LightningModule):
         prior_samples = history.gather(2, indices)
         return prior_samples
 
-    # def test_step(self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int, data_set: torch.utils.data.Dataset, n_steps=100):
+    def init_metrics(self):
+        self.train_metrics = metrics.MomentsErrorsMetric()
+        self.test_metrics = self.train_metrics.clone()
 
-    test_step = validation_step
+    def test_step(self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int, flow_steps=FLOW_STEPS):
+        meta, conditioning_input, target_samples = batch
+        prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
+        generated_samples: torch.Tensor = self.integrate_path(
+            prior_samples, conditioning_input=conditioning_input, n_steps=flow_steps, save_trajectories=False
+        )  # type: ignore
+        # Metrics
+        metrics_out = self.train_metrics(generated_samples, target_samples)
+        self.log_dict(metrics_out, prog_bar=True)
 
     @torch.inference_mode()
     def evaluate(
