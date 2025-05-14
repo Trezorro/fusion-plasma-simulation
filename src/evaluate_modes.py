@@ -82,7 +82,7 @@ def pred_sample_slidingwindow(model, t, x, device, tw, stride, offset_pred, i_st
 
 def clean_labels(label_t, surr_labels, history_length, seq_length):
     """Resample the labels such that we have a label for every step from -history to +seq_length"""
-    resampled_series = pd.Series(data=surr_labels + 1, index=label_t.numpy())
+    resampled_series = pd.Series(data=surr_labels, index=label_t.numpy())
     # Extend the index to the full range and forward fill the series
     # cut to around the target timeline, interpolate nearest,
     # ffill the end (model doesn't predict over the edge),

@@ -257,6 +257,7 @@ class FlowModule(L.LightningModule):
     def init_metrics(self):
         self.train_metrics = metrics.MomentsErrorsMetric()
         self.test_metrics = self.train_metrics.clone()
+        self.dice_metric = DiceScore(3, input_format='index')
 
     def test_step(self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int, flow_steps=FLOW_STEPS):
         meta, conditioning_input, target_samples = batch
@@ -269,17 +270,23 @@ class FlowModule(L.LightningModule):
             *self.transfer_batch_to_device((meta, generated_samples, target_samples), 'cpu', 0),
             data_module=data_module
         )
-
+        surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=int)
+        surr_labels_target = torch.tensor(surr_labels_target, device=self.device, dtype=int)
+        self.dice_metric(surr_labels_pred, surr_labels_target)
         # Metrics
         logger.debug("sur_labels shape: %s", surr_labels_pred.shape)
+
         metrics_out = self.test_metrics(generated_samples, target_samples)
 
         self.log_dict(metrics.prefix_metrics(metrics_out, 'test'), prog_bar=True, on_step=True, on_epoch=False)
 
     def on_test_epoch_end(self):
-        epoch_metrics = metrics.prefix_metrics(self.test_metrics.compute(), 'test')
+        test_metrics = self.test_metrics.compute()
+        test_metrics['dice'] = self.dice_metric.compute()
+        epoch_metrics = metrics.prefix_metrics(test_metrics, 'test')
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
         self.test_metrics.reset()
+        self.dice_metric.reset()
 
 
     @torch.inference_mode()
