@@ -88,12 +88,12 @@ class PlotsCallback(L.Callback):
                 logger.info(torch.cuda.memory_summary(device=None, abbreviated=False))
             # Generate images
             logger.info(f"Evaluating model for EPOCH {trainer.current_epoch} on validation data.")
-            data_set = trainer.val_dataloaders.dataset
+            data_set = trainer.datamodule.test_dataloader().dataset
             batch = next(
                 iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
             )  # this can be in general function
             logger.debug("Calling evaluate for validation data.")
-            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps, data_set=data_set)
+            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps)
             logger.debug("Evaluation done. Calling plotters.")
             title_base = f"{wandb.run.name} |  Epoch <b>{trainer.current_epoch}</b>"
             self.call_plot_functions(evaluation_output, "val", trainer.global_step, title_base)
@@ -107,8 +107,7 @@ class PlotsCallback(L.Callback):
     def on_train_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
         logger.debug(f"on_train_epoch_end called at epoch {trainer.current_epoch}")
         if self.train_every_n_epochs and (
-            (trainer.current_epoch % self.train_every_n_epochs == 0) or
-            trainer.current_epoch <= self.scrutinize_epochs
+            (trainer.current_epoch % self.train_every_n_epochs == 0) or trainer.current_epoch <= self.scrutinize_epochs
         ):
             logger.info(f"Evaluating model for EPOCH {trainer.current_epoch} on train data.")
             # Generate images
@@ -117,7 +116,7 @@ class PlotsCallback(L.Callback):
                 iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
             )  # this can be in general function
             logger.debug("Calling evaluate for train data.")
-            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps, data_set=data_set)
+            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps)
             logger.debug("Evaluation done. Calling plotters.")
             title_base = f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
             self.call_plot_functions(evaluation_output, "train", trainer.global_step, title_base)

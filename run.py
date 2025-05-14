@@ -71,18 +71,7 @@ if "skip_log_summary" not in C or not C["skip_log_summary"]:
 # log weights for analysis in W&B
 wandb_logger.watch(model, log="all", log_freq=50)
 logger.info("Model loaded, loading data.")
-DataSetClass = getattr(src.data_loaders, C.data.Class)
-train_set = DataSetClass(**C.data, train=True)
-val_set = DataSetClass(**C.data, train=False)
-
-# train_set, val_set = data.random_split(data_set, [0.9, 0.1], generator=torch.Generator().manual_seed(42))
-
-train_loader = data.DataLoader(train_set, batch_size=C.batch_size, shuffle=True)
-val_loader = data.DataLoader(
-    val_set,
-    batch_size=C.batch_size,
-    shuffle=False,
-)
+fusion_data_module = src.data_loaders.FusionShotDataModule(**C.data)
 
 logger.info("Data loaded, initializing trainer.")
 # torch.profiler.profile(
@@ -97,6 +86,7 @@ logger.info("Data loaded, initializing trainer.")
 #     record_shapes=True,
 #     profile_memory=True,  # This will take 1 to 2 minutes. Setting it to False could greatly speedup.
 #     with_stack=True
+
 trainer = L.Trainer(
     default_root_dir="output/",
     enable_progress_bar=wandb.run.disabled,
@@ -129,7 +119,7 @@ trainer = L.Trainer(
 logger.info("Starting training with first validation...")
 # trainer.validate(model=model, dataloaders=val_loader)echo $WANDB_DATA_DIR
 logger.info("Starting model fit...")
-trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+trainer.fit(model=model, datamodule=fusion_data_module)
 logger.info("Finished training.")
 wandb_logger.experiment.unwatch(model)
 
@@ -140,7 +130,7 @@ wandb_logger.experiment.unwatch(model)
 #     logger.info("CUDA memory snapshot dumped at %s", memory_trace_file)
 
 logger.info("Starting final validation...")
-trainer.test(model=model, dataloaders=val_loader)
+trainer.test(model=model, datamodule=fusion_data_module)
 logger.info("Finished training and testing.")
 
 logger.info("Run finished, deleting redundant artifacts.")

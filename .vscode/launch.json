@@ -18,6 +18,7 @@
                 "skip_log_summary=True",
                 // "evaluation.plot_functions=null",
                 "evaluation.n_steps=4",
+                "evaluation.max_n=5",
                 "data.seq_length=64",
                 "batch_size=16",
                 "model.params.batch_rematch_factor=1",

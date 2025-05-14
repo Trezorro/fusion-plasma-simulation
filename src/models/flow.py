@@ -7,6 +7,7 @@ import torch
 import torch.utils.data
 import torchinfo
 import torchmetrics
+from torchmetrics.segmentation import DiceScore
 import wandb
 from omegaconf import DictConfig
 
@@ -253,11 +254,17 @@ class FlowModule(L.LightningModule):
         prior_samples = history.gather(2, indices)
         return prior_samples
 
+    # def test_step(self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int, data_set: torch.utils.data.Dataset, n_steps=100):
+
     test_step = validation_step
 
     @torch.inference_mode()
     def evaluate(
-        self, batch: tuple[dict, dict, torch.Tensor], data_set: torch.utils.data.Dataset, n_steps=50, warp_fn=None
+        self,
+        batch: tuple[dict, dict, torch.Tensor],
+        n_steps=50,
+        warp_fn=None,
+        data_module: Optional[L.LightningDataModule] = None,
     ):
         """Evaluates the model on a given batch of data. Batch will be moved to the correct device.
 
@@ -308,8 +315,10 @@ class FlowModule(L.LightningModule):
             device='cpu'  # type: ignore
         )
         # surrogate labels
+        if data_module is None:
+            data_module = self.trainer.datamodule
         surr_labels_pred, surr_labels_target = generate_surrogate_labels(
-            meta, generated_samples, target_samples, data_set=data_set
+            meta, generated_samples, target_samples, data_module=data_module
         )
         # TODO do metric calculation elsewhere
         metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)

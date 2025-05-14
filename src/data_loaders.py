@@ -5,6 +5,7 @@ import pandas as pd
 import torch
 from torch.utils import data
 import random
+import lightning as L
 
 import wandb
 from src.data_generators import create_gaussian_data, create_square_data, create_spiral_data, create_heart_data, create_two_gaussians_data, create_smiley_data
@@ -212,7 +213,8 @@ class SourceTargetDS(data.Dataset):
         return self.source_data[idx], self.target_data[idx]
 
 
-class ShotFlowDS(data.Dataset):
+
+class FusionShotDataset(data.Dataset):
     """
     
     Returns:
@@ -238,48 +240,39 @@ class ShotFlowDS(data.Dataset):
 
     def __init__(
         self,
-        dir: str,
-        file: str,
+        subset_df,
         cols: DictConfig,
-        train_shots: list[int],
-        test_shots: list[int],
         seq_length=200,
         crop_margin=0,
         history_length: Optional[int] = 0,  # 0 or None, when no history conditioning is used.
         allowed_start_indices: Optional[list[int]] = None,
-        # overfitting helpers:
-        overfit_on_shots: Optional[list[int]] = None,
-        train=True,
         pre_shuffle=True,
+        name="train",
         **kwargs
     ):
         super().__init__()
-        self.file_path = dir + file
+        self.data = subset_df
         self.columns_C = list(cols.get('c', []))
         self.columns_X = list(cols.x)
         self.label = cols.get('label', None)
         self.seq_length = seq_length
         self.history_length = history_length or 0
         self.crop_margin = crop_margin or 0
-        self.overfit_on_shots = overfit_on_shots
         self.allowed_start_indices = allowed_start_indices
-        self.train = train
-        self.shot_numbers = train_shots if train else test_shots
         self.pre_shuffle = pre_shuffle
+        self.name = name
 
         assert self.crop_margin >= self.history_length, "crop_margin must be greater than or equal to history_length to provide enough context."
-
-        self.load_and_filter_data()
-        self.normalize_columns()
         self.precompute_indices()
 
+    def __len__(self):
+        return len(self.viable_indices)
+
     def precompute_indices(self):
-        """Precompute all viable sample indices for each shot."""
+        """Precompute all viable sample indices, indexing each possible window of each shot."""
         self.viable_indices = []
+        self.shot_numbers = self.data['ShotNum'].unique()
         viable_shots = set()
-        if self.overfit_on_shots:
-            # Overfit on a specific set of shots
-            self.shot_numbers = self.overfit_on_shots
         for shot_number in self.shot_numbers:
             shot_data = self.data[self.data['ShotNum'] == shot_number]
             shot_len = len(shot_data)
@@ -301,85 +294,11 @@ class ShotFlowDS(data.Dataset):
                 for start_idx in range(self.crop_margin, viable_start_max + 1):
                     self.viable_indices.append((shot_number, start_idx))
                     viable_shots.add(shot_number)
-        logger.info(f"Precomputed {len(self.viable_indices)} viable samples across all shots.")
+        logger.info(f"{self.name} set: Precomputed {len(self.viable_indices)} viable samples across all shots.")
         logger.info(f"Included {len(viable_shots)} shots of {len(self.shot_numbers)} specified, in the dataset.")
         self.shot_numbers = list(viable_shots)
         if self.pre_shuffle:
             random.shuffle(self.viable_indices)
-
-    def load_and_filter_data(self):
-        self.data = pd.read_parquet(self.file_path)
-        # Reduce memory usage and quicker indexing:
-        self.data['ShotNum'] = self.data['ShotNum'].astype(np.int32)
-        self.data = self.data[self.data['ShotNum'].isin(self.shot_numbers)]
-        # Fill NaNs with forward fill
-        self.data = self.data.ffill()
-        logger.info(f"Using {len(self.shot_numbers)} shots from {self.file_path}")
-        if "DML-r" in self.columns_X:
-            logger.info("Adding reversed DML to data.")
-            self.data["DML-r"] = self.data["DML"] * -1
-
-    def normalize_columns(self):
-        """Normalize within 0-1"""
-        target_cols = self.columns_X + self.columns_C
-        self.min = self.data[target_cols].min()
-        self.max = self.data[target_cols].max()
-        self.data[target_cols] = (self.data[target_cols] - self.min) / (self.max - self.min)
-        # Prepare these for denormalize method (used for downstream models):
-        self.max_vals_x: np.ndarray = self.max[self.columns_X].values[..., np.newaxis]
-        self.min_vals_x: np.ndarray = self.min[self.columns_X].values[..., np.newaxis]
-
-        # log the min and max of the target cols to wandb config
-        stats_key = 'stats_' + ("train" if self.train else "val")
-        wandb.run.config['data'] |= {stats_key: {'min': self.min.to_dict(), 'max': self.max.to_dict()}}
-        # Summarize statistics per column
-        for column in self.data.columns:
-            col_data = self.data[column]
-            logger.info(
-                "Column '%-15s': min=%-11.4f max=%-11.4f mean=%-11.4f std=%-11.4f nans=%-10d", column, col_data.min(),
-                col_data.max(), col_data.mean(), col_data.std(),
-                col_data.isna().sum()
-            )
-
-    def denormalize(self, x: np.ndarray | torch.Tensor):
-        """Makes a copy of the input and denormalizes it from [0,1] to original."""
-        if isinstance(x, torch.Tensor):
-            x = x.clone()
-        elif isinstance(x, np.ndarray):
-            x = torch.tensor(x)
-        else:
-            raise TypeError(f"Unsupported type {type(x)}. Expected np.ndarray or torch.Tensor.")
-        x = (x * (self.max_vals_x - self.min_vals_x)) + self.min_vals_x
-        return x
-
-    def __len__(self):
-        return len(self.viable_indices)
-
-    def get_full_history(self, shot_number: int | Sequence[int],
-                         start_i: int | Sequence[int]) -> np.ndarray | List[np.ndarray]:
-        """Get the full history of a shot up to the start index.
-
-        Supports both scalar input as well as batched input. Returns (*input shape, T).
-        """
-        if isinstance(shot_number, (Sequence, torch.Tensor)) and isinstance(start_i, (Sequence, torch.Tensor)):
-            assert len(shot_number) == len(
-                start_i
-            ), f"shot_number and start_i must have the same length. Got {len(shot_number)} and {len(start_i)}."
-            shots = shot_number
-            starts = start_i
-            histories = []
-            for shot, start in zip(shots, starts):
-                shot_data = self.data[self.data['ShotNum'] == shot]
-                full_history = shot_data[self.columns_X].iloc[:start].values.T
-                histories.append(full_history)
-            return histories
-        elif isinstance(shot_number, int) and isinstance(start_i, int):
-            shot_data = self.data[self.data['ShotNum'] == shot_number]
-            return shot_data[self.columns_X].iloc[:start_i].values.T
-        else:
-            raise TypeError(
-                f"Unsupported type {type(shot_number)=} and {type(start_i)=}. Expected int or Sequence[int]."
-            )
 
     def __getitem__(self, idx):
         shot_number, start_i = self.viable_indices[idx]
@@ -416,3 +335,173 @@ class ShotFlowDS(data.Dataset):
         assert not np.isnan(x).any(
         ), "NaNs found in the output window. Often caused by division by zero in normalization."
         return meta, conditioning_input, x
+
+
+class FusionShotDataModule(L.LightningDataModule):
+    """
+    A LightningDataModule for loading and preparing shot data.
+    """
+
+    def __init__(
+        self,
+        dir: str,
+        file: str,
+        cols: DictConfig,  # x, c, label
+        train_shots: list[int],
+        val_shots: list[int],
+        test_shots: list[int],
+        batch_size: int,
+        seq_length=64,
+        crop_margin=64,
+        history_length: Optional[int] = 0,
+        allowed_start_indices: Optional[list[int]] = None,
+        overfit_on_shots: Optional[list[int]] = None,
+        pre_shuffle=True,
+        **kwargs
+    ):
+        super().__init__()
+        self.dir = dir
+        self.file = file
+        self.cols = cols
+        self.train_shots = train_shots
+        self.val_shots = val_shots
+        self.test_shots = test_shots
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.crop_margin = crop_margin or 0
+        self.history_length = history_length or 0
+        assert self.crop_margin >= self.history_length, "crop_margin must be greater than or equal to history_length to provide enough context."
+
+        self.allowed_start_indices = allowed_start_indices
+        self.overfit_on_shots = overfit_on_shots
+        self.pre_shuffle = pre_shuffle
+
+        self.data_is_normalized = False
+        self.num_workers = 2 if torch.cuda.is_available() else 0
+
+    def prepare_data(self):
+        """Load the data file."""
+        self.data = pd.read_parquet(self.dir + self.file)
+        self.data_is_normalized = False
+        self.data['ShotNum'] = self.data['ShotNum'].astype(np.int32)
+        self.data = self.data.ffill()
+        logger.info(f"Loaded {self.data['ShotNum'].nunique()} shots from {self.file}")
+        # add artificial columns if found in the config:
+        if "DML-r" in self.cols.x:
+            self.data["DML-r"] = self.data["DML"] * -1
+
+    def setup(self, stage: Optional[str] = None):
+        """Split data into train, validation, and test sets and compute normalization stats."""
+        self.normalize_xc_data()
+        train_df = self.data[self.data['ShotNum'].isin(self.train_shots)]
+        # Todo check if values train_df change
+        self.train_dataset = FusionShotDataset(
+            train_df,
+            cols=self.cols,
+            seq_length=self.seq_length,
+            crop_margin=self.crop_margin,
+            history_length=self.history_length,
+            allowed_start_indices=self.allowed_start_indices,
+            pre_shuffle=self.pre_shuffle,
+            name='Train'
+        )
+
+        assert self.data_is_normalized, "Normalization stats not computed. Call setup() first."
+        val_df = self.data[self.data['ShotNum'].isin(self.val_shots)]
+        self.val_dataset = FusionShotDataset(
+            val_df,
+            cols=self.cols,
+            seq_length=self.seq_length,
+            crop_margin=self.crop_margin,
+            history_length=self.history_length,
+            allowed_start_indices=self.allowed_start_indices,
+            pre_shuffle=self.pre_shuffle,
+            name='Val'
+        )
+
+        assert self.data_is_normalized, "Normalization stats not computed. Call setup() first."
+        test_df = self.data[self.data['ShotNum'].isin(self.test_shots)]
+        self.test_dataset = FusionShotDataset(
+            test_df,
+            cols=self.cols,
+            seq_length=self.seq_length,
+            crop_margin=self.crop_margin,
+            history_length=self.history_length,
+            allowed_start_indices=self.allowed_start_indices,
+            pre_shuffle=self.pre_shuffle,
+            name='Test'
+        )
+
+    def normalize_xc_data(self):
+        """Normalize within 0-1"""
+        assert not self.data_is_normalized, "Data already normalized. Call setup() first."
+        target_cols = list(self.cols.x + self.cols.get('c', []))
+        train_df = self.data[self.data['ShotNum'].isin(self.train_shots)]
+        self.min = train_df[target_cols].min()
+        self.max = train_df[target_cols].max()
+        logger.info(f"Normalizing columns {target_cols} with min {self.min} and max {self.max}")
+        self.data[target_cols] = ((self.data[target_cols] - self.min) / (self.max - self.min))
+        self.data_is_normalized = True
+
+        wandb.run.config['data'] |= {'train_stats': {'min': self.min.to_dict(), 'max': self.max.to_dict()}}
+
+        # Prepare these for denormalize method (used for downstream models):
+        self.max_vals_x: np.ndarray = self.max[self.cols.x].values[..., np.newaxis]
+        self.min_vals_x: np.ndarray = self.min[self.cols.x].values[..., np.newaxis]
+
+        # log the min and max of the target cols to wandb config
+        # Summarize statistics per column
+        for column in self.data.columns:
+            col_data = self.data[column]
+            logger.info(
+                "Column '%-15s': min=%-11.4f max=%-11.4f mean=%-11.4f std=%-11.4f nans=%-10d", column, col_data.min(),
+                col_data.max(), col_data.mean(), col_data.std(),
+                col_data.isna().sum()
+            )
+
+    def denormalize(self, x: np.ndarray | torch.Tensor):
+        """Makes a copy of the input and denormalizes it from [0,1] to original."""
+        if isinstance(x, torch.Tensor):
+            x = x.clone()
+        elif isinstance(x, np.ndarray):
+            x = torch.tensor(x)
+        else:
+            raise TypeError(f"Unsupported type {type(x)}. Expected np.ndarray or torch.Tensor.")
+        x = (x * (self.max_vals_x - self.min_vals_x)) + self.min_vals_x
+        return x
+
+    def get_full_history(self, shot_number: int | Sequence[int],
+                         start_i: int | Sequence[int]) -> np.ndarray | List[np.ndarray]:
+        """Get the full history of a shot up to the start index.
+
+        Supports both scalar input as well as batched input. Returns (*input shape, T).
+        """
+        if isinstance(shot_number, (Sequence, torch.Tensor)) and isinstance(start_i, (Sequence, torch.Tensor)):
+            assert len(shot_number) == len(
+                start_i
+            ), f"shot_number and start_i must have the same length. Got {len(shot_number)} and {len(start_i)}."
+            shots = shot_number
+            starts = start_i
+            histories = []
+            for shot, start in zip(shots, starts):
+                shot_data = self.data[self.data['ShotNum'] == shot]
+                full_history = shot_data[self.cols.x].iloc[:start].values.T
+                histories.append(full_history)
+            return histories
+        elif isinstance(shot_number, int) and isinstance(start_i, int):
+            shot_data = self.data[self.data['ShotNum'] == shot_number]
+            return shot_data[self.cols.x].iloc[:start_i].values.T
+        else:
+            raise TypeError(
+                f"Unsupported type {type(shot_number)=} and {type(start_i)=}. Expected int or Sequence[int]."
+            )
+
+    def train_dataloader(self):
+        return data.DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+
+    def val_dataloader(self):
+        assert self.data_is_normalized, "Normalization stats not computed. Call setup() first."
+        return data.DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def test_dataloader(self):
+        return data.DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers)

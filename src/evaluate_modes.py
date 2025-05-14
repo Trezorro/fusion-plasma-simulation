@@ -128,7 +128,7 @@ def get_mode_predictions(
     return surr_labels_pred, surr_labels_target
 
 
-def generate_surrogate_labels(meta, generated_samples, target_samples, data_set):
+def generate_surrogate_labels(meta, generated_samples, target_samples, data_module):
     """Dataset is needed for get history and denormalization."""
     C = get_current_config()
     shot_numbers = meta['shot_number'].cpu()
@@ -136,8 +136,8 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_set)
     PD_index = C.data.cols.x.index("PD")
     history_length = C.data.history_length
     seq_length = C.data.seq_length
-    target_samples_denorm = data_set.denormalize(target_samples.to('cpu'))
-    generated_samples_denorm = data_set.denormalize(generated_samples.to('cpu'))
+    target_samples_denorm = data_module.denormalize(target_samples.to('cpu'))
+    generated_samples_denorm = data_module.denormalize(generated_samples.to('cpu'))
     surr_labels_pred = []
     surr_labels_target = []
     logger.info("Generating surrogate labels for batch of %d samples", len(shot_numbers))
@@ -149,8 +149,8 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_set)
             desc="Getting surrogate labels ",
         )
     ):
-        full_history_raw = data_set.get_full_history(shot_num.item(), prediction_window_starts_idx[i].item())
-        full_history = data_set.denormalize(full_history_raw)  # type: ignore
+        full_history_raw = data_module.get_full_history(shot_num.item(), prediction_window_starts_idx[i].item())
+        full_history = data_module.denormalize(full_history_raw)  # type: ignore
         target_pd_rollout = torch.concat((full_history, target_samples_denorm[i]), dim=-1)[PD_index]  # type: ignore
         predicted_pd_rollout = torch.concat((full_history, generated_samples_denorm[i]),
                                             dim=-1)[PD_index]  # type: ignore

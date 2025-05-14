@@ -5,7 +5,7 @@
 from re import A
 import torch
 import logging
-from src.data_loaders import ShotFlowDS
+from src.data_loaders import FusionShotDataset
 from src.config import load_config_from_file
 
 logging.basicConfig(level=logging.INFO)
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 C = load_config_from_file('fm_toy', as_omega=True)
 
-ds = ShotFlowDS(
+ds = FusionShotDataset( #Yodo: rewrite to adapt to Data Module
     './data/',
     '2024_05_01-NaNsFiltered.parquet',
     cols=C.data.cols,

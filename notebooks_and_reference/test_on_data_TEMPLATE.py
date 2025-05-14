@@ -1,10 +1,10 @@
 # %% [markdown]
 # # Test entropy
-# 
+#
 # %%
 import torch
 import logging
-from src.data_loaders import ShotFlowDS
+from src.data_loaders import FusionShotDataModule, FusionShotDataset
 from src.config import load_config_from_file
 
 logging.basicConfig(level=logging.INFO)
@@ -12,7 +12,14 @@ logger = logging.getLogger(__name__)
 
 C = load_config_from_file('fm_toy', as_omega=True)
 
-ds = ShotFlowDS('./data/', '2024_05_01-NaNsFiltered.parquet', cols=C.data.cols, seq_length=512, history_length=512, crop_margin=1000, )
+ds = FusionShotDataModule( # Todo: rewrite to adapt to Data Module
+    './data/',
+    '2024_05_01-NaNsFiltered.parquet',
+    cols=C.data.cols,
+    seq_length=512,
+    history_length=512,
+    crop_margin=1000,
+)
 
 # %%
 ds.data
@@ -24,6 +31,7 @@ from plotly.subplots import make_subplots as plotly_make_subplots
 
 COLOR_SCALE = plt_colors.qualitative.Plotly
 
+
 def plot_shot(df, shot: int):
     shot_ids = df['ShotNum'].unique()
     shot_id = shot_ids[shot]
@@ -34,17 +42,14 @@ def plot_shot(df, shot: int):
         template='plotly_dark',
     )
     for i, col in enumerate(C.data.cols.x):
-        fig.add_trace(go.Scatter(x=shot_df.index, y=shot_df[col], mode='lines', name=col, line_color=COLOR_SCALE[i % 10]))
+        fig.add_trace(
+            go.Scatter(x=shot_df.index, y=shot_df[col], mode='lines', name=col, line_color=COLOR_SCALE[i % 10])
+        )
     fig.show()
+
 
 plot_shot(ds.data, 0)
 
-
-
 # %%
 
-
 # %%
-
-
-
