@@ -42,7 +42,7 @@ from lightning.pytorch.callbacks import DeviceStatsMonitor, ModelCheckpoint
 
 logger.info("Torch and lightning imported, importing src modules.")
 
-from src.evaluation import PlotsCallback, TrainStepMonitor
+import src.evaluation
 from datetime import datetime
 import src.models
 import src.data_loaders
@@ -103,7 +103,7 @@ trainer = L.Trainer(
     check_val_every_n_epoch=1,  # May validate less often
     # gradient_clip_val=C["gradient_clip_val"],  # gradient_clip_algorithm='norm' by default
     callbacks=[
-        PlotsCallback(C.evaluation),
+        src.evaluation.PlotsCallback(C.evaluation),
         pl_callbacks.EarlyStopping(monitor="loss/val", patience=C.patience, mode="min"),
         pl_callbacks.LearningRateMonitor(logging_interval='epoch'),
         ModelCheckpoint(
@@ -113,7 +113,7 @@ trainer = L.Trainer(
             filename=dated_run_name + '-Epoch={epoch:02d}-step={step}-val_loss={loss/val:.2f}',
             auto_insert_metric_name=False
         ),
-        TrainStepMonitor(),
+        src.evaluation.TrainStepMonitor(),
     ]
 )
 logger.info("Starting training with first validation...")
@@ -134,16 +134,9 @@ trainer.test(model=model, datamodule=fusion_data_module)
 logger.info("Finished training and testing.")
 
 logger.info("Run finished, deleting redundant artifacts.")
-api = wandb.Api()
 
-artifacts = api.run(run.path).logged_artifacts()
-for art in artifacts:
-    if art.type == "model":
-        if len(art.aliases) == 0 or not ("best" in art.aliases or "latest" in art.aliases):
-            logger.warning("Deleting %s", art.name)
-            art.delete()
-        else:
-            logger.info("Keeping %s \n with aliases %s", art.name, art.aliases)
+if not wandb.run.disabled:
+    src.evaluation.prune_online_checkpoints(run)
 
 logger.info("Goodbye!")
 run.finish()

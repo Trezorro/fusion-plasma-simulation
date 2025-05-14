@@ -23,6 +23,18 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+def prune_online_checkpoints(run):
+    api = wandb.Api()
+    artifacts = api.run(run.path).logged_artifacts()
+    for art in artifacts:
+        if art.type == "model":
+            if len(art.aliases) == 0 or not ("best" in art.aliases or "latest" in art.aliases):
+                logger.warning("Deleting %s", art.name)
+                art.delete()
+            else:
+                logger.info("Keeping %s \n with aliases %s", art.name, art.aliases)
+
+
 class PlotsCallback(L.Callback):
     """Calls a specified function, with the model and batch as arguments.
 
@@ -82,6 +94,8 @@ class PlotsCallback(L.Callback):
 
     def on_validation_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
         logger.debug(f"on_validation_epoch_end called at epoch {trainer.current_epoch}")
+        if not wandb.run.disabled:
+            prune_online_checkpoints(wandb.run)
         # Skip for all other epochs
         if (trainer.current_epoch % self.val_every_n_epochs == 1) or trainer.current_epoch <= self.scrutinize_epochs:
             if torch.cuda.is_available():
