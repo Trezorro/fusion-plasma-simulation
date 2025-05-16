@@ -13,6 +13,7 @@ from src.models.unet_conditional import ConditionalUNet
 from src.optimal_transport import OTPlanSampler
 import src.metrics.metrics as metrics
 from src.metrics.evaluate_modes import generate_surrogate_labels, generate_surrogate_labels_batched
+from src.metrics.mode_metrics import ModeTransitionMetric
 
 import logging
 from tqdm import tqdm
@@ -257,9 +258,19 @@ class FlowModule(L.LightningModule):
         return prior_samples
 
     def init_metrics(self):
-        self.train_metrics = metrics.MomentsErrorsMetric()
-        self.test_metrics = self.train_metrics.clone()
+        self.moments_metrics = metrics.MomentsErrorsMetric()
+        self.mode_test_metrics = torchmetrics.MetricCollection(
+            dict(
+                any_Wh=ModeTransitionMetric('any_Wh'),
+                L_only_Wh=ModeTransitionMetric('L_only_Wh'),
+                D_in_Wh=ModeTransitionMetric('D_in_Wh'),
+                H_not_in_Wh=ModeTransitionMetric('H_not_in_Wh'),
+            )
+        )
         self.dice_metric = DiceScore(3, input_format='index')
+        # self.mode_metrics = mode_metrics_collection
+        # self.train_metrics = mode_metrics_collection.clone(prefix='train/')
+        # self.mode_test_metrics = mode_metrics_collection.clone(prefix='test/')
 
     def test_step(self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int, flow_steps=FLOW_STEPS):
         meta, conditioning_input, target_samples = batch
@@ -268,25 +279,32 @@ class FlowModule(L.LightningModule):
             prior_samples, conditioning_input=conditioning_input, n_steps=flow_steps, save_trajectories=False
         )  # type: ignore
         data_module = self.trainer.datamodule
+        Wf_length = data_module.seq_length
         surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
             meta, generated_samples, target_samples, data_module=data_module
         )  # both pred and target have shape B, Wh+Wf, and
-        surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=int)
-        surr_labels_target = torch.tensor(surr_labels_target, device=self.device, dtype=int)
+        surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=torch.int)
+        surr_labels_target = torch.tensor(surr_labels_target, device=self.device, dtype=torch.int)
         # TODO: the metrics don't need the interpolated versions of the labels. and they often need the transitions only.
         # Metrics
         logger.debug("sur_labels shape: %s", surr_labels_pred.shape)
 
-        metrics_out = self.test_metrics(generated_samples, target_samples)
-        metrics_out['/dice'] = self.dice_metric(surr_labels_pred, surr_labels_target)
+        metrics_out = self.moments_metrics(generated_samples, target_samples)
+        metrics_out |= self.mode_test_metrics(surr_labels_pred, surr_labels_target)
+        # Ensure both inputs are long tensors with class indices for DiceScore
+        pred_labels = surr_labels_pred[:, -Wf_length:].long()
+        target_labels = surr_labels_target[:, -Wf_length:].long()
+        metrics_out['/dice'] = self.dice_metric(pred_labels, target_labels)
         self.log_dict(metrics.prefix_metrics(metrics_out, 'test'), prog_bar=True, on_step=True, on_epoch=False)
 
     def on_test_epoch_end(self):
-        test_metrics = self.test_metrics.compute()
+        test_metrics = self.moments_metrics.compute()
+        test_metrics |= self.mode_test_metrics.compute()
         test_metrics['/dice'] = self.dice_metric.compute()
         epoch_metrics = metrics.prefix_metrics(test_metrics, 'test')
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
-        self.test_metrics.reset()
+        self.moments_metrics.reset()
+        self.mode_test_metrics.reset()
         self.dice_metric.reset()
 
     @torch.inference_mode()

@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from scipy.signal import find_peaks
 from scipy.stats import wasserstein_distance
+import torchmetrics
 
 import src.entropy as entropy
 import wandb
@@ -74,9 +75,7 @@ def define_error_metrics(main_prefix: str):
     C = get_current_config()
     for metric_name in MOMENT_NAMES:
         for channel_name in C.data.cols.x:
-            wandb.define_metric(
-                f"{main_prefix}/error/magnitude_{metric_name}_mse/{channel_name}", summary='min'
-            )
+            wandb.define_metric(f"{main_prefix}/error/magnitude_{metric_name}_mse/{channel_name}", summary='min')
             wandb.define_metric(f"{main_prefix}/error/diff_{metric_name}_mse/{channel_name}", summary='min')
         wandb.define_metric(f"{main_prefix}/error/magnitude_{metric_name}_mse/mean", summary='min')
         wandb.define_metric(f"{main_prefix}/error/diff_{metric_name}_mse/mean", summary='min')
@@ -85,18 +84,15 @@ def define_error_metrics(main_prefix: str):
             wandb.define_metric(f"{main_prefix}/error/{entropy_method}_mse/{channel_name}", summary='min')
             wandb.define_metric(f"{main_prefix}/error/{entropy_method}_msd/{channel_name}", summary='min')
             wandb.define_metric(f"{main_prefix}/error/{entropy_method}_mae/{channel_name}", summary='min')
-            wandb.define_metric(
-                f"{main_prefix}/error/{entropy_method}_wasserstein/{channel_name}", summary='min'
-            )
+            wandb.define_metric(f"{main_prefix}/error/{entropy_method}_wasserstein/{channel_name}", summary='min')
         wandb.define_metric(f"{main_prefix}/error/{entropy_method}_mse/mean", summary='min')
         wandb.define_metric(f"{main_prefix}/error/{entropy_method}_mae/mean", summary='min')
         wandb.define_metric(f"{main_prefix}/error/{entropy_method}_wasserstein/mean", summary='min')
 
 
 def prefix_metrics(metric_dict, prefix='test'):
-    assert all(
-        [k.startswith("/") for k in metric_dict]
-    ), "Metric keys returned by subset agnostic model should start with /"
+    # Ensure all metric keys start with a slash; if not, prepend it
+    metric_dict = {k if k.startswith("/") else "/" + k: v for k, v in metric_dict.items()}
     val_metrics = {prefix + k: v for k, v in metric_dict.items()}
     return val_metrics
 
@@ -682,7 +678,6 @@ def plot_delta_prominence_scatter(dml_channel_index, pred_peaks_batch):
     fig.show()
 
 
-import torchmetrics
 
 
 class MomentsErrorsMetric(torchmetrics.Metric):
