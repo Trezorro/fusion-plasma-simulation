@@ -445,8 +445,9 @@ class FusionShotDataModule(L.LightningDataModule):
 
         wandb.run.config['data'] |= {'train_stats': {'min': self.min.to_dict(), 'max': self.max.to_dict()}}
         # Prepare these for denormalize method (used for downstream models):
-        self.max_vals_x = torch.tensor(self.max[self.cols.x].values, device=).unsqueeze(-1)
-        self.min_vals_x = torch.tensor(self.min[self.cols.x].values, device=).unsqueeze(-1)
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.max_vals_x = torch.tensor(self.max[self.cols.x].values, device=device).unsqueeze(-1)
+        self.min_vals_x = torch.tensor(self.min[self.cols.x].values, device=device).unsqueeze(-1)
 
         # log the min and max of the target cols to wandb config
         # Summarize statistics per column
