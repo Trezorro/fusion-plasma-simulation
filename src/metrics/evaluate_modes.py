@@ -118,13 +118,15 @@ def get_mode_predictions_single_window(
     normalized_rollout = (x - stats_PD[COLNAME]["mean"]) / stats_PD[COLNAME]["sd"]
     if normalized_rollout.dim() == 2:
         normalized_rollout = normalized_rollout.unsqueeze(1)  # add the input channels dimension back
-    logger.debug("Device before lstm rollout x: %s", x.device)
+    # logger.debug("Device before lstm rollout x: %s", x.device)
+
+    # TODO: combine pred and target batch here, probably on same dimension
 
     t_out, y_out = pred_sample_slidingwindow(
         model_PD, t=timeline, x=normalized_rollout, tw=TW, stride=STRIDE, offset_pred=OFFSET_PRED, i_start=0
     )
-    logger.debug("Devices after lstm pred_sample_slidingwindow: y_out - %s", y_out.device)
-    y_out_pred, y_out_target = y_out.unbind(0)
+    # logger.debug("Devices after lstm pred_sample_slidingwindow: y_out - %s", y_out.device)
+    y_out_pred, y_out_target = y_out.unbind(0)  # TODO: change to split / chunck
     surr_labels_pred = clean_labels_series(
         label_t=t_out, surr_labels=y_out_pred, history_length=history_length, seq_length=seq_length
     )
@@ -167,17 +169,18 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
     ):
         full_history_raw = data_module.get_full_history(shot_num.item(), prediction_window_starts_idx[i].item())
         full_history = data_module.denormalize(full_history_raw, to_device=DEVICE)  # type: ignore
-        logger.debug(
-            "Devices: full_history - %s, target_samples_denorm %s", full_history.device, target_samples_denorm.device
-        )
+        # logger.debug(
+        #     "Devices: full_history - %s, target_samples_denorm %s", full_history.device, target_samples_denorm.device
+        # )
         target_pd_rollout = torch.concat((full_history, target_samples_denorm[i]), dim=-1)[PD_index]  # type: ignore
         predicted_pd_rollout = torch.concat((full_history, generated_samples_denorm[i]),
                                             dim=-1)[PD_index]  # type: ignore
-        logger.debug(
-            "Devices before normalize target_pd_rollout %s, predicted_pd_rollout: %s", target_pd_rollout.device,
-            predicted_pd_rollout.device
-        )
-        idx_timeline = np.arange(-prediction_window_starts_idx[i].item(), seq_length)
+        # TODO; DO padding here to max length, then give it to get mode predictions. Actually need parallel function for this.
+        # logger.debug(
+        #     "Devices before normalize target_pd_rollout %s, predicted_pd_rollout: %s", target_pd_rollout.device,
+        #     predicted_pd_rollout.device,
+        # )
+        idx_timeline = np.arange(-prediction_window_starts_idx[i].item(), seq_length)  # TODO: batch this
         surr_labels_pred_i, surr_labels_target_i = get_mode_predictions_single_window(
             pd_rollout_pred=predicted_pd_rollout,
             pd_rollout_target=target_pd_rollout,

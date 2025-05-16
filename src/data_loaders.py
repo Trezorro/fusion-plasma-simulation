@@ -471,7 +471,7 @@ class FusionShotDataModule(L.LightningDataModule):
             x = x.to(to_device)
         min_vals = self.min_vals_x.to(x.device)
         max_vals = self.max_vals_x.to(x.device)
-        logger.debug("Devices: x - %s, self.max_vals_x %s", x.device, self.max_vals_x.device)
+        # logger.debug("Devices: x - %s, self.max_vals_x %s", x.device, self.max_vals_x.device)
         x = (x * (max_vals - min_vals)) + min_vals
         return x
 
