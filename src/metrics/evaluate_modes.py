@@ -177,7 +177,7 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
             "Devices before normalize target_pd_rollout %s, predicted_pd_rollout: %s", target_pd_rollout.device,
             predicted_pd_rollout.device
         )
-        idx_timeline = np.arange(-prediction_window_starts_idx[i], seq_length)
+        idx_timeline = np.arange(-prediction_window_starts_idx[i].item(), seq_length)
         surr_labels_pred_i, surr_labels_target_i = get_mode_predictions_single_window(
             pd_rollout_pred=predicted_pd_rollout,
             pd_rollout_target=target_pd_rollout,
