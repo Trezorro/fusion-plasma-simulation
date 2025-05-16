@@ -86,7 +86,7 @@ def pred_sample_slidingwindow(model: FNOLSTM, t, x, tw, stride, offset_pred, i_s
 
         y_preds.append(y_pred)
     y_preds = torch.stack(y_preds, dim=1).argmax(dim=-1).to('cpu')
-    y_times = torch.tensor(y_times, device='cpu')
+    y_times = np.stack(y_times, axis=1)
 
     return y_times, y_preds
 
@@ -104,7 +104,23 @@ def clean_labels_series(label_t, surr_labels, history_length, seq_length):
     return resampled_series
 
 
-def get_mode_predictions_single_window(
+def clean_labels_series_batched(label_t_batch, surr_labels_batch, history_length, seq_length):
+    """Batched version: Resample the labels for each batch element such that we have a label for every step from -history to +seq_length."""
+    batch_size = len(label_t_batch)
+    resampled = []
+    surr_labels_batch = surr_labels_batch.cpu().numpy()
+    for i in range(batch_size):
+        label_t = label_t_batch[i]
+        surr_labels = surr_labels_batch[i]
+        series = pd.Series(data=surr_labels, index=label_t)
+        resampled_series = series.reindex(range(-history_length - STRIDE, seq_length)
+                                         ).interpolate(method='nearest'
+                                                      ).ffill().reindex(range(-history_length, seq_length))
+        resampled.append(resampled_series.values)
+    return np.stack(resampled)
+
+
+def get_mode_predictions_batched_window(
     pd_rollout_pred: torch.Tensor,
     pd_rollout_target: torch.Tensor,
     timeline: np.ndarray,
@@ -113,7 +129,7 @@ def get_mode_predictions_single_window(
 ):
     """Get interpolated mode predictions ranging from 1 to 3 for the range from provided timeline around -history_length to + seq_length."""
     # dim should be (N, T)
-    x = torch.stack((pd_rollout_pred, pd_rollout_target))
+    x = torch.concat((pd_rollout_pred, pd_rollout_target))
     COLNAME = 'PD'
     normalized_rollout = (x - stats_PD[COLNAME]["mean"]) / stats_PD[COLNAME]["sd"]
     if normalized_rollout.dim() == 2:
@@ -126,12 +142,13 @@ def get_mode_predictions_single_window(
         model_PD, t=timeline, x=normalized_rollout, tw=TW, stride=STRIDE, offset_pred=OFFSET_PRED, i_start=0
     )
     # logger.debug("Devices after lstm pred_sample_slidingwindow: y_out - %s", y_out.device)
-    y_out_pred, y_out_target = y_out.unbind(0)  # TODO: change to split / chunck
-    surr_labels_pred = clean_labels_series(
-        label_t=t_out, surr_labels=y_out_pred, history_length=history_length, seq_length=seq_length
+    y_out_pred, y_out_target = torch.chunk(y_out, 2, dim=0)
+    # y_out_pred, y_out_target = y_out.unbind(0)  # TODO: change to split / chunck
+    surr_labels_pred = clean_labels_series_batched(
+        t_out, y_out_pred, history_length=history_length, seq_length=seq_length
     )
-    surr_labels_target = clean_labels_series(
-        label_t=t_out, surr_labels=y_out_target, history_length=history_length, seq_length=seq_length
+    surr_labels_target = clean_labels_series_batched(
+        t_out, y_out_target, history_length=history_length, seq_length=seq_length
     )
     return surr_labels_pred, surr_labels_target
 
@@ -176,12 +193,13 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
         predicted_pd_rollout = torch.concat((full_history, generated_samples_denorm[i]),
                                             dim=-1)[PD_index]  # type: ignore
         # TODO; DO padding here to max length, then give it to get mode predictions. Actually need parallel function for this.
+
         # logger.debug(
         #     "Devices before normalize target_pd_rollout %s, predicted_pd_rollout: %s", target_pd_rollout.device,
         #     predicted_pd_rollout.device,
         # )
         idx_timeline = np.arange(-prediction_window_starts_idx[i].item(), seq_length)  # TODO: batch this
-        surr_labels_pred_i, surr_labels_target_i = get_mode_predictions_single_window(
+        surr_labels_pred_i, surr_labels_target_i = get_mode_predictions_batched_window(
             pd_rollout_pred=predicted_pd_rollout,
             pd_rollout_target=target_pd_rollout,
             timeline=idx_timeline,
@@ -193,6 +211,67 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
 
     surr_labels_pred = np.stack(surr_labels_pred)
     surr_labels_target = np.stack(surr_labels_target)
+    return surr_labels_pred, surr_labels_target
+
+
+def generate_surrogate_labels_batched(meta, generated_samples, target_samples, data_module):
+    """Batched version of generate_surrogate_labels.
+    Calls get_full_history in batch, pads after concat, and processes in batch.
+    """
+    import torch.nn.functional as F
+    C = get_current_config()
+    shot_numbers = meta['shot_number'].cpu()
+    prediction_window_starts_idx = meta['start_i'].cpu()
+    PD_index = C.data.cols.x.index("PD")
+    history_length = C.data.history_length
+    seq_length = C.data.seq_length
+    batch_size = len(shot_numbers)
+
+    logger.info("Generating surrogate labels (batched) for batch of %d samples", batch_size)
+
+    # 1. Get all histories in batch (list of tensors, not padded)
+    full_histories_raw = data_module.get_full_history(shot_numbers, prediction_window_starts_idx)
+    # 2. Denormalize histories and windows
+    full_histories = [data_module.denormalize(h, to_device=DEVICE) for h in full_histories_raw]
+    target_samples_denorm = data_module.denormalize(target_samples)  # [B, C, L]
+    generated_samples_denorm = data_module.denormalize(generated_samples)  # [B, C, L]
+
+    # 3. Concat histories and windows, then pad to max length
+    concat_pd_rollouts_target = []
+    concat_pd_rollouts_pred = []
+    concat_lens = []
+    for i in range(batch_size):
+        hist = full_histories[i]  # [C, H_i]
+        target = target_samples_denorm[i]  # [C, L]
+        pred = generated_samples_denorm[i]  # [C, L]
+        concat_target = torch.cat((hist, target), dim=-1)  # [C, H_i+L]
+        concat_pred = torch.cat((hist, pred), dim=-1)  # [C, H_i+L]
+        concat_pd_rollouts_target.append(concat_target[PD_index])
+        concat_pd_rollouts_pred.append(concat_pred[PD_index])
+        concat_lens.append(concat_target.shape[-1])
+    total_len = max(concat_lens)
+    concat_pd_rollouts_target = torch.stack(
+        [F.pad(x, (0, total_len - x.shape[-1])) for x in concat_pd_rollouts_target], dim=0
+    )  # [B, total_len]
+    concat_pd_rollouts_pred = torch.stack(
+        [F.pad(x, (0, total_len - x.shape[-1])) for x in concat_pd_rollouts_pred], dim=0
+    )
+
+    # 4. Build timeline for each sample (broadcasted, shape [MAXT, batch_size])
+    MAXT = total_len  # or max(concat_lens)
+    idx_timelines = np.arange(MAXT)[:, None] - prediction_window_starts_idx[None, :].numpy()
+
+    # 5. Call get_mode_predictions_single_window for each sample
+    surr_labels_pred = []
+    surr_labels_target = []
+    surr_labels_pred, surr_labels_target = get_mode_predictions_batched_window(
+        pd_rollout_pred=concat_pd_rollouts_pred,
+        pd_rollout_target=concat_pd_rollouts_target,
+        timeline=idx_timelines,
+        history_length=history_length,
+        seq_length=seq_length
+    )
+
     return surr_labels_pred, surr_labels_target
 
 

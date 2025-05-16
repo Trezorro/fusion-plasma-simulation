@@ -481,7 +481,7 @@ class FusionShotDataModule(L.LightningDataModule):
 
         Supports both scalar input as well as batched input. Returns (*input shape, T).
         """
-        if isinstance(shot_number, (Sequence, torch.Tensor)) and isinstance(start_i, (Sequence, torch.Tensor)):
+        if isinstance(shot_number, (torch.Tensor)) and isinstance(start_i, (torch.Tensor)):
             assert len(shot_number) == len(
                 start_i
             ), f"shot_number and start_i must have the same length. Got {len(shot_number)} and {len(start_i)}."
@@ -489,8 +489,8 @@ class FusionShotDataModule(L.LightningDataModule):
             starts = start_i
             histories = []
             for shot, start in zip(shots, starts):
-                shot_data = self.data[self.data['ShotNum'] == shot]
-                full_history = shot_data[self.cols.x].iloc[:start].values.T
+                shot_data = self.data[self.data['ShotNum'] == shot.item()]
+                full_history = shot_data[self.cols.x].iloc[:start.item()].values.T
                 histories.append(full_history)
             return histories
         elif isinstance(shot_number, int) and isinstance(start_i, int):

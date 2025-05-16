@@ -12,7 +12,7 @@ from omegaconf import DictConfig
 from src.models.unet_conditional import ConditionalUNet
 from src.optimal_transport import OTPlanSampler
 import src.metrics.metrics as metrics
-from src.metrics.evaluate_modes import generate_surrogate_labels
+from src.metrics.evaluate_modes import generate_surrogate_labels, generate_surrogate_labels_batched
 
 import logging
 from tqdm import tqdm
@@ -268,7 +268,7 @@ class FlowModule(L.LightningModule):
             prior_samples, conditioning_input=conditioning_input, n_steps=flow_steps, save_trajectories=False
         )  # type: ignore
         data_module = self.trainer.datamodule
-        surr_labels_pred, surr_labels_target = generate_surrogate_labels(
+        surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
             meta, generated_samples, target_samples, data_module=data_module
         )  # both pred and target have shape B, Wh+Wf, and
         surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=int)
@@ -288,7 +288,6 @@ class FlowModule(L.LightningModule):
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
         self.test_metrics.reset()
         self.dice_metric.reset()
-
 
     @torch.inference_mode()
     def evaluate(
@@ -345,7 +344,7 @@ class FlowModule(L.LightningModule):
         # surrogate labels
         if data_module is None:
             data_module = self.trainer.datamodule
-        surr_labels_pred, surr_labels_target = generate_surrogate_labels(
+        surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
             meta, generated_samples, target_samples, data_module=data_module
         )
         meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
