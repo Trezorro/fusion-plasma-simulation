@@ -15,7 +15,7 @@ import src.plotters.plot_animations
 import src.plotters.plot_entropy as entropy
 import src.plotters.flow_plots as fp
 import wandb
-from src.metrics import prefix_metrics
+from src.metrics.metrics import prefix_metrics
 from src.plotters.histograms import plot_peak_prominences_histogram
 
 PlotFunction = Callable[[Any], plt.Figure | go.Figure | wandb.Image]

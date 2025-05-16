@@ -11,7 +11,7 @@ from omegaconf import DictConfig
 
 from src.models.unet_conditional import ConditionalUNet
 from src.optimal_transport import OTPlanSampler
-import src.metrics as metrics
+import src.metrics.metrics as metrics
 from src.evaluate_modes import generate_surrogate_labels
 
 import logging
