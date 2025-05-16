@@ -46,7 +46,7 @@ import src.evaluation
 from datetime import datetime
 import src.models
 import src.data_loaders
-import src.metrics as metrics
+import src.metrics.metrics as metrics
 
 logger.info("Imports complete, init wandb logger and loading model and data.")
 
@@ -92,7 +92,7 @@ trainer = L.Trainer(
     enable_progress_bar=wandb.run.disabled,
     max_epochs=C["epochs"],
     logger=wandb_logger,
-    fast_dev_run=False,
+    fast_dev_run=3,
     # profiler='simple',
     limit_train_batches=C.limit_train_batches,
     limit_val_batches=C.limit_val_batches,

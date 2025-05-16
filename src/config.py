@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT = "flowtoy"
 ENTITY = "tresoor"
+MAIN_CONFIG_FILE = "fm_toy"
 
 
 def print_types(value, level=0):
@@ -39,7 +40,7 @@ def convert_lists(value, level=0):
             convert_lists(v, level=level + 1)
 
 
-def load_config_from_file(name='main', as_omega=False) -> dict | omegaconf.DictConfig:
+def load_config_from_file(name=MAIN_CONFIG_FILE, as_omega=False) -> dict | omegaconf.DictConfig:
     """Load configuration from (hierarchical) yaml files and CLI."""
     main_conf = OmegaConf.load(f'configs/{name}.yaml')
     if type(main_conf.model) == str:
@@ -77,7 +78,12 @@ def update_model_input_channels(conf):
 def get_current_config():
     if not wandb.config:
         raise RuntimeError("wandb.config was not initialized yet.")
-    conf = OmegaConf.create(dict(wandb.config))
+    try:
+        config_dict = dict(wandb.config)
+    except wandb.Error as e:
+        config_dict = load_config_from_file()
+        logger.info("No wandb config found. Loaded it from current yaml file.")
+    conf = OmegaConf.create(config_dict)
     convert_lists(conf)
     return conf
 

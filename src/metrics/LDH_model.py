@@ -38,12 +38,24 @@ class FNOLSTM(nn.Module):
         h_dropmlp (float): Dropout rate for the final MLP.
         act: Activation function to use.
     """
-    def __init__(self, n_in=3, n_out=3, tw=40,
-                 h_c1=32, h_m1=8, h_c2=64, h_m2=8, h_dropc=.5, h_maxpool=2,
-                 h_lstm_in=16, h_lstm=32,
-                 h_conv_res=False,
-                 h_mlp=8, h_dropmlp=.5,
-                 act=nn.ReLU(), **kwargs):
+    def __init__(
+        self,
+        n_in=3,
+        n_out=3,
+        tw=40,
+        h_c1=32,
+        h_m1=8,
+        h_c2=64,
+        h_m2=8,
+        h_dropc=.5,
+        h_maxpool=2,
+        h_lstm_in=16,
+        h_lstm=32,
+        h_conv_res=False,
+        h_mlp=8,
+        h_dropmlp=.5,
+        act=nn.ReLU()
+    ):
         super().__init__()
         self.conv_extractor = WindowFNOExtractor(n_in=n_in, n_feature=h_lstm_in, tw=tw,
                                                  h_c=[h_c1, h_c2], h_m=[h_m1, h_m2],

@@ -1,17 +1,21 @@
 # %%
 import json
 import pathlib
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger('src').setLevel(logging.DEBUG)
 
 import numpy as np
 import pandas as pd
 import torch
 
-from src.models.LDH_model import FNOLSTM
-from src.config import get_current_config
-import logging
+from src.metrics.LDH_model import FNOLSTM
+from src.config import get_current_config, load_config_from_file
+
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-from tqdm import tqdm
 
 # %%
 # global model settings
@@ -19,13 +23,16 @@ MODEL_METADATA_DIR = pathlib.Path("configs/MHD_model_yoerie")
 TW = 40
 OFFSET_PRED = 20
 STRIDE = 10
-C = get_current_config()
+C = load_config_from_file()
 train_shots = C.data.train_shots
 test_shots = C.data.test_shots
 
 with open(MODEL_METADATA_DIR / 'stats_PD.json', 'r') as f:
     stats_PD = json.load(f)
 # %% Initialize mode segmentation model
+
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+print(f"Using {device} device")
 
 model_PD = FNOLSTM(
     n_in=1,
@@ -38,11 +45,12 @@ model_PD = FNOLSTM(
     h_dropc=0.5,
     h_maxpool=2,
     h_lstm_in=32,
-    h_lmst=32,
+    h_lstm=32,
     h_mlp=8,
-    m_dropmlp=0.5
+    h_dropmlp=0.5
 )
 model_PD.load_state_dict(torch.load(MODEL_METADATA_DIR / "weights_PD.pt"))
+model_PD.to(device)
 
 
 # %%
@@ -55,7 +63,7 @@ def normalize_input_multichannel(sig, signal_list, stats):
 
 
 # %%
-def pred_sample_slidingwindow(model, t, x, device, tw, stride, offset_pred, i_start=0):
+def pred_sample_slidingwindow(model: FNOLSTM, t, x, device, tw, stride, offset_pred, i_start=0):
     model.eval()
     x = x.to(device)
     if x.dim() == 2:
@@ -93,7 +101,7 @@ def clean_labels(label_t, surr_labels, history_length, seq_length):
     return resampled_series
 
 
-def get_mode_predictions(
+def get_mode_predictions_single_window(
     pd_rollout_pred: torch.Tensor,
     pd_rollout_target: torch.Tensor,
     timeline: np.ndarray,
@@ -155,7 +163,7 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
         predicted_pd_rollout = torch.concat((full_history, generated_samples_denorm[i]),
                                             dim=-1)[PD_index]  # type: ignore
         idx_timeline = np.arange(-prediction_window_starts_idx[i], seq_length)
-        surr_labels_pred_i, surr_labels_target_i = get_mode_predictions(
+        surr_labels_pred_i, surr_labels_target_i = get_mode_predictions_single_window(
             pd_rollout_pred=predicted_pd_rollout,
             pd_rollout_target=target_pd_rollout,
             timeline=idx_timeline,
@@ -171,3 +179,8 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
 
 
 # surr_labels_target, surr_labels_pred = generate_surrogate_labels(get_mode_predictions, evaluation_output)
+
+if __name__ == "__main__":
+    # load the data into a data frame
+    # then put all the X col values into a C x L array for each shot
+    raise ValueError

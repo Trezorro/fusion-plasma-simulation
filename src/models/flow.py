@@ -12,7 +12,7 @@ from omegaconf import DictConfig
 from src.models.unet_conditional import ConditionalUNet
 from src.optimal_transport import OTPlanSampler
 import src.metrics.metrics as metrics
-from src.evaluate_modes import generate_surrogate_labels
+from src.metrics.evaluate_modes import generate_surrogate_labels
 
 import logging
 from tqdm import tqdm
@@ -20,6 +20,8 @@ from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 FLOW_STEPS = 150 if torch.cuda.is_available() else 6
+
+logger.debug("Ran flow module.")
 
 
 class FlowModule(L.LightningModule):
@@ -269,10 +271,10 @@ class FlowModule(L.LightningModule):
         surr_labels_pred, surr_labels_target = generate_surrogate_labels(
             *self.transfer_batch_to_device((meta, generated_samples, target_samples), 'cpu', 0),
             data_module=data_module
-        )
+        )  # both pred and target have shape B, Wh+Wf, and
         surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=int)
         surr_labels_target = torch.tensor(surr_labels_target, device=self.device, dtype=int)
-
+        # TODO: the metrics don't need the interpolated versions of the labels. and they often need the transitions only.
         # Metrics
         logger.debug("sur_labels shape: %s", surr_labels_pred.shape)
 
