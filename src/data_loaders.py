@@ -445,8 +445,8 @@ class FusionShotDataModule(L.LightningDataModule):
 
         wandb.run.config['data'] |= {'train_stats': {'min': self.min.to_dict(), 'max': self.max.to_dict()}}
         # Prepare these for denormalize method (used for downstream models):
-        self.max_vals_x = torch.tensor(self.max[self.cols.x].values).unsqueeze(-1)
-        self.min_vals_x = torch.tensor(self.min[self.cols.x].values).unsqueeze(-1)
+        self.max_vals_x = torch.tensor(self.max[self.cols.x].values, device=).unsqueeze(-1)
+        self.min_vals_x = torch.tensor(self.min[self.cols.x].values, device=).unsqueeze(-1)
 
         # log the min and max of the target cols to wandb config
         # Summarize statistics per column
@@ -466,8 +466,10 @@ class FusionShotDataModule(L.LightningDataModule):
             x = torch.tensor(x)
         else:
             raise TypeError(f"Unsupported type {type(x)}. Expected np.ndarray or torch.Tensor.")
+        min_vals = self.min_vals_x.to(x.device)
+        max_vals = self.max_vals_x.to(x.device)
         logger.debug("Devices: x - %s, self.max_vals_x %s", x.device, self.max_vals_x.device)
-        x = (x * (self.max_vals_x - self.min_vals_x)) + self.min_vals_x
+        x = (x * (max_vals - min_vals)) + min_vals
         return x
 
     def get_full_history(self, shot_number: int | Sequence[int],

@@ -342,15 +342,15 @@ class FlowModule(L.LightningModule):
         metrics_out = metrics.get_moments_errors_per_channel(generated_samples, target_samples)
         self.model.train()  # Reset model to training mode
 
-        meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
-            (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
-            device='cpu'  # type: ignore
-        )
         # surrogate labels
         if data_module is None:
             data_module = self.trainer.datamodule
         surr_labels_pred, surr_labels_target = generate_surrogate_labels(
             meta, generated_samples, target_samples, data_module=data_module
+        )
+        meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
+            (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
+            device='cpu'  # type: ignore
         )
         # TODO do metric calculation elsewhere
         metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
