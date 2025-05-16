@@ -96,6 +96,7 @@ trainer = L.Trainer(
     # profiler='simple',
     limit_train_batches=C.limit_train_batches,
     limit_val_batches=C.limit_val_batches,
+    limit_test_batches=100,
     max_time={"hours": 6},
     benchmark=True,
     # num_sanity_val_steps=1,
