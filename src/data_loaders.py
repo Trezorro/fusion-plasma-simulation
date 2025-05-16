@@ -459,7 +459,7 @@ class FusionShotDataModule(L.LightningDataModule):
                 col_data.isna().sum()
             )
 
-    def denormalize(self, x: np.ndarray | torch.Tensor):
+    def denormalize(self, x: np.ndarray | torch.Tensor, to_device: Optional[str]=None):
         """Makes a copy of the input and denormalizes it from [0,1] to original."""
         if isinstance(x, torch.Tensor):
             x = x.clone()
@@ -467,6 +467,8 @@ class FusionShotDataModule(L.LightningDataModule):
             x = torch.tensor(x)
         else:
             raise TypeError(f"Unsupported type {type(x)}. Expected np.ndarray or torch.Tensor.")
+        if to_device is not None:
+            x = x.to(to_device)
         min_vals = self.min_vals_x.to(x.device)
         max_vals = self.max_vals_x.to(x.device)
         logger.debug("Devices: x - %s, self.max_vals_x %s", x.device, self.max_vals_x.device)

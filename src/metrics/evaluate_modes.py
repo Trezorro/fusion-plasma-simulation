@@ -135,7 +135,9 @@ def get_mode_predictions_single_window(
 
 
 def generate_surrogate_labels(meta, generated_samples, target_samples, data_module):
-    """Dataset is needed for get history and denormalization."""
+    """To be called by test or evaluate step. 
+
+    Dataset is needed for get history and denormalization."""
     C = get_current_config()
     shot_numbers = meta['shot_number'].cpu()
     prediction_window_starts_idx = meta['start_i']
@@ -164,7 +166,7 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
         )
     ):
         full_history_raw = data_module.get_full_history(shot_num.item(), prediction_window_starts_idx[i].item())
-        full_history = data_module.denormalize(full_history_raw)  # type: ignore
+        full_history = data_module.denormalize(full_history_raw, to_device=DEVICE)  # type: ignore
         logger.debug(
             "Devices: full_history - %s, target_samples_denorm %s", full_history.device, target_samples_denorm.device
         )
