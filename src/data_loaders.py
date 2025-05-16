@@ -444,10 +444,9 @@ class FusionShotDataModule(L.LightningDataModule):
         self.data_is_normalized = True
 
         wandb.run.config['data'] |= {'train_stats': {'min': self.min.to_dict(), 'max': self.max.to_dict()}}
-
         # Prepare these for denormalize method (used for downstream models):
-        self.max_vals_x: np.ndarray = self.max[self.cols.x].values[..., np.newaxis]
-        self.min_vals_x: np.ndarray = self.min[self.cols.x].values[..., np.newaxis]
+        self.max_vals_x = torch.tensor(self.max[self.cols.x].values).unsqueeze(-1)
+        self.min_vals_x = torch.tensor(self.min[self.cols.x].values).unsqueeze(-1)
 
         # log the min and max of the target cols to wandb config
         # Summarize statistics per column
@@ -467,6 +466,7 @@ class FusionShotDataModule(L.LightningDataModule):
             x = torch.tensor(x)
         else:
             raise TypeError(f"Unsupported type {type(x)}. Expected np.ndarray or torch.Tensor.")
+        logger.debug("Devices: x - %s, self.max_vals_x %s", x.device, self.max_vals_x.device)
         x = (x * (self.max_vals_x - self.min_vals_x)) + self.min_vals_x
         return x
 

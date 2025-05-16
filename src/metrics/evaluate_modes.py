@@ -11,7 +11,7 @@ import pandas as pd
 import torch
 
 from src.metrics.LDH_model import FNOLSTM
-from src.config import get_current_config, load_config_from_file
+from src.config import get_current_config
 
 from tqdm import tqdm
 
@@ -23,7 +23,10 @@ MODEL_METADATA_DIR = pathlib.Path("configs/MHD_model_yoerie")
 TW = 40
 OFFSET_PRED = 20
 STRIDE = 10
-C = load_config_from_file()
+
+## A Time window
+# -
+C = get_current_config()
 train_shots = C.data.train_shots
 test_shots = C.data.test_shots
 
@@ -31,8 +34,8 @@ with open(MODEL_METADATA_DIR / 'stats_PD.json', 'r') as f:
     stats_PD = json.load(f)
 # %% Initialize mode segmentation model
 
-device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
-print(f"Using {device} device")
+DEVICE = torch.device("cuda") if torch.cuda.is_available() else "cpu"
+logger.info(f"Using {DEVICE} device")
 
 model_PD = FNOLSTM(
     n_in=1,
@@ -50,7 +53,7 @@ model_PD = FNOLSTM(
     h_dropmlp=0.5
 )
 model_PD.load_state_dict(torch.load(MODEL_METADATA_DIR / "weights_PD.pt"))
-model_PD.to(device)
+model_PD.to(DEVICE)
 
 
 # %%
@@ -63,12 +66,12 @@ def normalize_input_multichannel(sig, signal_list, stats):
 
 
 # %%
-def pred_sample_slidingwindow(model: FNOLSTM, t, x, device, tw, stride, offset_pred, i_start=0):
+def pred_sample_slidingwindow(model: FNOLSTM, t, x, tw, stride, offset_pred, i_start=0):
     model.eval()
-    x = x.to(device)
+    x = x.to(DEVICE)
     if x.dim() == 2:
         x = x.unsqueeze(0)  # add the Batch dimension if it isn't there
-    model.to(device)
+    model.to(DEVICE)
     hidden = None
     i_max = x.shape[-1] - tw + 1  # max index for the sliding window
     y_preds = []
@@ -88,7 +91,7 @@ def pred_sample_slidingwindow(model: FNOLSTM, t, x, device, tw, stride, offset_p
     return y_times, y_preds
 
 
-def clean_labels(label_t, surr_labels, history_length, seq_length):
+def clean_labels_series(label_t, surr_labels, history_length, seq_length):
     """Resample the labels such that we have a label for every step from -history to +seq_length"""
     resampled_series = pd.Series(data=surr_labels, index=label_t.numpy())
     # Extend the index to the full range and forward fill the series
@@ -117,20 +120,14 @@ def get_mode_predictions_single_window(
         normalized_rollout = normalized_rollout.unsqueeze(1)  # add the input channels dimension back
 
     t_out, y_out = pred_sample_slidingwindow(
-        model_PD,
-        t=timeline,
-        x=normalized_rollout,
-        device='cpu',
-        tw=TW,
-        stride=STRIDE,
-        offset_pred=OFFSET_PRED,
-        i_start=0
+        model_PD, t=timeline, x=normalized_rollout, tw=TW, stride=STRIDE, offset_pred=OFFSET_PRED, i_start=0
     )
+    logger.debug("Devices after lstm pred_sample_slidingwindow: y_out - %s", y_out.device)
     y_out_pred, y_out_target = y_out.unbind(0)
-    surr_labels_pred = clean_labels(
+    surr_labels_pred = clean_labels_series(
         label_t=t_out, surr_labels=y_out_pred, history_length=history_length, seq_length=seq_length
     )
-    surr_labels_target = clean_labels(
+    surr_labels_target = clean_labels_series(
         label_t=t_out, surr_labels=y_out_target, history_length=history_length, seq_length=seq_length
     )
     return surr_labels_pred, surr_labels_target
@@ -144,8 +141,8 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
     PD_index = C.data.cols.x.index("PD")
     history_length = C.data.history_length
     seq_length = C.data.seq_length
-    target_samples_denorm = data_module.denormalize(target_samples.to('cpu'))
-    generated_samples_denorm = data_module.denormalize(generated_samples.to('cpu'))
+    target_samples_denorm = data_module.denormalize(target_samples)
+    generated_samples_denorm = data_module.denormalize(generated_samples)
     surr_labels_pred = []
     surr_labels_target = []
     logger.info("Generating surrogate labels for batch of %d samples", len(shot_numbers))
@@ -159,6 +156,9 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
     ):
         full_history_raw = data_module.get_full_history(shot_num.item(), prediction_window_starts_idx[i].item())
         full_history = data_module.denormalize(full_history_raw)  # type: ignore
+        logger.debug(
+            "Devices: full_history - %s, target_samples_denorm %s", full_history.device, target_samples_denorm.device
+        )
         target_pd_rollout = torch.concat((full_history, target_samples_denorm[i]), dim=-1)[PD_index]  # type: ignore
         predicted_pd_rollout = torch.concat((full_history, generated_samples_denorm[i]),
                                             dim=-1)[PD_index]  # type: ignore
