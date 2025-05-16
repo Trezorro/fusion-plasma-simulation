@@ -269,8 +269,7 @@ class FlowModule(L.LightningModule):
         )  # type: ignore
         data_module = self.trainer.datamodule
         surr_labels_pred, surr_labels_target = generate_surrogate_labels(
-            *self.transfer_batch_to_device((meta, generated_samples, target_samples), 'cpu', 0),
-            data_module=data_module
+            meta, generated_samples, target_samples, data_module=data_module
         )  # both pred and target have shape B, Wh+Wf, and
         surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=int)
         surr_labels_target = torch.tensor(surr_labels_target, device=self.device, dtype=int)

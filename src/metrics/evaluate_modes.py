@@ -118,6 +118,7 @@ def get_mode_predictions_single_window(
     normalized_rollout = (x - stats_PD[COLNAME]["mean"]) / stats_PD[COLNAME]["sd"]
     if normalized_rollout.dim() == 2:
         normalized_rollout = normalized_rollout.unsqueeze(1)  # add the input channels dimension back
+    logger.debug("Device before lstm rollout x: %s", x.device)
 
     t_out, y_out = pred_sample_slidingwindow(
         model_PD, t=timeline, x=normalized_rollout, tw=TW, stride=STRIDE, offset_pred=OFFSET_PRED, i_start=0
@@ -141,8 +142,16 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
     PD_index = C.data.cols.x.index("PD")
     history_length = C.data.history_length
     seq_length = C.data.seq_length
+    logger.debug(
+        "Devices before normalize target_samples %s, generated_samples: %s", target_samples.device,
+        generated_samples.device
+    )
     target_samples_denorm = data_module.denormalize(target_samples)
     generated_samples_denorm = data_module.denormalize(generated_samples)
+    logger.debug(
+        "Devices after normalize target_samples %s, generated_samples: %s", target_samples.device,
+        generated_samples.device
+    )
     surr_labels_pred = []
     surr_labels_target = []
     logger.info("Generating surrogate labels for batch of %d samples", len(shot_numbers))
@@ -162,6 +171,10 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
         target_pd_rollout = torch.concat((full_history, target_samples_denorm[i]), dim=-1)[PD_index]  # type: ignore
         predicted_pd_rollout = torch.concat((full_history, generated_samples_denorm[i]),
                                             dim=-1)[PD_index]  # type: ignore
+        logger.debug(
+            "Devices before normalize target_pd_rollout %s, predicted_pd_rollout: %s", target_pd_rollout.device,
+            predicted_pd_rollout.device
+        )
         idx_timeline = np.arange(-prediction_window_starts_idx[i], seq_length)
         surr_labels_pred_i, surr_labels_target_i = get_mode_predictions_single_window(
             pd_rollout_pred=predicted_pd_rollout,
