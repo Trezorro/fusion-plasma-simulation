@@ -305,7 +305,7 @@ class FlowModule(L.LightningModule):
 
     def on_test_epoch_end(self):
         test_metrics = self.moments_metrics.compute()
-        test_metrics |= metrics.prefix_metrics(self.mode_test_metrics.compute(), '/mode/')
+        test_metrics |= metrics.prefix_metrics(self.mode_test_metrics.compute(), '/mode')
         test_metrics['/dice'] = self.dice_metric.compute()
         epoch_metrics = metrics.prefix_metrics(test_metrics, 'test')
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
