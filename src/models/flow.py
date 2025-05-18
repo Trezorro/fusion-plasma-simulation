@@ -263,7 +263,13 @@ class FlowModule(L.LightningModule):
             dict(
                 any_Wh=ModeTransitionMetric('any_Wh'),
                 L_only_Wh=ModeTransitionMetric('L_only_Wh'),
+                D_only_Wh=ModeTransitionMetric('D_only_Wh'),
+                H_only_Wh=ModeTransitionMetric('H_only_Wh'),
+                L_in_Wh=ModeTransitionMetric('L_in_Wh'),
                 D_in_Wh=ModeTransitionMetric('D_in_Wh'),
+                H_in_Wh=ModeTransitionMetric('H_in_Wh'),
+                L_not_in_Wh=ModeTransitionMetric('L_not_in_Wh'),
+                D_not_in_Wh=ModeTransitionMetric('D_not_in_Wh'),
                 H_not_in_Wh=ModeTransitionMetric('H_not_in_Wh'),
             )
         )
@@ -299,7 +305,7 @@ class FlowModule(L.LightningModule):
 
     def on_test_epoch_end(self):
         test_metrics = self.moments_metrics.compute()
-        test_metrics |= self.mode_test_metrics.compute()
+        test_metrics |= metrics.prefix_metrics(self.mode_test_metrics.compute(), '/mode/')
         test_metrics['/dice'] = self.dice_metric.compute()
         epoch_metrics = metrics.prefix_metrics(test_metrics, 'test')
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
