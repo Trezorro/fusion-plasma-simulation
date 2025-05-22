@@ -73,6 +73,7 @@ class UnFlowModule(FlowModule):
             (meta, conditioning_input, target_samples, prior_samples, generated_samples), device=torch.device('cpu'))
         metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
         peak_metrics, peak_features = metrics.get_peak_metrics(generated_samples, target_samples)
+        trajectories = torch.stack((prior_samples, generated_samples))
         return dict(
             meta=meta,
             conditioning_input=conditioning_input,
@@ -80,6 +81,7 @@ class UnFlowModule(FlowModule):
             prior_samples=prior_samples,
             generated_samples=generated_samples,
             metrics=metrics_out | peak_metrics,
+            trajectories=trajectories,
             peak_features=peak_features,
             surr_labels_pred=surr_labels_pred,
             surr_labels_target=surr_labels_target
