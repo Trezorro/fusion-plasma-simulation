@@ -4,3 +4,4 @@
 # from src.models.UNet_fourier import UNetFourier
 # from src.models.complexnet import ComplexNet
 from src.models.flow import FlowModule
+from src.models.UnFlow import UnFlowModule
