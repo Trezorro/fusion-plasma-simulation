@@ -1,13 +1,14 @@
 from src.models.flow import FlowModule
 import torch
 import src.metrics.metrics as metrics
-from src.metrics.evaluate_modes import generate_surrogate_labels, generate_surrogate_labels_batched
-from src.metrics.mode_metrics import ModeTransitionMetric
+from src.metrics.evaluate_modes import generate_surrogate_labels_batched
+
 
 class UnFlowModule(FlowModule):
     """
     Ablation: Directly predicts the output window from prior sample and conditioning, with t=1, no flow/interpolation.
     """
+
     def forward(self, x, t, conditioning_input=None):
         # Standard UNet interface: x, t, conditioning_input
         return self.model(x, t, conditioning=conditioning_input)
@@ -40,7 +41,9 @@ class UnFlowModule(FlowModule):
         if data_module is None:
             raise RuntimeError("No datamodule found on trainer.")
         Wf_length = data_module.seq_length
-        surr_labels_pred, surr_labels_target = self.generate_surrogate_labels(meta, pred, target_samples, data_module)
+        surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
+            meta, pred, target_samples, data_module
+        )
         surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=torch.int)
         surr_labels_target = torch.tensor(surr_labels_target, device=self.device, dtype=torch.int)
         metrics_out = self.moments_metrics(pred, target_samples)
@@ -48,12 +51,7 @@ class UnFlowModule(FlowModule):
         pred_labels = surr_labels_pred[:, -Wf_length:].long()
         target_labels = surr_labels_target[:, -Wf_length:].long()
         metrics_out['/dice'] = self.dice_metric(pred_labels, target_labels)
-        self.log_dict(self.metrics.prefix_metrics(metrics_out, 'test'), prog_bar=True, on_step=True, on_epoch=False)
-
-    @staticmethod
-    def generate_surrogate_labels(meta, pred, target, data_module):
-        from src.metrics.evaluate_modes import generate_surrogate_labels_batched
-        return generate_surrogate_labels_batched(meta, pred, target, data_module=data_module)
+        self.log_dict(metrics.prefix_metrics(metrics_out, 'test'), prog_bar=True, on_step=True, on_epoch=False)
 
     @torch.inference_mode()
     def evaluate(self, batch, n_steps=1, warp_fn=None, data_module=None):
@@ -68,7 +66,9 @@ class UnFlowModule(FlowModule):
             data_module = getattr(self.trainer, 'datamodule', None)
             if data_module is None:
                 raise RuntimeError("No datamodule found on trainer.")
-        surr_labels_pred, surr_labels_target = self.generate_surrogate_labels(meta, generated_samples, target_samples, data_module)
+        surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
+            meta, generated_samples, target_samples, data_module
+        )
         meta, conditioning_input, target_samples, prior_samples, generated_samples = self._apply_batch_transfer_handler(
             (meta, conditioning_input, target_samples, prior_samples, generated_samples), device=torch.device('cpu'))
         metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
