@@ -15,7 +15,7 @@ model:
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
-      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
+      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 5 # Default 3
       c_channels: 0  # Default 0 disables conditioning on C
