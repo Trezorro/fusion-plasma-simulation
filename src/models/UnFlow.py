@@ -14,13 +14,26 @@ class UnFlowModule(FlowModule):
         return self.model(x, t, conditioning=conditioning_input)
 
     def training_step(self, batch, batch_idx):
-        meta, conditioning_input, target_samples = batch
-        noise_sample = self.get_prior_samples(conditioning_input, target_samples.size())
-        t_dummy = torch.ones(target_samples.size(0), device=self.device)  # constant t=1
-        pred = self.model(noise_sample, t_dummy, conditioning_input=conditioning_input)
-        loss = self.loss(pred, target_samples)
-        self.log("loss/train", loss, prog_bar=True)
-        return loss
+        opt: LightningOptimizer = self.optimizers()  # type: ignore
+        total_loss = 0
+        opt.zero_grad()
+        for match_i in range(1, self.batch_rematch_factor + 1):
+            # this is a batch matched with one sample from the prior:
+            meta, conditioning_input, target_samples = batch
+            noise_sample = self.get_prior_samples(conditioning_input, target_samples.size())
+            t_dummy = torch.ones(target_samples.size(0), device=self.device)  # constant t=1
+            pred = self.model(noise_sample, t_dummy, conditioning_input=conditioning_input)
+            loss = self.loss(pred, target_samples)
+            if loss.isnan().any():
+                raise ValueError(f"Loss is NaN: {loss}")
+            self.manual_backward(loss)
+            total_loss += loss.detach()
+            if match_i % self.step_every_nth_match == 0:
+                # See: on_before_optimizer_step() for gradient clipping
+                opt.step()
+                opt.zero_grad()
+        total_loss /= self.batch_rematch_factor
+        self.log("loss/train", total_loss, prog_bar=True)
 
     def validation_step(self, batch, batch_idx):
         meta, conditioning_input, target_samples = batch

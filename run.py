@@ -69,7 +69,7 @@ if "skip_log_summary" not in C or not C["skip_log_summary"]:
     logger.info("Model loaded, summary:")
     model.log_summary(C)
 # log weights for analysis in W&B
-wandb_logger.watch(model, log="all", log_freq=50)
+wandb_logger.watch(model, log="all", log_freq=50)  # log gradients
 logger.info("Model loaded, loading data.")
 fusion_data_module = src.data_loaders.FusionShotDataModule(**C.data)
 

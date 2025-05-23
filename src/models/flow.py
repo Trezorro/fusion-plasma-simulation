@@ -121,6 +121,7 @@ class FlowModule(L.LightningModule):
         self.log("loss/train", total_loss, prog_bar=True)
 
     def batch_match(self, batch, batch_idx, match_i=0):
+        """Create a velocity training sample by sampling the prior once and interpolating, then calculate the loss."""
         t, samples_at_t, velocity, conditioning_input = self.interpolate_samples(batch)
         pred_velocity = self.model(samples_at_t, t, conditioning_input)
         loss = self.loss(pred_velocity, velocity)
