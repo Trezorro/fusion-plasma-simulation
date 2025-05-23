@@ -43,7 +43,7 @@ class FlowModule(L.LightningModule):
         ConditionalUNet=ConditionalUNet,
     )
     SAMPLE_RATE = 10_000  # Hz
-    PRIOR_OPTIONS = ["normal", "levy", "resample", "brownian", "copy"]
+    PRIOR_OPTIONS = ["normal", "levy", "resample", "brownian", "copy", "constant"]
 
     def __init__(
         self,
@@ -51,7 +51,7 @@ class FlowModule(L.LightningModule):
         model_params: Optional[DictConfig | dict] = None,
         loss: str = "MSELoss",
         optimizer_params: Optional[DictConfig | dict] = None,
-        prior: Literal["normal", "levy", "resample", "brownian", "copy"] = "normal",
+        prior: Literal["normal", "levy", "resample", "brownian", "copy", "constant"] = "normal",
         prior_sigma: float = 0.3,
         ot_method: Optional[str] = None,
         ot_replace: bool = False,
@@ -173,6 +173,7 @@ class FlowModule(L.LightningModule):
         return t, samples_at_t, target_velocity, conditioning_inputs
 
     def get_prior_samples(self, conditioning_inputs, target_size: torch.Size):
+        """Sample priors either around the mean of 0.5 or starting connected to the last value of Wh."""
         assert type(
             target_size
         ) == torch.Size and 2 <= len(target_size) <= 5, "target_size must be a torch.Size with 2-5 dimensions"
@@ -195,6 +196,8 @@ class FlowModule(L.LightningModule):
                 # in case the x_history is longer than the target_samples, crop to seq_length
                 history = conditioning_inputs['x_history'].to(self.device)
                 prior_samples = self.generate_history_resample(history, seq_length)
+            case "constant":
+                prior_samples = torch.zeros(target_size, device=self.device) + 0.5
             case _:
                 raise ValueError(f"Invalid prior: {self.prior}")
         return prior_samples

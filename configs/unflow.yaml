@@ -5,7 +5,7 @@ patience: 20
 model: 
   Class: UnFlowModule
   params:
-    prior: 'resample'  # normal, copy, brownian, levy, resample
+    prior: 'constant'  # normal, copy, brownian, levy, resample, constant
     prior_sigma: 0.01  # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
     ot_method: null  # null to disable
     ot_replace: true  # Default false
@@ -15,7 +15,7 @@ model:
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
-      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
+      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 5 # Default 3
       c_channels: 0  # Default 0 disables conditioning on C
