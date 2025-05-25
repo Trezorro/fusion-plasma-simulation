@@ -5,7 +5,7 @@ patience: 20
 model: 
   Class: UnFlowModule
   params:
-    prior: 'brownian'  # normal, copy, brownian, levy, resample, constant
+    prior: 'constant'  # normal, copy, brownian, levy, resample, constant
     prior_sigma: 0.01  # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
     ot_method: null  # null to disable
     ot_replace: true  # Default false
