@@ -50,9 +50,18 @@ echo "Version: $(python --version 2>&1)"
 
 
 # Export wandb env variable
-export WANDB_DIR="~/fusion-plasma-simulation/output"
 export WANDB_NOTES=$(git log -n 10 --pretty=format:"%B (%h - %ar) %N")
 export WANDB__SERVICE_WAIT=300
+
+# BASE_DIR="/scratch-local/mtresoor/fusion-plasma-simulation"
+# export WANDB_DIR="~/fusion-plasma-simulation/output"
+export WANDB_DIR="/scratch-shared/mtresoor/wandb"
+export WANDB_CACHE_DIR="/scratch-shared/mtresoor/wandb/cache"
+export WANDB_ARTIFACT_DIR="/scratch-shared/mtresoor/artifacts"
+# Ensure WANDB_CACHE_DIR and WANDB_ARTIFACT_DIR exist
+[ ! -d "$WANDB_DIR" ] && mkdir -p "$WANDB_DIR"
+[ ! -d "$WANDB_CACHE_DIR" ] && mkdir -p "$WANDB_CACHE_DIR"
+[ ! -d "$WANDB_ARTIFACT_DIR" ] && mkdir -p "$WANDB_ARTIFACT_DIR"
 
 # Run the Python script
 echo "---------------- JOB START ----------------"

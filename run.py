@@ -59,7 +59,7 @@ dated_run_name = current_date + '-' + RUN_NAME
 wandb_logger = WandbLogger(
     log_model="all",
     experiment=run,
-    save_dir="output/models/",  # where to save the model checkpoints, will get lighting_logs/ appended
+    # save_dir="output/models/",  # where to save the model checkpoints, will get lighting_logs/ appended
     checkpoint_name=dated_run_name,  # name of the wandb artifact
 )
 
