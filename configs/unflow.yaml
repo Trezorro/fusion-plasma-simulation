@@ -38,3 +38,15 @@ model:
       lr: 0.00005
       weight_decay: 0  # Default 0
       amsgrad: false  # Default false
+
+# disable c:
+data:
+  cols:
+    c: []
+    # - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
+    # - gas_fringes  # Ingepompte gas
+    # - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
+    # - ECRH  # magnetron.
+    # - a_minor  # reel gemeten plasma shape a k d (horizontale radius
+    # - KAPPA
+    # - DELTA  # linkerbovenhoek naar links vanuit hetmidden
