@@ -22,8 +22,6 @@ logger = logging.getLogger(__name__)
 
 FLOW_STEPS = 150 if torch.cuda.is_available() else 6
 
-logger.debug("Ran flow module.")
-
 
 class FlowModule(L.LightningModule):
 

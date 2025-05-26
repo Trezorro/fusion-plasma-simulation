@@ -52,7 +52,7 @@ def load_config_from_file(name=MAIN_CONFIG_FILE, as_omega=False) -> dict | omega
     if as_omega:
         return conf
     conf = OmegaConf.to_object(conf)
-    logger.info(f"Configuration:\n{pretty_config(conf)}")
+    logger.info("Loaded configuration from %s: \n%s", f'configs/{name}.yaml', pretty_config(conf))
     if not type(conf) == dict:
         raise ValidationError("Configuration was not in dict style. Got: " + repr(conf))
     return dict(conf)

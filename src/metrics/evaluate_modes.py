@@ -24,12 +24,6 @@ TW = 40
 OFFSET_PRED = 20
 STRIDE = 10
 
-## A Time window
-# -
-C = get_current_config()
-train_shots = C.data.train_shots
-test_shots = C.data.test_shots
-
 with open(MODEL_METADATA_DIR / 'stats_PD.json', 'r') as f:
     stats_PD = json.load(f)
 # %% Initialize mode segmentation model
@@ -276,8 +270,3 @@ def generate_surrogate_labels_batched(meta, generated_samples, target_samples, d
 
 
 # surr_labels_target, surr_labels_pred = generate_surrogate_labels(get_mode_predictions, evaluation_output)
-
-if __name__ == "__main__":
-    # load the data into a data frame
-    # then put all the X col values into a C x L array for each shot
-    raise ValueError
