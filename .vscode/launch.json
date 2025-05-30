@@ -49,6 +49,29 @@
             
         },
         {
+            "name": "Reeval",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "run",
+            "env": {
+                // "WANDB_MODE":"disabled",
+                "WANDB_NOTES": "debugging",
+            },
+            "args": [
+                "reeval=true",
+                "run_name=ExpB_7_C_brown_seq",
+                "epochs=1",
+                "evaluation.n_steps=2",
+                "evaluation.plot_functions=null",
+                "skip_log_summary=True",
+                "batch_size=16",
+                "model.params.batch_rematch_factor=1",
+                "model.params.step_every_nth_match=null"
+            ],
+            "justMyCode": true
+            
+        },
+        {
             "name": "Run sweep agent",
             "type": "debugpy",
             "request": "launch",

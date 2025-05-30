@@ -8,25 +8,36 @@ logging.getLogger('src').setLevel(logging.DEBUG)
 logger.info("Starting run.py with wandb init.")
 import wandb
 import wandb.env
-from src.config import get_current_config, load_config_from_file
+from src.config import find_wandb_run, get_current_config, load_config_from_file, find_and_download_model, pretty_config, is_reeval_run
 
-conf = load_config_from_file('fm_toy')
-PROJECT = "flowtoy"
-run = wandb.init(
-    name=conf.get("run_name", None),
-    tags=conf.get("tags", None),
-    project=PROJECT,
-    config=conf,
-    # dir="./output/wandb",
-    # mode="offline",
-)
 logger.debug(
     "Wandb dirs: \n  main: %s, \n  data dir: %s, \n  artifacts: %s", wandb.env.get_dir(),
     wandb.env.get_data_dir(), wandb.env.get_artifact_dir()
 )
-C = get_current_config()
-RUN_NAME = wandb.run.name
+
+PROJECT = "flowtoy"
+reeval_prev_run = is_reeval_run() # Based on cli arguments
+if reeval_prev_run:
+    logger.info("Re-evaluating run, loading existing wandb run.")
+    base_run = find_wandb_run(reeval_prev_run, project=PROJECT)
+    assert isinstance(base_run, wandb.apis.public.Run), f"Run {FIND_RUN} not found"  # type: ignore
+    conf = base_run._attrs['config']
+    RUN_NAME = "reeval-"+base_run.name
+    base_checkpoint_path = find_and_download_model(base_run)
+else:
+    logger.info("Training new model, initializing new wandb run.")
+    conf = load_config_from_file('fm_toy')
+    RUN_NAME = conf.get("run_name", None)
+    base_checkpoint_path = None
+run = wandb.init(
+    name=RUN_NAME,
+    project=PROJECT,
+    config=conf,
+    # mode="offline",
+)
 RUN_ID = wandb.run.id
+C = get_current_config(wandb_only=True) # clean synchronized config object from wandb
+logger.info("Running with config:\n%s", pretty_config(C))
 
 logger.info("Run initialized, importing torch and lightning.")
 import torch
@@ -50,6 +61,10 @@ import src.metrics.metrics as metrics
 
 logger.info("Imports complete, init wandb logger and loading model and data.")
 
+logger.info("Trying to init data module:")
+fusion_data_module = src.data_loaders.FusionShotDataModule(**C.data)
+
+
 metrics.define_error_metrics("val")
 metrics.define_error_metrics("train")
 wandb.define_metric("loss/train", summary="min")
@@ -64,14 +79,16 @@ wandb_logger = WandbLogger(
 )
 
 ModelClass = getattr(src.models, C.model.Class)
-model = ModelClass(**C.model.params)
+if reeval_prev_run and base_checkpoint_path is not None:
+    model = ModelClass.load_from_checkpoint(base_checkpoint_path)
+else:
+    model = ModelClass(**C.model.params) # fresh model
+    wandb_logger.watch(model, log="all", log_freq=50)  # log gradients
 if "skip_log_summary" not in C or not C["skip_log_summary"]:
     logger.info("Model loaded, summary:")
     model.log_summary(C)
 # log weights for analysis in W&B
-wandb_logger.watch(model, log="all", log_freq=50)  # log gradients
 logger.info("Model loaded, loading data.")
-fusion_data_module = src.data_loaders.FusionShotDataModule(**C.data)
 
 logger.info("Data loaded, initializing trainer.")
 # torch.profiler.profile(
@@ -117,12 +134,12 @@ trainer = L.Trainer(
         src.evaluation.TrainStepMonitor(),
     ]
 )
-logger.info("Starting training with first validation...")
-# trainer.validate(model=model, dataloaders=val_loader)echo $WANDB_DATA_DIR
-logger.info("Starting model fit...")
-trainer.fit(model=model, datamodule=fusion_data_module)
-logger.info("Finished training.")
-wandb_logger.experiment.unwatch(model)
+
+if not reeval_prev_run: # Train fresh model
+    logger.info("Starting model fit...")
+    trainer.fit(model=model, datamodule=fusion_data_module)
+    logger.info("Finished training.")
+    wandb_logger.experiment.unwatch(model)
 
 # if torch.cuda.is_available():
 #     logger.info("Dumping CUDA memory snapshot...")
@@ -130,12 +147,12 @@ wandb_logger.experiment.unwatch(model)
 #     torch.cuda.memory._dump_snapshot(filename=memory_trace_file)
 #     logger.info("CUDA memory snapshot dumped at %s", memory_trace_file)
 
-logger.info("Starting final validation...")
+logger.info("Starting final testing...")
 trainer.test(model=model, datamodule=fusion_data_module)
-logger.info("Finished training and testing.")
+logger.info("Finished testing.")
+
 
 logger.info("Run finished, deleting redundant artifacts.")
-
 if not wandb.run.disabled:
     src.evaluation.prune_online_checkpoints(run)
 

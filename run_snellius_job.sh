@@ -62,7 +62,8 @@ export WANDB_ARTIFACT_DIR="/scratch-shared/mtresoor/artifacts"
 
 # Run the Python script
 echo "---------------- JOB START ----------------"
-srun python run.py run_name=$1
+echo "Running: srun python run.py run_name=$1 reeval=$2"
+srun python run.py run_name=$1 reeval=$2
 
 # srun wandb agent deep-learning-course-team/plasma/96sckgvi
 # Deactivate the conda environment

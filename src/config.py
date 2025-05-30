@@ -1,4 +1,6 @@
 """Hyper parameter configuration helper functions"""
+from pathlib import Path
+from typing import Literal
 from omegaconf import OmegaConf, ValidationError
 import omegaconf
 import wandb
@@ -52,14 +54,21 @@ def load_config_from_file(name=MAIN_CONFIG_FILE, as_omega=False) -> dict | omega
     if as_omega:
         return conf
     conf = OmegaConf.to_object(conf)
-    logger.info("Loaded configuration from %s: \n%s", f'configs/{name}.yaml', pretty_config(conf))
+    logger.info("Loaded configuration from %s", f'configs/{name}.yaml')
     if not type(conf) == dict:
         raise ValidationError("Configuration was not in dict style. Got: " + repr(conf))
     return dict(conf)
 
+def is_reeval_run() -> str | Literal[False]:
+    """Check the program input arguments just to see whether we need to do training or just testing."""
+    cli_conf = OmegaConf.from_cli()
+    if cli_conf.get("reeval", False):
+        return cli_conf.get("run_name")
+    else:
+        return False
 
 def pretty_config(conf):
-    return pformat(conf, compact=True, sort_dicts=False, width=160)
+    return pformat(OmegaConf.to_object(conf), compact=True, sort_dicts=False, width=160)
 
 
 def update_model_input_channels(conf):
@@ -75,12 +84,14 @@ def update_model_input_channels(conf):
 
 
 # wandb.config.update(conf)
-def get_current_config():
+def get_current_config(wandb_only=False):
     if not wandb.config:
         raise RuntimeError("wandb.config was not initialized yet.")
     try:
         config_dict = dict(wandb.config)
     except wandb.Error as e:
+        if wandb_only:
+            raise RuntimeError("wandb.config is not available yet. Did you call wandb.init()?")
         config_dict = load_config_from_file()
         logger.info("No wandb config found. Loaded it from current yaml file.")
     conf = OmegaConf.create(config_dict)
@@ -116,6 +127,40 @@ def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.
     if run is not None:
         RUN_ID = run.id
         RUN_NAME = run.name
-        print(f" ✅ Run ID: {RUN_ID}, Run Name: {RUN_NAME}\n Created at: {run.created_at}")
+        print(f" ✅ Found Run ID: {RUN_ID}, Run Name: {RUN_NAME}\n Created at: {run.created_at}")
         print(f"   Run URL: {run.url}")
     return run
+
+
+def find_and_download_model(run):
+    artifacts = [a for a in run.logged_artifacts() if a.type == "model"]
+    for artifact in artifacts:
+        print(
+            f"{artifact.name}\n  > Type: {artifact.type}, Version: {artifact.version}, aliases: {artifact.aliases}, size: {artifact.size:_}, updated: {artifact.updated_at}, description: {artifact.description}"
+        )
+
+    if len(artifacts) == 0:
+        print("No model artifacts found")
+        raise ValueError("No model artifacts found")
+    elif len(artifacts) == 1:
+        artifact = artifacts[0]
+        print(f"Single model artifact found, so using it.")
+    else:
+        artifact_name = input(f"Enter the name of the artifact to use (default: {artifacts[0].name}): ")
+        if artifact_name == "":
+            artifact_name = artifacts[0].name
+        artifact = wandb.Api().artifact(
+            artifact_name
+        )  # TODO fix CommError: project 'uncategorized' not found under entity 'tresoor'
+
+        print(f"Using artifact {artifact.name}")
+    print("Downloading artifact...")
+    artifact_dir = artifact.download()
+    print("Stored model locally in", artifact_dir)
+    # Log model summary
+    # logger.info("Model loaded. Summary:")
+    # model.log_summary(C)
+    # Get the number of steps the model has trained
+
+    # load checkpoint
+    return Path(artifact_dir) / "model.ckpt"

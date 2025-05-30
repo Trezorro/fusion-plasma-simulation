@@ -25,9 +25,27 @@ sync_slurms() {
     done
 }
 
+# Parse arguments for optional --reeval flag
+REEVAL_MODE=false
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --reeval)
+            REEVAL_MODE=true
+            shift # past flag
+            ;;
+        *)
+            POSITIONAL+=("$1") # save positional arg
+            shift # past argument
+            ;;
+    esac
+done
+set -- "${POSITIONAL[@]}" # resets the script’s positional parameters
+JOB_NAME=$1
+
 # Check if a job name argument is provided
 if [ "$#" -ne 1 ] || [ -z "$1" ]; then
-    echo "To submit a new job, use: $0 <job_name>"
+    echo "To submit a new job, use: $0 <job_name> [--reeval]"
     echo "Will check the queue and sync results from snellius."
     # SSH into the main node, check the queue status, and run rsync
     ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
@@ -40,20 +58,26 @@ EOF
     exit 0
 fi
 
-# Check if there are commits that have not been pushed
-LOCAL_COMMITS=$(git rev-list HEAD --not --remotes)
-if [[ -n $LOCAL_COMMITS ]]; then
-    echo "Error: There are local commits that have not been pushed. Please push your changes."
-    exit 1
-fi
+# Bypass commit checks and tagging if in reeval mode
+if [ "$REEVAL_MODE" = false ]; then
+    # Check if there are commits that have not been pushed
+    LOCAL_COMMITS=$(git rev-list HEAD --not --remotes)
+    if [[ -n $LOCAL_COMMITS ]]; then
+        echo "Error: There are local commits that have not been pushed. Please push your changes."
+        exit 1
+    fi
 
-# Tag the last commit with the job name
-if ! git tag -a "$JOB_NAME" -m "Job '$JOB_NAME' [$(date)]"; then
-    echo "Error: Failed to tag the last commit."
-    exit 1
-fi
+    # Tag the last commit with the job name
+    if ! git tag -a "$JOB_NAME" -m "Job '$JOB_NAME' [$(date)]"; then
+        echo "Error: Failed to tag the last commit."
+        exit 1
+    fi
 
-git push origin "$JOB_NAME"
+    git push origin "$JOB_NAME"
+    SBATCH_JOB_NAME="$JOB_NAME"
+else
+    SBATCH_JOB_NAME="reeval-$JOB_NAME"
+fi
 
 # SSH into the main node, pull latest code, submit SLURM job, and inspect queue
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
@@ -62,7 +86,7 @@ ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     git checkout $GIT_BRANCH  # Switch to the main branch, incase we are detached
     git reset --hard origin/$GIT_BRANCH  # Reset local branch to match remote
     git pull origin $GIT_BRANCH
-    sbatch --job-name=$JOB_NAME $JOB_SCRIPT $JOB_NAME
+    sbatch --job-name=$SBATCH_JOB_NAME $JOB_SCRIPT $JOB_NAME $REEVAL_MODE
     echo "Submitted job '$JOB_NAME'. Checking queue status:"
     squeue $QUEUE_FORMAT
 EOF

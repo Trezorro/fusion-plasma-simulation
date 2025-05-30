@@ -15,6 +15,12 @@
         "problemMatcher": []
       },
       {
+        "label": "Reeval Snellius Experiment",
+        "type": "shell",
+        "command": "bash src/HPC_setup/submit_remote_job_snellius.sh '${input:run_name}' --reeval",
+        "problemMatcher": []
+      },
+      {
         "label": "Run HPC Experiment",
         "type": "shell",
         "command": "bash src/HPC_setup/submit_remote_job_HPC.sh '${input:run_name}'",
