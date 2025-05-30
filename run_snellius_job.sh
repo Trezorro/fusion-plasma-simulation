@@ -43,7 +43,8 @@ which python
 echo "Version: $(python --version 2>&1)"
 
 
-if [ "$2" = "true" ]; then
+if [[ $2 == "true" ]]; then
+    echo "Will run on latest commit for reeval task"
     git checkout -
 else
     git checkout tags/$1
