@@ -19,7 +19,7 @@ echo "-------------------------------"
 echo $1
 echo "==============================="
 echo
-echo "Job script $0"
+echo "Running Job script $0 $1 $2"
 echo "Current working directory:"
 pwd
 echo
@@ -43,8 +43,12 @@ which python
 echo "Version: $(python --version 2>&1)"
 
 
+if [ "$2" = "true" ]; then
+    git checkout -
+else
+    git checkout tags/$1
+fi
 # Export wandb env variable
-git checkout tags/$1
 export WANDB_NOTES=$(git log -n 5 --pretty=format:"%B (%h - %ar) %N")
 
 # BASE_DIR="/scratch-local/mtresoor/fusion-plasma-simulation"
