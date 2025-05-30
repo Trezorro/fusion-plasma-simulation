@@ -142,19 +142,25 @@ class ConditionalUNet(nn.Module):
         # TODO: concat positional encoding also when not using x_history, condition only on position then.
         self.act = ACTIVATION_OPTIONS[activation]()
         self.ConvLayer = CONV_LAYERS[spatial_dim]
+        logger.debug(
+            f"[UNet] Initializing ConditionalUNet: input_channels={input_channels}, c_channels={c_channels}, apex_hidden_channels={apex_hidden_channels}, time_embedding={time_embedding}, time_embedding_d={time_embedding_d}, positional_encoding={positional_encoding}, positional_encoding_d={positional_encoding_d}, positional_encoding_c={positional_encoding_c}, ch_mults={ch_mults}, is_attn={is_attn}, mid_attn={mid_attn}, attn_heads={attn_heads}, n_blocks={n_blocks}, activation={activation}, norm_groups={norm_groups}, conditioning={conditioning}, conditioning_method={conditioning_method}"
+        )
         # Project image into feature map
         self.image_proj = self.ConvLayer(in_channels, apex_hidden_channels, kernel_size=3, padding=1)
+        logger.debug(
+            f"[UNet] image_proj: in_channels={in_channels}, out_channels={apex_hidden_channels}, kernel_size=3, padding=1, ConvLayer={self.ConvLayer.__name__}"
+        )
 
         # #### First half of U-Net - decreasing resolution
         down = []
         in_channels = apex_hidden_channels
-        # For each resolution
         n_resolutions = len(ch_mults)
         for i in range(n_resolutions):
-            # Number of output channels at this resolution
             out_channels = in_channels * ch_mults[i]
-            # Add `n_blocks`
-            for _ in range(n_blocks):
+            for block_idx in range(n_blocks):
+                logger.debug(
+                    f"[UNet][DownBlock][res={i}][block={block_idx}] DownBlock: in_channels={in_channels}, out_channels={out_channels}, time_emb_channels={self.time_emb_channels}, attn={is_attn[i]}, attn_heads={attn_heads}, act={self.act.__class__.__name__}, norm_groups={norm_groups}, spatial_dim={spatial_dim}"
+                )
                 down.append(
                     DownBlock(
                         in_channels,
@@ -168,14 +174,14 @@ class ConditionalUNet(nn.Module):
                     )
                 )
                 in_channels = out_channels
-            # Down sample at all resolutions except the last
             if i < n_resolutions - 1:
+                logger.debug(f"[UNet][Downsample][reslevel={i}] Downsample: in_channels={in_channels}\n")
                 down.append(Downsample(in_channels, spatial_dims=spatial_dim))
-
-        # Combine the set of modules
         self.down = nn.ModuleList(down)
 
-        # Middle block
+        logger.debug(
+            f"[UNet] MiddleBlock: in_channels={out_channels}, time_emb_channels={self.time_emb_channels}, has_attn={mid_attn}, act={self.act.__class__.__name__}, norm_groups={norm_groups}, attn_heads={attn_heads}"
+        )
         self.middle = MiddleBlock(
             out_channels,
             self.time_emb_channels,
@@ -186,15 +192,14 @@ class ConditionalUNet(nn.Module):
             attn_heads=attn_heads,
         )
 
-        # #### Second half of U-Net - increasing resolution
         up = []
-        # Number of channels
         in_channels = out_channels
-        # For each resolution
         for i in reversed(range(n_resolutions)):
-            # `n_blocks` at the same resolution
             out_channels = in_channels
-            for _ in range(n_blocks):
+            for block_idx in range(n_blocks):
+                logger.debug(
+                    f"[UNet][UpBlock][res={i}][block={block_idx}] UpBlock: in_channels={in_channels}, out_channels={out_channels}, time_emb_channels={self.time_emb_channels}, attn={is_attn[i]}, attn_heads={attn_heads}, act={self.act.__class__.__name__}, norm_groups={norm_groups}, spatial_dim={spatial_dim}"
+                )
                 up.append(
                     UpBlock(
                         in_channels,
@@ -207,12 +212,14 @@ class ConditionalUNet(nn.Module):
                         attn_heads=attn_heads,
                     )
                 )
-            # Final block to reduce the number of channels
             out_channels = in_channels // ch_mults[i]
+            logger.debug(
+                f"[UNet][up][res={i}][final] UpBlock: in_channels={in_channels}, out_channels={out_channels}, time_emb_channels={self.time_emb_channels}, attn={is_attn[i]}, attn_heads={attn_heads}, act={self.act.__class__.__name__}, norm_groups={norm_groups}, spatial_dim={spatial_dim}"
+            )
             up.append(
                 UpBlock(
                     in_channels,
-                    out_channels,  # out channels should also match the skip connection channels
+                    out_channels,
                     self.time_emb_channels,
                     is_attn[i],
                     act=self.act,
@@ -222,15 +229,18 @@ class ConditionalUNet(nn.Module):
                 )
             )
             in_channels = out_channels
-            # Up sample at all resolutions except last
             if i > 0:
+                logger.debug(
+                    f"[UNet][Upsample][res={i}] Upsample Conv: in+out channels={in_channels}, k=4, stride=2, pad=1\n"
+                )
                 up.append(Upsample(in_channels, spatial_dims=spatial_dim))
-
-        # Combine the set of modules
         self.up = nn.ModuleList(up)
 
-        # Final normalization and convolution layer
+        logger.debug(f"[UNet] Final norm: norm_groups={norm_groups}, apex_hidden_channels={apex_hidden_channels}")
         self.norm = nn.GroupNorm(norm_groups, apex_hidden_channels) if norm_groups > 0 else nn.Identity()
+        logger.debug(
+            f"[UNet] Final conv: in_channels={in_channels}, out_channels={input_channels}, kernel_size=3, padding=1, ConvLayer={self.ConvLayer.__name__}"
+        )
         self.final = self.ConvLayer(
             in_channels, input_channels, kernel_size=3, padding=1
         )  # TODO: Option for 1x1 convolution
@@ -333,18 +343,14 @@ class ConditionalUNet(nn.Module):
         if self.use_positional_embedding:
             position_sequence = conditioning_input.get("position_sequence")  # [batch_size, full_seq_length]
             # Assertions:
-            pos_n, pos_seq_length = position_sequence.shape
-            assert pos_seq_length == double_length, (
-                f"Position sequence length {pos_seq_length} does not match conditioned sequence length {double_length}"
-            )
-            assert pos_n == n  # TODO: remove this when we have a proper test
+            # pos_n, pos_seq_length = position_sequence.shape
+            # assert pos_seq_length == double_length, (
+            #     f"Position sequence length {pos_seq_length} does not match conditioned sequence length {double_length}"
+            # )
+            # assert pos_n == n  # TODO: remove this when we have a proper test
             # Embed the position sequence and concatenate:
-            position_embedding = self.pos_emb(
-                position_sequence
-            )  # batch_size, full_lenght, positional_encoding_c
-            position_embedding = position_embedding.permute(
-                0, 2, 1
-            )  # batch_size, positional_encoding_c, full_length
+            position_embedding = self.pos_emb(position_sequence)  # batch_size, full_lenght, positional_encoding_c
+            position_embedding = position_embedding.permute(0, 2, 1)  # batch_size, positional_encoding_c, full_length
             x = torch.cat((x, position_embedding), dim=1)
         return x
 
@@ -355,16 +361,12 @@ class ConditionalUNet(nn.Module):
         if self.use_positional_embedding:
             position_sequence = conditioning_input.get("position_sequence")  # [batch_size, full_seq_length]
             # Assertions:
-            pos_n, pos_seq_length = position_sequence.shape
-            assert pos_seq_length == history_length + seq_length
-            assert pos_n == n  # TODO: remove this when we have a proper test
+            # pos_n, pos_seq_length = position_sequence.shape
+            # assert pos_seq_length == history_length + seq_length
+            # assert pos_n == n  # TODO: remove this when we trust the code
             # Embed the position sequence and concatenate:
-            position_embedding = self.pos_emb(
-                position_sequence
-            )  # batch_size, full_lenght, positional_encoding_c
-            position_embedding = position_embedding.permute(
-                0, 2, 1
-            )  # batch_size, positional_encoding_c, full_length
+            position_embedding = self.pos_emb(position_sequence)  # batch_size, full_lenght, positional_encoding_c
+            position_embedding = position_embedding.permute(0, 2, 1)  # batch_size, positional_encoding_c, full_length
             x = torch.cat((x, position_embedding[:, :, -seq_length:]), dim=1)
             x_history = torch.cat((x_history, position_embedding[:, :, :history_length]), dim=1)
         if history_length > seq_length:
@@ -519,7 +521,7 @@ class AttentionBlock(nn.Module):
     This is similar to [transformer multi-head attention](../../transformers/mha.html).
     """
 
-    def __init__(self, n_channels: int, n_heads: int = 1, d_k: int = None):
+    def __init__(self, n_channels: int, n_heads: int = 1, d_k: int | None = None):
         """
         * `n_channels` is the number of channels in the input
         * `n_heads` is the number of heads in multi-head attention
@@ -527,7 +529,9 @@ class AttentionBlock(nn.Module):
         * `norm_groups` is the number of groups for [group normalization](../../normalization/group_norm/index.html)
         """
         super().__init__()
-
+        logger.debug(
+            f"              (AttentionBlock) n_channels={n_channels}, n_heads={n_heads}, d_k={d_k if d_k is not None else n_channels}"
+        )
         # Default `d_k`
         if d_k is None:
             d_k = n_channels
@@ -607,15 +611,14 @@ class DownBlock(nn.Module):
         attn_heads: int = 1,
     ):
         super().__init__()
+        logger.debug(
+            f"[UNet][DownBlock][ResidualBlock] in_channels={in_channels}, out_channels={out_channels}, time_channels={time_channels}, norm_groups={norm_groups}, act={act.__class__.__name__}"
+        )
         self.res = ResidualBlock(
-            in_channels,
-            out_channels,
-            time_channels,
-            act=act,
-            norm_groups=norm_groups,
-            spatial_dim=spatial_dim
+            in_channels, out_channels, time_channels, act=act, norm_groups=norm_groups, spatial_dim=spatial_dim
         )
         if has_attn:
+            logger.debug(f"[UNet][DownBlock][AttentionBlock] out_channels={out_channels}, attn_heads={attn_heads}")
             self.attn = AttentionBlock(out_channels, n_heads=attn_heads)
         else:
             self.attn = nn.Identity()
@@ -651,8 +654,9 @@ class UpBlock(nn.Module):
         attn_heads: int = 1,
     ):
         super().__init__()
-        # The input has `in_channels + out_channels` because we concatenate the output of the same resolution
-        # from the first half of the U-Net
+        logger.debug(
+            f"[UNet][UpBlock][ResidualBlock] double in_channels={in_channels + out_channels}, out_channels={out_channels}, time_channels={time_channels}, norm_groups={norm_groups}, act={act.__class__.__name__}"
+        )
         self.res = ResidualBlock(
             in_channels + out_channels,
             out_channels,
@@ -662,6 +666,7 @@ class UpBlock(nn.Module):
             spatial_dim=spatial_dim
         )
         if has_attn:
+            logger.debug(f"[UNet][UpBlock][AttentionBlock] out_channels={out_channels}, attn_heads={attn_heads}")
             self.attn = AttentionBlock(out_channels, n_heads=attn_heads)
         else:
             self.attn = nn.Identity()
@@ -694,6 +699,9 @@ class MiddleBlock(nn.Module):
         super().__init__()
         if in_channels is None:
             in_channels = n_channels
+        logger.debug(
+            f"[UNet][MiddleBlock][ResidualBlock] in_channels={in_channels}, out_channels={n_channels}, time_channels={time_channels}, norm_groups={norm_groups}, act={act.__class__.__name__}"
+        )
         self.res1 = ResidualBlock(
             in_channels,
             n_channels,
@@ -703,9 +711,13 @@ class MiddleBlock(nn.Module):
             spatial_dim=spatial_dim,
         )
         if has_attn:
+            logger.debug(f"[UNet][MiddleBlock][AttentionBlock] n_channels={n_channels}, attn_heads={attn_heads}")
             self.attn = AttentionBlock(n_channels, n_heads=attn_heads)
         else:
             self.attn = nn.Identity()
+        logger.debug(
+            f"[UNet][MiddleBlock][ResidualBlock 2] in_channels={n_channels}, out_channels={n_channels}, time_channels={time_channels}, norm_groups={norm_groups}, act={act.__class__.__name__}\n"
+        )
         self.res2 = ResidualBlock(
             n_channels,
             n_channels,

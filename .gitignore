@@ -7,6 +7,7 @@ wandb/
 artifacts/
 output/*
 !output/.gitkeep
+!output/model_structure.*
 lightning_logs/
 # Python specific
 __pycache__/

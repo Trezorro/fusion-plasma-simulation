@@ -187,44 +187,44 @@ evaluation:
 
 
 # model: model.yaml # To be replaced by respective yaml file content
-model: configs/unflow.yaml
+# model: configs/unflow.yaml
 
-# model: 
-#   Class: UnFlowModule
-#   params:
-#     prior: 'normal'  # normal, copy, brownian, levy, resample
-#     prior_sigma: 0.3  # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
-#     ot_method: null  # null to disable
-#     ot_replace: true  # Default false
-#     batch_rematch_factor: 5  # Default 1
-#     step_every_nth_match: 1  # Default 1 # TODO
-#     gradient_clip_val: ${ gradient_clip_val }
-#     model: ConditionalUNet  # Must accept x, t inputs
-#     model_params:
-#       conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
-#       conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
-#       spatial_dim: 1
-#       input_channels: 5 # Default 3
-#       c_channels: 0  # Default 0 disables conditioning on C
-#       apex_hidden_channels: 64  # Default 128
-#       # activation: GELU  # Default GELU # TODO implement configurable activation
-#       time_embedding: sinusoidal+mlp  # default: sinusoidal, with optional +mlp, other: dummy
-#       time_embedding_d: 8  # Default 32 
-#       positional_encoding: sinusoidal+mlp  # Default sinusoidal, other: sinusoidal+mlp, dummy
-#       positional_encoding_d: 32
-#       positional_encoding_c: 4  # Only used if using +mlp
-#       ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
-#       is_attn: [true, false, false, false] # Default [false, false, false, false]
-#       mid_attn: true # Default false
-#       attn_heads: 2  # Default 1
-#       n_blocks: 2 # Default 2. Number of residual blocks
-#       norm_groups: 4 # Default false
-#       use1x1: false # Default false
-#     loss: MSELoss
-#     optimizer_params:
-#       lr: 0.00005
-#       weight_decay: 0  # Default 0
-#       amsgrad: false  # Default false
+model: 
+  Class: FlowModule
+  params:
+    prior: 'normal'  # normal, copy, brownian, levy, resample
+    prior_sigma: 0.3  # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
+    ot_method: null  # null to disable
+    ot_replace: true  # Default false
+    batch_rematch_factor: 5  # Default 1
+    step_every_nth_match: 1  # Default 1 # TODO
+    gradient_clip_val: ${ gradient_clip_val }
+    model: ConditionalUNet  # Must accept x, t inputs
+    model_params:
+      conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
+      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
+      spatial_dim: 1
+      input_channels: 5 # Default 3
+      c_channels: 0  # Default 0 disables conditioning on C
+      apex_hidden_channels: 64  # Default 128
+      # activation: GELU  # Default GELU # TODO implement configurable activation
+      time_embedding: sinusoidal+mlp  # default: sinusoidal, with optional +mlp, other: dummy
+      time_embedding_d: 8  # Default 32 
+      positional_encoding: sinusoidal+mlp  # Default sinusoidal, other: sinusoidal+mlp, dummy
+      positional_encoding_d: 32
+      positional_encoding_c: 4  # Only used if using +mlp
+      ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
+      is_attn: [true, false, false, false] # Default [false, false, false, false]
+      mid_attn: true # Default false
+      attn_heads: 2  # Default 1
+      n_blocks: 2 # Default 2. Number of residual blocks
+      norm_groups: 4 # Default false
+      use1x1: false # Default false
+    loss: MSELoss
+    optimizer_params:
+      lr: 0.00005
+      weight_decay: 0  # Default 0
+      amsgrad: false  # Default false
 
 # Shorthands for important parameters for wandb
 Prior: ${ model.params.prior }
