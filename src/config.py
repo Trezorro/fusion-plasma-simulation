@@ -68,7 +68,9 @@ def is_reeval_run() -> str | Literal[False]:
         return False
 
 def pretty_config(conf):
-    return pformat(OmegaConf.to_object(conf), compact=True, sort_dicts=False, width=160)
+    if type(conf) == omegaconf.DictConfig:
+        conf = OmegaConf.to_object(conf)
+    return pformat(conf, compact=True, sort_dicts=False, width=160)
 
 
 def update_model_input_channels(conf):
