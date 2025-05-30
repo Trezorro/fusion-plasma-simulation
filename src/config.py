@@ -121,9 +121,10 @@ def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.
             logger.warning("Found multiple runs with the same name (%s)", find_run)
             for r in runs:
                 logger.warning("Run ID: %s  Date: %s", r.id, r.created_at)
+            return
         else:
             logger.error("No runs found with name %s", find_run)
-            run = None
+            return
     if run is not None:
         RUN_ID = run.id
         RUN_NAME = run.name

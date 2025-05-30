@@ -50,9 +50,6 @@ if [ "$#" -ne 1 ] || [ -z "$1" ]; then
     # SSH into the main node, check the queue status, and run rsync
     ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
         squeue $QUEUE_FORMAT
-    echo "Cleaning wandb folders"
-    . setup.sh
-    wandb sync --clean
 EOF
     sync_slurms
     exit 0
