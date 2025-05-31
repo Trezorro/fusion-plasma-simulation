@@ -8,6 +8,7 @@ import torchmetrics
 from torchmetrics.segmentation import DiceScore
 import wandb
 from omegaconf import DictConfig
+from torchdiffeq import odeint
 
 from src.models.unet_conditional import ConditionalUNet
 from src.optimal_transport import OTPlanSampler
@@ -56,6 +57,8 @@ class FlowModule(L.LightningModule):
         batch_rematch_factor: int = 1,
         step_every_nth_match: Optional[int] = None,  # if None, step only after all matches.
         gradient_clip_val: float = 1.0,
+        flow_steps=5,
+        solve_method='simple',
         **kwargs: Any
     ):
         super().__init__()
@@ -68,13 +71,14 @@ class FlowModule(L.LightningModule):
         self.loss = self.LOSS_OPTIONS[loss]()
         self.prior = prior
         self.prior_sigma = prior_sigma
-        self.step_fn = self.fwd_euler_step
         self.ot_method = ot_method
         self.ot_sampler = OTPlanSampler(method=ot_method, reg=0.05) if ot_method else None
         self.ot_replace = ot_replace
         self.gradient_clip_val = gradient_clip_val
         self.batch_rematch_factor = batch_rematch_factor
         self.step_every_nth_match = step_every_nth_match or batch_rematch_factor
+        self.flow_steps = flow_steps
+        self.solve_method = 'simple'
         self._validate_configuration()
         self.automatic_optimization = False
         self.register_buffer("sqrt_dt", torch.sqrt(torch.tensor(1 / self.SAMPLE_RATE)))
@@ -278,11 +282,17 @@ class FlowModule(L.LightningModule):
         # self.train_metrics = mode_metrics_collection.clone(prefix='train/')
         # self.mode_test_metrics = mode_metrics_collection.clone(prefix='test/')
 
-    def test_step(self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int, flow_steps=FLOW_STEPS):
+    def test_step(
+        self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int, flow_steps=FLOW_STEPS, solve_method='dopri5'
+    ):
         meta, conditioning_input, target_samples = batch
         prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
         generated_samples: torch.Tensor = self.integrate_path(
-            prior_samples, conditioning_input=conditioning_input, n_steps=flow_steps, save_trajectories=False
+            prior_samples,
+            conditioning_input=conditioning_input,
+            n_steps=flow_steps,
+            method=solve_method,
+            save_trajectories=False
         )  # type: ignore
         data_module = self.trainer.datamodule
         Wf_length = data_module.seq_length
@@ -318,6 +328,7 @@ class FlowModule(L.LightningModule):
         self,
         batch: tuple[dict, dict, torch.Tensor],
         n_steps=50,
+        solve_method="simple",
         data_module: Optional[L.LightningDataModule] = None,
     ):
         """Evaluates the model on a given batch of data. Batch will be moved to the correct device.
@@ -355,6 +366,7 @@ class FlowModule(L.LightningModule):
             prior_samples,
             conditioning_input=conditioning_input,
             n_steps=n_steps,
+            method=solve_method,
             save_trajectories=True
         )
         # Metrics
@@ -389,7 +401,7 @@ class FlowModule(L.LightningModule):
 
     @staticmethod
     @torch.no_grad()
-    def fwd_euler_step(velocity_model, current_points, current_t, dt):
+    def fwd_euler_step(ode_func, current_points, current_t, dt):
         """
         Perform a forward Euler step.
 
@@ -402,8 +414,7 @@ class FlowModule(L.LightningModule):
         Returns:
             torch.Tensor: Shape [batch_size, num_features]
         """
-        # TODO change to self(x, t) for the model
-        velocity = velocity_model(current_points, current_t)
+        velocity = ode_func(current_t, current_points)
         return current_points + velocity * dt
 
     @torch.inference_mode()
@@ -411,7 +422,7 @@ class FlowModule(L.LightningModule):
         self,
         initial_points,
         conditioning_input=None,
-        step_fn=fwd_euler_step,
+        method='simple',  # Other commonly used solvers are "dopri5", "midpoint" and "heun3". For a complete list, see torchdiffeq.
         n_steps=100,
         save_trajectories=False,
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
@@ -430,31 +441,56 @@ class FlowModule(L.LightningModule):
         """
         current_points = initial_points.clone()
         if conditioning_input is not None and self.model.conditioning:
-            velocity_model = partial(self.model, conditioning_input=conditioning_input)
+
+            def ode_func(t, x):
+                return self.model(x=x.to(torch.float32), t=t.to(torch.float32), conditioning_input=conditioning_input)
         else:
-            velocity_model = self.model
-        ts = torch.linspace(0, 1, n_steps, device=self.device)
-        if save_trajectories:
-            trajectories = [current_points]
-        logger.debug(f"Integrating path with {n_steps} steps")
-        logger.debug(
-            "Devices: timesteps: %s, current_points: %s, conditioning_input: %s", ts.device,
-            current_points.device, {
-                k: v.device for k, v in conditioning_input.items()
-            } if conditioning_input is not None else None
-        )
-        # Integrate and use progress bar if running on CPU
-        for i in tqdm(
-            range(len(ts) - 1),
-            disable=self.device.type != "cpu",
-            desc="Integrating path",
-        ):
-            current_points = self.step_fn(velocity_model, current_points, ts[i], ts[i + 1] - ts[i])
+
+            def ode_func(t, x):  # just swap around for torchdiffeq
+                return self.model(x=x.to(torch.float32), t=t.to(torch.float32))
+
+        time_grid = torch.linspace(0, 1, n_steps, device=self.device, dtype=torch.float64)
+
+        logger.debug(f"Integrating path with {n_steps} steps with method {method}")
+        # logger.debug(
+        #     "Devices: timesteps: %s, current_points: %s, conditioning_input: %s", time_grid.device,
+        #     current_points.device, {
+        #         k: v.device for k, v in conditioning_input.items()
+        #     } if conditioning_input is not None else None
+        # )
+        if method == "simple":
+            # Integrate and use progress bar if running on CPU
             if save_trajectories:
-                trajectories.append(current_points)
-        if save_trajectories:
-            return current_points, torch.stack(trajectories)
-        return current_points
+                trajectories = [current_points]
+            for i in tqdm(
+                range(len(time_grid) - 1),
+                disable=self.device.type != "cpu",
+                desc="Integrating path",
+            ):
+                current_points = self.fwd_euler_step(
+                    ode_func, current_points, time_grid[i], time_grid[i + 1] - time_grid[i]
+                )
+                if save_trajectories:
+                    trajectories.append(current_points)
+            logger.debug("Solved with %s steps.", len(time_grid))
+            if save_trajectories:
+                return current_points, torch.stack(trajectories)
+            return current_points
+        else:  # use torchdiffeq
+            sol = odeint(
+                ode_func,
+                current_points,
+                time_grid,
+                method=method,
+                options={'max_num_steps': 2000},
+                # atol=atol,
+                # rtol=rtol,
+            )
+            logger.debug("Solved with %s steps.", len(sol))
+            if save_trajectories:
+                return sol[-1], sol
+            else:
+                return sol
 
     # def integrate_path_advanced(self, )
 

@@ -67,6 +67,7 @@ class PlotsCallback(L.Callback):
         super().__init__()
         self.config = evaluation_config
         self.n_steps = evaluation_config.get("n_steps", 50)
+        self.solve_method = evaluation_config.get("solve_method", "simple")
         # Only save those images every N epochs (otherwise tensorboard gets quite large)
         self.val_every_n_epochs = self.config.get("val_every_n_epochs", 20)
         self.train_every_n_epochs = self.config.get("train_every_n_epochs", 20)
@@ -108,7 +109,7 @@ class PlotsCallback(L.Callback):
                 iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
             )  # this can be in general function
             logger.debug("Calling evaluate for validation data.")
-            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps)
+            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps, solve_method=self.solve_method)
             logger.debug("Evaluation done. Calling plotters.")
             title_base = f"{wandb.run.name} |  Epoch <b>{trainer.current_epoch}</b>"
             self.call_plot_functions(evaluation_output, "val", trainer.global_step, title_base)
@@ -128,7 +129,7 @@ class PlotsCallback(L.Callback):
                 iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
             )  # this can be in general function
             logger.debug("Calling evaluate for train data.")
-            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps)
+            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps, solve_method=self.solve_method)
             logger.debug("Evaluation done. Calling plotters.")
             title_base = f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
             self.call_plot_functions(evaluation_output, "train", trainer.global_step, title_base)

@@ -79,11 +79,11 @@ wandb_logger = WandbLogger(
     checkpoint_name=dated_run_name,  # name of the wandb artifact
 )
 
-ModelClass = getattr(src.models, C.model.Class)
+ModelClass: src.models.FlowModule = getattr(src.models, C.model.Class)
 if reeval_prev_run and base_checkpoint_path is not None:
     model = ModelClass.load_from_checkpoint(base_checkpoint_path)
 else:
-    model = ModelClass(**C.model.params) # fresh model
+    model = ModelClass(**C.model.params)  # fresh model
     wandb_logger.watch(model, log="all", log_freq=50)  # log gradients
 if "skip_log_summary" not in C or not C["skip_log_summary"]:
     logger.info("Model loaded, summary:")
@@ -136,7 +136,7 @@ trainer = L.Trainer(
     ]
 )
 
-if not reeval_prev_run: # Train fresh model
+if not reeval_prev_run:  # Train fresh model
     logger.info("Starting model fit...")
     trainer.fit(model=model, datamodule=fusion_data_module)
     logger.info("Finished training.")
@@ -148,6 +148,7 @@ if not reeval_prev_run: # Train fresh model
 #     torch.cuda.memory._dump_snapshot(filename=memory_trace_file)
 #     logger.info("CUDA memory snapshot dumped at %s", memory_trace_file)
 
+model.solve_method = "dopri5"
 logger.info("Starting final testing...")
 trainer.test(model=model, datamodule=fusion_data_module)
 logger.info("Finished testing.")

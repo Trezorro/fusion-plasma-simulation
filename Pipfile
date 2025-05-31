@@ -26,6 +26,7 @@ lightning = "*"
 pot = "*"
 antropy = "*"
 kaleido = "*"
+torchdiffeq = "*"
 
 [dev-packages]
 jupyter = "*"
