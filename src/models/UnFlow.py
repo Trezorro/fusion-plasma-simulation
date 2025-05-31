@@ -67,7 +67,7 @@ class UnFlowModule(FlowModule):
         self.log_dict(metrics.prefix_metrics(metrics_out, 'test'), prog_bar=True, on_step=True, on_epoch=False)
 
     @torch.inference_mode()
-    def evaluate(self, batch, n_steps=1, warp_fn=None, data_module=None):
+    def evaluate(self, batch, n_steps=1, data_module=None):
         self.model.eval()
         meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch)
         prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())

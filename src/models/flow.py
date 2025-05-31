@@ -164,8 +164,6 @@ class FlowModule(L.LightningModule):
 
         # interpolate the probability path at t (making the example path)
         t = torch.rand(target_samples.size(0), device=self.device)  # TODO add safety non 1.0. see cfm.
-        # if self.warp_fn is not None: # TODO warp option
-        #     t = self.warp_fn(t)
         t_broadcast = t.view(-1, 1, 1)
         samples_at_t = prior_samples * (1 - t_broadcast) + target_samples * t_broadcast
         target_velocity = target_samples - prior_samples
@@ -320,7 +318,6 @@ class FlowModule(L.LightningModule):
         self,
         batch: tuple[dict, dict, torch.Tensor],
         n_steps=50,
-        warp_fn=None,
         data_module: Optional[L.LightningDataModule] = None,
     ):
         """Evaluates the model on a given batch of data. Batch will be moved to the correct device.
@@ -335,8 +332,6 @@ class FlowModule(L.LightningModule):
                 and target samples. The metadata is a dictionary, the conditioning input is a dictionary, 
                 and the target samples are a tensor.
             n_steps (int, optional): The number of integration steps to perform. Defaults to 50.
-            warp_fn (callable, optional): A function to warp the generated samples during integration. 
-                Defaults to None.
 
         Returns:
             dict: A dictionary containing the following keys:
@@ -360,7 +355,6 @@ class FlowModule(L.LightningModule):
             prior_samples,
             conditioning_input=conditioning_input,
             n_steps=n_steps,
-            warp_fn=warp_fn,
             save_trajectories=True
         )
         # Metrics
@@ -420,7 +414,6 @@ class FlowModule(L.LightningModule):
         step_fn=fwd_euler_step,
         n_steps=100,
         save_trajectories=False,
-        warp_fn=None
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         Integrate a path using the given step function.
@@ -430,7 +423,6 @@ class FlowModule(L.LightningModule):
             step_fn: The function to use for computing the next step.
             n_steps (int): The number of steps to integrate.
             save_trajectories (bool): Whether to save the trajectories.
-            warp_fn: A function to warp the time steps.
 
         Returns:
             torch.Tensor: Shape [batch_size, num_features]
@@ -442,8 +434,6 @@ class FlowModule(L.LightningModule):
         else:
             velocity_model = self.model
         ts = torch.linspace(0, 1, n_steps, device=self.device)
-        if warp_fn:
-            ts = warp_fn(ts)
         if save_trajectories:
             trajectories = [current_points]
         logger.debug(f"Integrating path with {n_steps} steps")
@@ -465,6 +455,8 @@ class FlowModule(L.LightningModule):
         if save_trajectories:
             return current_points, torch.stack(trajectories)
         return current_points
+
+    # def integrate_path_advanced(self, )
 
     def configure_optimizers(self):
         if self.optimizer_params is None:

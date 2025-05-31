@@ -90,7 +90,6 @@ def plot_flow(
         size (int, optional): Size of scatter plot points. Defaults to 20.
         alpha (float, optional): Transparency of scatter plot points. Defaults to 0.5.
         n_steps (int, optional): Number of integration steps. Defaults to 100.
-        warp_fn (callable, optional): Optional function to warp time steps. Defaults to None.
 
     Returns:
         None
@@ -162,7 +161,6 @@ def plot_flow_and_lines_mpl(
         size (int, optional): Size of scatter plot points. Defaults to 20.
         alpha (float, optional): Transparency of scatter plot points. Defaults to 0.5.
         n_steps (int, optional): Number of integration steps. Defaults to 100.
-        warp_fn (callable, optional): Optional function to warp time steps. Defaults to None.
 
     Returns:
         None
@@ -263,7 +261,6 @@ def plot_flow_and_lines_plotly(
         size (int, optional): Size of scatter plot points. Defaults to 20.
         alpha (float, optional): Transparency of scatter plot points. Defaults to 0.5.
         n_steps (int, optional): Number of integration steps. Defaults to 100.
-        warp_fn (callable, optional): Optional function to warp time steps. Defaults to None.
 
     Returns:
         None
