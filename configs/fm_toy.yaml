@@ -193,8 +193,8 @@ evaluation:
 model: 
   Class: FlowModule
   params:
-    prior: 'levy'  # normal, copy, brownian, levy, resample
-    prior_sigma: 0.4  # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
+    prior: 'resample'  # normal, copy, brownian, levy, resample
+    prior_sigma: 0.3 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
     ot_method: null  # null to disable
     ot_replace: true  # Default false
     batch_rematch_factor: 5  # Default 1
