@@ -20,7 +20,7 @@ reeval_prev_run = is_reeval_run() # Based on cli arguments
 if reeval_prev_run:
     logger.info("Re-evaluating run, loading existing wandb run.")
     base_run = find_wandb_run(reeval_prev_run, project=PROJECT)
-    assert isinstance(base_run, wandb.apis.public.Run), f"Run {FIND_RUN} not found"  # type: ignore
+    assert isinstance(base_run, wandb.apis.public.Run), f"Run {reeval_prev_run} not found"  # type: ignore
     conf = base_run._attrs['config']
     RUN_NAME = "reeval-"+base_run.name
     base_checkpoint_path = find_and_download_model(base_run)

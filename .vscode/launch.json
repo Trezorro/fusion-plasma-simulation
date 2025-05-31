@@ -59,7 +59,7 @@
             },
             "args": [
                 "reeval=true",
-                "run_name=ExpB_7_C_brown_seq",
+                "run_name=ExpB_6b_noC_normal_seq",
                 "epochs=1",
                 "evaluation.n_steps=2",
                 "evaluation.plot_functions=null",
