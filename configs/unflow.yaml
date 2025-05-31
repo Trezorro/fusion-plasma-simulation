@@ -5,7 +5,7 @@ patience: 20
 model: 
   Class: UnFlowModule
   params:
-    prior: 'constant'  # normal, copy, brownian, levy, resample, constant
+    prior: 'brownian'  # normal, copy, brownian, levy, resample, constant
     prior_sigma: 0.01  # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
     ot_method: null  # null to disable
     ot_replace: true  # Default false
@@ -40,9 +40,9 @@ model:
       amsgrad: false  # Default false
 
 # disable c:
-data:
-  cols:
-    c: []
+# data:
+#   cols:
+#     c: []
     # - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
     # - gas_fringes  # Ingepompte gas
     # - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.

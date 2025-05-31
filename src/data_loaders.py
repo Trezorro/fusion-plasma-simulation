@@ -389,6 +389,10 @@ class FusionShotDataModule(L.LightningDataModule):
         # add artificial columns if found in the config:
         if "DML-r" in self.cols.x:
             self.data["DML-r"] = self.data["DML"] * -1
+        if "NBI-median" in self.cols.c:
+            self.data["NBI-median"] = self.data.groupby('ShotNum')["NBI"].transform(lambda x: x.rolling(100, min_periods=1, center=True).median()).astype(np.float32)
+        if "ECRH-median" in self.cols.c:
+            self.data["ECRH-median"] = self.data.groupby('ShotNum')["ECRH"].transform(lambda x: x.rolling(100, min_periods=1, center=True).median()).astype(np.float32)
 
     def setup(self, stage: Optional[str] = None):
         """Split data into train, validation, and test sets and compute normalization stats."""
@@ -442,8 +446,8 @@ class FusionShotDataModule(L.LightningDataModule):
         logger.info(f"Normalizing columns {target_cols} with min {self.min} and max {self.max}")
         self.data[target_cols] = ((self.data[target_cols] - self.min) / (self.max - self.min))
         self.data_is_normalized = True
-
-        wandb.run.config['data'] |= {'train_stats': {'min': self.min.to_dict(), 'max': self.max.to_dict()}}
+        if wandb.run is not None:
+            wandb.run.config['data'] |= {'train_stats': {'min': self.min.to_dict(), 'max': self.max.to_dict()}}
         # Prepare these for denormalize method (used for downstream models):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.max_vals_x = torch.tensor(self.max[self.cols.x].values, device=device).unsqueeze(-1)

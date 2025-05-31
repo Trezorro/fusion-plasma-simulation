@@ -36,6 +36,7 @@ run = wandb.init(
     # mode="offline",
 )
 RUN_ID = wandb.run.id
+RUN_NAME = wandb.run.name
 C = get_current_config(wandb_only=True) # clean synchronized config object from wandb
 logger.info("Running with config:\n%s", pretty_config(C))
 
