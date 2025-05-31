@@ -67,7 +67,7 @@ class PlotsCallback(L.Callback):
         super().__init__()
         self.config = evaluation_config
         self.n_steps = evaluation_config.get("n_steps", 50)
-        self.solve_method = evaluation_config.get("solve_method", "simple")
+        self.solve_method = evaluation_config.get("solve_method", "rk4")
         # Only save those images every N epochs (otherwise tensorboard gets quite large)
         self.val_every_n_epochs = self.config.get("val_every_n_epochs", 20)
         self.train_every_n_epochs = self.config.get("train_every_n_epochs", 20)

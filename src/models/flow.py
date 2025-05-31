@@ -353,7 +353,6 @@ class FlowModule(L.LightningModule):
                 - peak_features [dict]: Features related to the peaks in the generated samples. Contains keys
                     pred_peaks and target_peaks. See `metrics.get_peak_metrics` for details. 
         """
-        # TODO: may add matching, and (pred) velocity to the output  to debug and plot a training step.
         self.model.eval()
         # Use lightnings manner of moving to correct current device:
         meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch)
