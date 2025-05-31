@@ -21,8 +21,6 @@ from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
-FLOW_STEPS = 150 if torch.cuda.is_available() else 6
-
 
 class FlowModule(L.LightningModule):
 
@@ -57,7 +55,7 @@ class FlowModule(L.LightningModule):
         batch_rematch_factor: int = 1,
         step_every_nth_match: Optional[int] = None,  # if None, step only after all matches.
         gradient_clip_val: float = 1.0,
-        flow_steps=5,
+        flow_steps=150,
         solve_method='simple',
         **kwargs: Any
     ):
@@ -282,16 +280,14 @@ class FlowModule(L.LightningModule):
         # self.train_metrics = mode_metrics_collection.clone(prefix='train/')
         # self.mode_test_metrics = mode_metrics_collection.clone(prefix='test/')
 
-    def test_step(
-        self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int, flow_steps=FLOW_STEPS, solve_method='dopri5'
-    ):
+    def test_step(self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int):
         meta, conditioning_input, target_samples = batch
         prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
         generated_samples: torch.Tensor = self.integrate_path(
             prior_samples,
             conditioning_input=conditioning_input,
-            n_steps=flow_steps,
-            method=solve_method,
+            n_steps=self.flow_steps,
+            method=self.solve_method,
             save_trajectories=False
         )  # type: ignore
         data_module = self.trainer.datamodule

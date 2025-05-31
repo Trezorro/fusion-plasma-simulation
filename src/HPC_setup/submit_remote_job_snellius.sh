@@ -52,6 +52,9 @@ if [ "$#" -ne 1 ] || [ -z "$1" ]; then
         squeue $QUEUE_FORMAT
 EOF
     sync_slurms
+
+    echo "Re-sync results with:"
+    echo "rsync -avzv $REMOTE_SLURM_DIR $LOCAL_HPC_PATH"
     exit 0
 fi
 

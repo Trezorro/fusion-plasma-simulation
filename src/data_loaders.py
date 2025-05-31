@@ -389,9 +389,11 @@ class FusionShotDataModule(L.LightningDataModule):
         # add artificial columns if found in the config:
         if "DML-r" in self.cols.x:
             self.data["DML-r"] = self.data["DML"] * -1
-        if "NBI-median" in self.cols.c:
-            self.data["NBI-median"] = self.data.groupby('ShotNum')["NBI"].transform(lambda x: x.rolling(100, min_periods=1, center=True).median()).astype(np.float32)
-        if "ECRH-median" in self.cols.c:
+        if "NBI-median" in self.cols.get('c', []):
+            self.data["NBI-median"] = self.data.groupby('ShotNum')["NBI"].transform(
+                lambda x: x.rolling(100, min_periods=1, center=True).median()
+            ).astype(np.float32)
+        if "ECRH-median" in self.cols.get('c', []):
             self.data["ECRH-median"] = self.data.groupby('ShotNum')["ECRH"].transform(lambda x: x.rolling(100, min_periods=1, center=True).median()).astype(np.float32)
 
     def setup(self, stage: Optional[str] = None):
