@@ -247,7 +247,7 @@ class FusionShotDataset(data.Dataset):
         history_length: Optional[int] = 0,  # 0 or None, when no history conditioning is used.
         allowed_start_indices: Optional[list[int]] = None,
         pre_shuffle=True,
-        name="train",
+        name="Train",
         **kwargs
     ):
         super().__init__()
@@ -290,15 +290,19 @@ class FusionShotDataset(data.Dataset):
                         self.viable_indices.append((shot_number, start_idx))
                         viable_shots.add(shot_number)
             else:
+                stride = 10 if self.name == "Test" else 1
                 # Use all possible start indices within the viable range and crop margin
-                for start_idx in range(self.crop_margin, viable_start_max + 1):
+                for start_idx in range(self.crop_margin, viable_start_max + 1, stride):
                     self.viable_indices.append((shot_number, start_idx))
                     viable_shots.add(shot_number)
         logger.info(f"{self.name} set: Precomputed {len(self.viable_indices)} viable samples across all shots.")
         logger.info(f"Included {len(viable_shots)} shots of {len(self.shot_numbers)} specified, in the dataset.")
         self.shot_numbers = list(viable_shots)
-        if self.pre_shuffle:
+        if self.pre_shuffle and self.name != "Test":
             random.shuffle(self.viable_indices)
+        elif self.name == "Test":
+            self.viable_indices.sort(key=lambda x: x[1])
+            logger.info(f"Sorted test set on time index.")
 
     def __getitem__(self, idx):
         shot_number, start_i = self.viable_indices[idx]
@@ -374,7 +378,7 @@ class FusionShotDataModule(L.LightningDataModule):
 
         self.allowed_start_indices = allowed_start_indices
         self.overfit_on_shots = overfit_on_shots
-        self.pre_shuffle = pre_shuffle
+        self.pre_shuffle = pre_shuffle  # overridden by test set
 
         self.data_is_normalized = False
         self.num_workers = 2 if torch.cuda.is_available() else 0

@@ -148,8 +148,8 @@ if not reeval_prev_run:  # Train fresh model
 #     torch.cuda.memory._dump_snapshot(filename=memory_trace_file)
 #     logger.info("CUDA memory snapshot dumped at %s", memory_trace_file)
 
-model.solve_method = "rk4"
-model.flow_steps = 20
+# model.solve_method = "rk4"
+# model.flow_steps = 20
 logger.info("Starting model validation...")
 trainer.validate(model=model, datamodule=fusion_data_module)
 logger.info("Starting final testing...")

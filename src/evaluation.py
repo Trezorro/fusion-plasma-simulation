@@ -106,7 +106,7 @@ class PlotsCallback(L.Callback):
             logger.info(f"Evaluating model for EPOCH {trainer.current_epoch} on validation data.")
             data_set = trainer.datamodule.test_dataloader().dataset
             batch = next(
-                iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
+                iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=True))
             )  # this can be in general function
             logger.debug("Calling evaluate for validation data.")
             evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps, solve_method=self.solve_method)

@@ -16,8 +16,8 @@ patience: 10
 gradient_clip_val: 10  # in testing, lower values did not help prevent loss explosions. This is just a safeguard
 skip_log_summary: false
 evaluation:
-  n_steps: 5 # enough for adaptive dopri5
-  solve_method: dopri5 # dopri5, euler, midpoint
+  n_steps: 25 # enough for adaptive dopri5
+  solve_method: rk4 # dopri5, euler, midpoint
   max_n: 64
   val_every_n_epochs: 5
   train_every_n_epochs: 10
@@ -276,12 +276,12 @@ data:
             "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
         ]
     c:
-      # - NBI-median
-      # - ECRH-median
+      - NBI-median
+      - ECRH-median
       # - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
       # - gas_fringes  # Ingepompte gas
-      - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
-      - ECRH  # magnetron.
+      # - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
+      # - ECRH  # magnetron.
       # - a_minor  # reel gemeten plasma shape a k d (horizontale radius
       # - KAPPA
       # - DELTA  # linkerbovenhoek naar links vanuit hetmidden

@@ -221,7 +221,6 @@ def generate_surrogate_labels_batched(meta, generated_samples, target_samples, d
     seq_length = C.data.seq_length
     batch_size = len(shot_numbers)
 
-    logger.info("Generating surrogate labels (batched) for batch of %d samples", batch_size)
 
     # 1. Get all histories in batch (list of tensors, not padded)
     full_histories_raw = data_module.get_full_history(shot_numbers, prediction_window_starts_idx)
@@ -250,10 +249,13 @@ def generate_surrogate_labels_batched(meta, generated_samples, target_samples, d
     concat_pd_rollouts_pred = torch.stack(
         [F.pad(x, (0, total_len - x.shape[-1])) for x in concat_pd_rollouts_pred], dim=0
     )
+    logger.info(
+        "Generating surrogate labels (batched) for batch of %d samples with max length %s", batch_size, total_len
+    )
 
     # 4. Build timeline for each sample (broadcasted, shape [MAXT, batch_size])
     MAXT = total_len  # or max(concat_lens)
-    idx_timelines = np.arange(MAXT)[:, None] - prediction_window_starts_idx[None, :].numpy()
+    idx_timelines = np.arange(MAXT)[:, None] - prediction_window_starts_idx[None, :].numpy()  # Wf starts at 0
 
     # 5. Call get_mode_predictions_single_window for each sample
     surr_labels_pred = []

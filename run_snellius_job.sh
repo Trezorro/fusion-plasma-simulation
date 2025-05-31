@@ -49,6 +49,8 @@ if [[ $2 == "true" ]]; then
 else
     git checkout tags/$1
 fi
+echo "Recent commits:"
+git log -5  --pretty=reference
 # Export wandb env variable
 export WANDB_NOTES=$(git log -n 5 --pretty=format:"%B (%h - %ar) %N")
 
