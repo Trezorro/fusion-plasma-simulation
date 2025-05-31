@@ -486,7 +486,7 @@ class FlowModule(L.LightningModule):
             if save_trajectories:
                 return sol[-1], sol
             else:
-                return sol
+                return sol[-1]
 
     # def integrate_path_advanced(self, )
 
