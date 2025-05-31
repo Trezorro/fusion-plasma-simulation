@@ -76,7 +76,7 @@ class FlowModule(L.LightningModule):
         self.batch_rematch_factor = batch_rematch_factor
         self.step_every_nth_match = step_every_nth_match or batch_rematch_factor
         self.flow_steps = flow_steps
-        self.solve_method = 'simple'
+        self.solve_method = solve_method
         self._validate_configuration()
         self.automatic_optimization = False
         self.register_buffer("sqrt_dt", torch.sqrt(torch.tensor(1 / self.SAMPLE_RATE)))

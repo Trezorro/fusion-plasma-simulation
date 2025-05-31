@@ -201,7 +201,7 @@ model:
     step_every_nth_match: 1  # Default 1 # TODO
     gradient_clip_val: ${ gradient_clip_val }
     solve_method: ${ evaluation.solve_method }
-    n_steps: ${ evaluation.n_steps }
+    flow_steps: ${ evaluation.n_steps }
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
