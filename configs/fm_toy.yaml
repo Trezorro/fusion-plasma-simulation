@@ -8,9 +8,9 @@ features:
   - FIX_conditioning_input_matching
   - learning_rate_scheduler
 
-epochs: 100
-limit_train_batches: 70
-limit_val_batches: 10
+epochs: 1000
+limit_train_batches: 2
+limit_val_batches: 1
 batch_size: 128
 patience: 10
 gradient_clip_val: 10  # in testing, lower values did not help prevent loss explosions. This is just a safeguard

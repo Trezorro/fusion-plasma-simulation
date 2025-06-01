@@ -128,6 +128,8 @@ trainer = L.Trainer(
         ModelCheckpoint(
             monitor="loss/val",
             mode="min",
+            save_last=True,
+            verbose=True,
             dirpath="output/models/" + dated_run_name,  # lightning_logs by default
             filename=dated_run_name + '-Epoch={epoch:02d}-step={step}-val_loss={loss/val:.2f}',
             auto_insert_metric_name=False
