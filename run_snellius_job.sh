@@ -66,6 +66,7 @@ export WANDB_ARTIFACT_DIR="/scratch-shared/mtresoor/artifacts"
 
 # export WANDB_DATA_DIR="~/fusion-plasma-simulation/output/wandb/data"
 # export WANDB_ARTIFACT_DIR="~/fusion-plasma-simulation/output/wandb/artifacts"
+export TEST_CACHE_DIR="/scratch-shared/mtresoor/test_cache"
 
 # Run the Python script
 echo "---------------- JOB START ----------------"

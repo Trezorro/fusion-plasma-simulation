@@ -54,19 +54,20 @@
             "request": "launch",
             "module": "run",
             "env": {
-                // "WANDB_MODE":"disabled",
+                "WANDB_MODE":"disabled",
                 "WANDB_NOTES": "debugging",
             },
             "args": [
                 "reeval=true",
-                "run_name=ExpB_6b_noC_normal_seq",
+                "run_name=reeval_test",
                 "epochs=1",
                 "evaluation.n_steps=2",
                 "evaluation.plot_functions=null",
                 "skip_log_summary=True",
                 "batch_size=16",
                 "model.params.batch_rematch_factor=1",
-                "model.params.step_every_nth_match=null"
+                "model.params.step_every_nth_match=null",
+                "data.batch_size=16"
             ],
             "justMyCode": true
             

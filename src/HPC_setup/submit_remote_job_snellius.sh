@@ -59,25 +59,21 @@ EOF
 fi
 
 # Bypass commit checks and tagging if in reeval mode
-if [ "$REEVAL_MODE" = false ]; then
-    # Check if there are commits that have not been pushed
-    LOCAL_COMMITS=$(git rev-list HEAD --not --remotes)
-    if [[ -n $LOCAL_COMMITS ]]; then
-        echo "Error: There are local commits that have not been pushed. Please push your changes."
-        exit 1
-    fi
-
-    # Tag the last commit with the job name
-    if ! git tag -a "$JOB_NAME" -m "Job '$JOB_NAME' [$(date)]"; then
-        echo "Error: Failed to tag the last commit."
-        exit 1
-    fi
-
-    git push origin "$JOB_NAME"
-    SBATCH_JOB_NAME="$JOB_NAME"
-else
-    SBATCH_JOB_NAME="reeval-$JOB_NAME"
+# Check if there are commits that have not been pushed
+LOCAL_COMMITS=$(git rev-list HEAD --not --remotes)
+if [[ -n $LOCAL_COMMITS ]]; then
+    echo "Error: There are local commits that have not been pushed. Please push your changes."
+    exit 1
 fi
+
+# Tag the last commit with the job name
+if ! git tag -a "$JOB_NAME" -m "Job '$JOB_NAME' [$(date)]"; then
+    echo "Error: Failed to tag the last commit."
+    exit 1
+fi
+
+git push origin "$JOB_NAME"
+SBATCH_JOB_NAME="$JOB_NAME"
 
 # SSH into the main node, pull latest code, submit SLURM job, and inspect queue
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF

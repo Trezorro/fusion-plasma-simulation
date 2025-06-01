@@ -15,6 +15,11 @@ batch_size: 128
 patience: 12
 gradient_clip_val: 10  # in testing, lower values did not help prevent loss explosions. This is just a safeguard
 skip_log_summary: false
+
+test_cache_name: ${ run_name }
+test_cache_mode: create # create or use
+
+
 evaluation:
   n_steps: 32 # enough for rk4
   solve_method: rk4 # dopri5, euler, midpoint

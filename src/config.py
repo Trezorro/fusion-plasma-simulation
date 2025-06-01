@@ -45,27 +45,39 @@ def convert_lists(value, level=0):
 def load_config_from_file(name=MAIN_CONFIG_FILE, as_omega=False) -> dict | omegaconf.DictConfig:
     """Load configuration from (hierarchical) yaml files and CLI."""
     main_conf = OmegaConf.load(f'configs/{name}.yaml')
-    if type(main_conf.model) == str:
+    if 'model' in main_conf and type(main_conf.model) == str:
         model_conf = OmegaConf.load(main_conf.model)
         main_conf = OmegaConf.merge(main_conf, model_conf)
     cli_conf = OmegaConf.from_cli()
     conf: omegaconf.DictConfig = OmegaConf.merge(main_conf, cli_conf)
     update_model_input_channels(conf)
+    logger.info("Loaded configuration from %s", f'configs/{name}.yaml')
     if as_omega:
         return conf
     conf = OmegaConf.to_object(conf)
-    logger.info("Loaded configuration from %s", f'configs/{name}.yaml')
     if not type(conf) == dict:
         raise ValidationError("Configuration was not in dict style. Got: " + repr(conf))
     return dict(conf)
 
-def is_reeval_run() -> str | Literal[False]:
+def get_current_config(wandb_only=False):
+    if not wandb.config:
+        raise RuntimeError("wandb.config was not initialized yet.")
+    try:
+        config_dict = dict(wandb.config)
+    except wandb.Error as e:
+        if wandb_only:
+            raise RuntimeError("wandb.config is not available yet. Did you call wandb.init()?")
+        config_dict = load_config_from_file()
+        logger.info("No wandb config found. Loaded it from current yaml file.")
+    conf = OmegaConf.create(config_dict)
+    convert_lists(conf)
+    return conf
+
+
+def is_reeval_run() -> bool:
     """Check the program input arguments just to see whether we need to do training or just testing."""
     cli_conf = OmegaConf.from_cli()
-    if cli_conf.get("reeval", False):
-        return cli_conf.get("run_name")
-    else:
-        return False
+    return cli_conf.get("reeval", False)
 
 def pretty_config(conf):
     if type(conf) == omegaconf.DictConfig:
@@ -83,22 +95,6 @@ def update_model_input_channels(conf):
             conf.model.params.model_params.input_channels = len(conf.data.cols.x)
         if 'c' in conf.data.cols:
             conf.model.params.model_params.c_channels = len(conf.data.cols.c)
-
-
-# wandb.config.update(conf)
-def get_current_config(wandb_only=False):
-    if not wandb.config:
-        raise RuntimeError("wandb.config was not initialized yet.")
-    try:
-        config_dict = dict(wandb.config)
-    except wandb.Error as e:
-        if wandb_only:
-            raise RuntimeError("wandb.config is not available yet. Did you call wandb.init()?")
-        config_dict = load_config_from_file()
-        logger.info("No wandb config found. Loaded it from current yaml file.")
-    conf = OmegaConf.create(config_dict)
-    convert_lists(conf)
-    return conf
 
 
 def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.public.Run | None:
@@ -123,7 +119,9 @@ def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.
             logger.warning("Found multiple runs with the same name (%s)", find_run)
             for r in runs:
                 logger.warning("Run ID: %s  Date: %s", r.id, r.created_at)
-            return
+            raise ValueError(
+                f"Multiple runs found with name '{find_run}'. Please specify a unique run ID or name."
+            )
         else:
             logger.error("No runs found with name %s", find_run)
             return
@@ -135,35 +133,38 @@ def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.
     return run
 
 
-def find_and_download_model(run):
+def find_and_download_model(run, prefer_alias='latest'):
     artifacts = [a for a in run.logged_artifacts() if a.type == "model"]
-    for artifact in artifacts:
+    selected_artifact = None
+    for art in artifacts:
         print(
-            f"{artifact.name}\n  > Type: {artifact.type}, Version: {artifact.version}, aliases: {artifact.aliases}, size: {artifact.size:_}, updated: {artifact.updated_at}, description: {artifact.description}"
+            f"{art.name}\n  > Type: {art.type}, Version: {art.version}, aliases: {art.aliases}, size: {art.size:_}, updated: {art.updated_at}, description: {art.description}"
         )
-
-    if len(artifacts) == 0:
-        print("No model artifacts found")
-        raise ValueError("No model artifacts found")
-    elif len(artifacts) == 1:
-        artifact = artifacts[0]
-        print(f"Single model artifact found, so using it.")
-    else:
-        artifact_name = input(f"Enter the name of the artifact to use (default: {artifacts[0].name}): ")
-        if artifact_name == "":
-            artifact_name = artifacts[0].name
-        artifact = wandb.Api().artifact(
-            artifact_name
-        )  # TODO fix CommError: project 'uncategorized' not found under entity 'tresoor'
-
-        print(f"Using artifact {artifact.name}")
+        if prefer_alias in art.aliases:
+            selected_artifact = art
+    if selected_artifact is None:
+        if len(artifacts) == 0:
+            print("No model artifacts found")
+            raise ValueError("No model artifacts found")
+        elif len(artifacts) == 1:
+            selected_artifact = artifacts[0]
+            print(f"Single model artifact found, so using it.")
+        else:
+            print(f"Multiple model artifacts found and none had preferred alias '{prefer_alias}', so using the first one.")
+            selected_artifact = artifacts[0]
+        print(f"Using artifact {selected_artifact.name}:\nVersion: {selected_artifact.version}, aliases: {selected_artifact.aliases}, size: {selected_artifact.size:_}, updated: {selected_artifact.updated_at}")
     print("Downloading artifact...")
-    artifact_dir = artifact.download()
+    artifact_dir = selected_artifact.download()
     print("Stored model locally in", artifact_dir)
-    # Log model summary
-    # logger.info("Model loaded. Summary:")
-    # model.log_summary(C)
-    # Get the number of steps the model has trained
-
-    # load checkpoint
     return Path(artifact_dir) / "model.ckpt"
+
+
+def consolidate_base_reeval_configs(reeval_config_name = 'reeval', project=PROJECT):
+    logger.info("Re-evaluating run, loading reeval file.")
+    reeval_config = load_config_from_file(reeval_config_name, True) # includes CLI arguments
+    logger.info("Finding base run.")
+    base_run = find_wandb_run(reeval_config['base_run'], project=project)
+    assert isinstance(base_run, wandb.apis.public.Run), f"Run {reeval_config['base_run']} not found"  # type: ignore
+    base_conf = OmegaConf.create(base_run.config)
+    merged_conf = OmegaConf.merge(base_conf, reeval_config)
+    return base_run, dict(OmegaConf.to_object(merged_conf)) # type: ignore

@@ -1,0 +1,11 @@
+# This will be merged into the inherited config from the base run
+
+base_run: seq_normal_smC # ID or unique name
+prefer_model_alias: latest # null just takes the one with latest, can be best or latest.
+
+test_cache_name: ${ base_run }
+test_cache_mode: create # create or use
+
+evaluation:
+  n_steps: 40 # enough for rk4
+  solve_method: rk4 # dopri5, euler, midpoint

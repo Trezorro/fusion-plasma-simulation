@@ -1,4 +1,5 @@
 import logging
+from src.config import consolidate_base_reeval_configs
 from src.logging_util import handler
 
 logging.basicConfig(level=logging.INFO, handlers=[handler])
@@ -8,7 +9,7 @@ logging.getLogger('src').setLevel(logging.DEBUG)
 logger.info("Starting run.py with wandb init.")
 import wandb
 import wandb.env
-from src.config import find_wandb_run, get_current_config, load_config_from_file, find_and_download_model, pretty_config, is_reeval_run
+from src.config import get_current_config, load_config_from_file, find_and_download_model, pretty_config, is_reeval_run
 
 logger.debug(
     "Wandb dirs: \n  main: %s, \n  data dir: %s, \n  artifacts: %s", wandb.env.get_dir(),
@@ -16,21 +17,16 @@ logger.debug(
 )
 
 PROJECT = "flowtoy"
-reeval_prev_run = is_reeval_run() # Based on cli arguments
-if reeval_prev_run:
-    logger.info("Re-evaluating run, loading existing wandb run.")
-    base_run = find_wandb_run(reeval_prev_run, project=PROJECT)
-    assert isinstance(base_run, wandb.apis.public.Run), f"Run {reeval_prev_run} not found"  # type: ignore
-    conf = base_run._attrs['config']
-    RUN_NAME = "reeval-"+base_run.name
-    base_checkpoint_path = find_and_download_model(base_run)
+if is_reeval_run(): # Based on cli arguments
+    logger.info("Re-evaluating previous run, consolidating configs.")
+    base_run, conf = consolidate_base_reeval_configs()
+    base_checkpoint_path = find_and_download_model(base_run, prefer_alias=conf.get('prefer_model_alias', 'latest'))
 else:
     logger.info("Training new model, initializing new wandb run.")
     conf = load_config_from_file('fm_toy')
-    RUN_NAME = conf.get("run_name", None)
     base_checkpoint_path = None
 run = wandb.init(
-    name=RUN_NAME,
+    name=conf.get("run_name", None), # None: Wandb picks a name for us
     project=PROJECT,
     config=conf,
     # mode="offline",
@@ -80,11 +76,16 @@ wandb_logger = WandbLogger(
 )
 
 ModelClass: src.models.FlowModule = getattr(src.models, C.model.Class)
-if reeval_prev_run and base_checkpoint_path is not None:
+if base_checkpoint_path is not None:
     model = ModelClass.load_from_checkpoint(base_checkpoint_path)
 else:
     model = ModelClass(**C.model.params)  # fresh model
     wandb_logger.watch(model, log="all", log_freq=50)  # log gradients
+
+if 'test_cache_name' in C:
+    model.set_cache(C.test_cache_name, C.test_cache_mode)
+if 'evaluation' in C:
+    model.set_integration_method(C.evaluation.n_steps, C.evaluation.get("solve_method", None))
 if "skip_log_summary" not in C or not C["skip_log_summary"]:
     logger.info("Model loaded, summary:")
     model.log_summary(C)
@@ -138,7 +139,7 @@ trainer = L.Trainer(
     ]
 )
 
-if not reeval_prev_run:  # Train fresh model
+if not is_reeval_run():  # Train fresh model
     logger.info("Starting model fit...")
     trainer.fit(model=model, datamodule=fusion_data_module)
     logger.info("Finished training.")

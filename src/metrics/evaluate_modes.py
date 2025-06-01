@@ -110,7 +110,7 @@ def clean_labels_series_batched(label_t_batch, surr_labels_batch, history_length
         resampled_series = series.reindex(range(-history_length - STRIDE, seq_length)
                                          ).interpolate(method='nearest'
                                                       ).ffill().reindex(range(-history_length, seq_length))
-        resampled.append(resampled_series.values)
+        resampled.append(resampled_series.to_numpy(np.int16))
     return np.stack(resampled)
 
 
@@ -258,8 +258,6 @@ def generate_surrogate_labels_batched(meta, generated_samples, target_samples, d
     idx_timelines = np.arange(MAXT)[:, None] - prediction_window_starts_idx[None, :].numpy()  # Wf starts at 0
 
     # 5. Call get_mode_predictions_single_window for each sample
-    surr_labels_pred = []
-    surr_labels_target = []
     surr_labels_pred, surr_labels_target = get_mode_predictions_batched_window(
         pd_rollout_pred=concat_pd_rollouts_pred,
         pd_rollout_target=concat_pd_rollouts_target,

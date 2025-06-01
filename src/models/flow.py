@@ -81,6 +81,20 @@ class FlowModule(L.LightningModule):
         self.automatic_optimization = False
         self.register_buffer("sqrt_dt", torch.sqrt(torch.tensor(1 / self.SAMPLE_RATE)))
         self.init_metrics()
+        self.test_cache_name = None
+        self.test_cache = None
+        self.test_cache_mode = "create"
+
+    def set_cache(self, name: str, mode='create'):
+        from src.hdf_cache import TestStepHDFCache
+        self.test_cache_name = name
+        self.test_cache_mode = mode
+        self.test_cache = TestStepHDFCache(name, 'a')
+
+    def set_integration_method(self, n_steps=None, method=None):
+        self.flow_steps = n_steps or self.flow_steps
+        self.solve_method = method or self.solve_method
+        logger.debug("Integration method set to %s with %s steps", self.solve_method, self.flow_steps)
 
     def _validate_configuration(self):
         assert self.batch_rematch_factor > 0 and type(
@@ -282,21 +296,28 @@ class FlowModule(L.LightningModule):
 
     def test_step(self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int):
         meta, conditioning_input, target_samples = batch
-        prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
-        generated_samples: torch.Tensor = self.integrate_path(
-            prior_samples,
-            conditioning_input=conditioning_input,
-            n_steps=self.flow_steps,
-            method=self.solve_method,
-            save_trajectories=False
-        )  # type: ignore
         data_module = self.trainer.datamodule
         Wf_length = data_module.seq_length
-        surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
-            meta, generated_samples, target_samples, data_module=data_module
-        )  # both pred and target have shape B, Wh+Wf, and
+        if self.test_cache is not None and self.test_cache_mode == 'use':
+            generated_samples, surr_labels_pred, surr_labels_target = self.test_cache.get(meta['shot_number'].cpu(), meta['start_i'].cpu())
+            generated_samples = torch.tensor(generated_samples, device=self.device, dtype=torch.float32)
+        else:
+            prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
+            generated_samples: torch.Tensor = self.integrate_path(
+                prior_samples,
+                conditioning_input=conditioning_input,
+                n_steps=self.flow_steps,
+                method=self.solve_method,
+                save_trajectories=False
+            )  # type: ignore
+            surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
+                meta, generated_samples, target_samples, data_module=data_module
+            )  # both pred and target have shape B, Wh+Wf, and
+            if self.test_cache is not None and self.test_cache_mode == 'create':
+                self.test_cache.set_from_batch(meta['shot_number'].cpu(), meta['start_i'].cpu(), generated_samples, surr_labels_pred, surr_labels_target)
         surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=torch.int)
         surr_labels_target = torch.tensor(surr_labels_target, device=self.device, dtype=torch.int)
+        
         # TODO: the metrics don't need the interpolated versions of the labels. and they often need the transitions only.
         # Metrics
         logger.debug("sur_labels shape: %s", surr_labels_pred.shape)
@@ -364,9 +385,6 @@ class FlowModule(L.LightningModule):
             method=solve_method,
             save_trajectories=True
         )
-        # Metrics
-        metrics_out = metrics.get_moments_errors_per_channel(generated_samples, target_samples)
-        self.model.train()  # Reset model to training mode
 
         # surrogate labels
         if data_module is None:
@@ -374,6 +392,9 @@ class FlowModule(L.LightningModule):
         surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
             meta, generated_samples, target_samples, data_module=data_module
         )
+        # Metrics
+        metrics_out = metrics.get_moments_errors_per_channel(generated_samples, target_samples)
+        self.model.train()  # Reset model to training mode
         meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
             (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
             device='cpu'  # type: ignore
@@ -477,7 +498,7 @@ class FlowModule(L.LightningModule):
                 current_points,
                 time_grid,
                 method=method,
-                options={'max_num_steps': 2000},
+                options={'max_num_steps': 2000} if method == 'dopri5' else {},
                 # atol=atol,
                 # rtol=rtol,
             )

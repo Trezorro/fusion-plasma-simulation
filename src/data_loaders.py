@@ -518,5 +518,6 @@ class FusionShotDataModule(L.LightningDataModule):
         assert self.data_is_normalized, "Normalization stats not computed. Call setup() first."
         return data.DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
 
-    def test_dataloader(self):
-        return data.DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
+    def test_dataloader(self, batch_size_override=None, shuffle=False):
+        batch_size = batch_size_override or self.batch_size
+        return data.DataLoader(self.test_dataset, batch_size=batch_size, num_workers=self.num_workers, shuffle=shuffle)
