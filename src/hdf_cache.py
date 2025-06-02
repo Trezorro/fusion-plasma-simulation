@@ -78,7 +78,7 @@ class TestStepHDFCache:
                         if "surr_labels_target" in grp:
                             del grp["surr_labels_target"]
                         grp.create_dataset("surr_labels_target", data=surr_labels_target, dtype="i2")
-        logger.debug("Set %s entries in cache.", i)
+        logger.debug("Set %s entries in cache.", i+1)
 
     def get(self, shot_nums, start_idxs):
         """
@@ -100,5 +100,5 @@ class TestStepHDFCache:
                 shot_t_group["generated_x"].read_direct(generated_x_batch, np.s_[:], np.s_[i, :, :])
                 shot_t_group["surr_labels_gen"].read_direct(surr_labels_gen_batch, np.s_[:], np.s_[i, :, :])
                 shot_t_group["surr_labels_target"].read_direct(surr_labels_target_batch, np.s_[:], np.s_[i, :, :])
-            logger.debug("Got %s entries from cache.", i)
+            logger.debug("Got %s entries from cache.", i+1)
         return generated_x_batch, surr_labels_gen_batch, surr_labels_target_batch
