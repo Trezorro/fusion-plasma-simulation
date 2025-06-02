@@ -129,7 +129,7 @@ def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.
         RUN_ID = run.id
         RUN_NAME = run.name
         print(f" ✅ Found Run ID: {RUN_ID}, Run Name: {RUN_NAME}\n Created at: {run.created_at}")
-        print(f"   Run URL: {run.url}")
+        print(f"   Run URL: {run.url}", flush=True)
     return run
 
 
