@@ -9,7 +9,7 @@ features:
   - learning_rate_scheduler
 
 epochs: 120
-limit_train_batches: 100
+limit_train_batches: 120
 limit_val_batches: 25
 batch_size: 128
 patience: 12
