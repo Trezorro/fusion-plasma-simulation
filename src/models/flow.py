@@ -314,7 +314,7 @@ class FlowModule(L.LightningModule):
                 meta, generated_samples, target_samples, data_module=data_module
             )  # both pred and target have shape B, Wh+Wf, and
             if self.test_cache is not None and self.test_cache_mode == 'create':
-                self.test_cache.set_from_batch(meta['shot_number'].cpu(), meta['start_i'].cpu(), generated_samples, surr_labels_pred, surr_labels_target)
+                self.test_cache.set_from_batch(meta['shot_number'].cpu(), meta['start_i'].cpu(), generated_samples.cpu(), surr_labels_pred, surr_labels_target)
         surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=torch.int)
         surr_labels_target = torch.tensor(surr_labels_target, device=self.device, dtype=torch.int)
         
