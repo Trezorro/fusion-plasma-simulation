@@ -3,7 +3,7 @@
 base_run: seq_normal_smC # ID or unique name
 prefer_model_alias: latest # null just takes the one with latest, can be best or latest.
 
-test_cache_name: ${ base_run }
+test_cache_name: ${ run_name }
 test_cache_mode: create # create or use
 
 evaluation:
