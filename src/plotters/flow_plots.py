@@ -874,7 +874,17 @@ def add_peak_markers(
                 )
 
 
-def add_mode_bars(fig, history_length, seq_length, num_samples, shot_labels, shot_i, shot_number, group: str = 'human'):
+def add_mode_bars(
+    fig,
+    history_length,
+    seq_length,
+    num_samples,
+    shot_labels,
+    shot_i,
+    shot_number,
+    group: str = 'human',
+    showlegend=True
+):
     BAR_WIDTH = 25
     MODE_COLORS = ["grey", "lightskyblue", "orange", "red"]
     MODE_NAMES = ["Unknown", "L", "D", "H"]
@@ -922,8 +932,9 @@ def add_mode_bars(fig, history_length, seq_length, num_samples, shot_labels, sho
             legendgroup=f'Shot {shot_number} - Modes',
             hoverinfo='skip',  # Disable hover for this trace
         ),
-        secondary_y=True,
+        # secondary_y=True,
     )
+
     fig.add_trace(
         go.Bar(
             x=spans,
@@ -937,11 +948,277 @@ def add_mode_bars(fig, history_length, seq_length, num_samples, shot_labels, sho
             hovertemplate=
             "Mode: %{customdata[3]}<br>Shot #%{customdata[0]}<br>Time steps: %{customdata[1]} - %{customdata[2]}<br>(%{x} steps)",
             customdata=custom_data,
-            showlegend=True,  # Bar chart does not need a separate legend
+            showlegend=showlegend,  # Bar chart does not need a separate legend
             name=f'Shot #{shot_number} - {group} Labels',
             # hoverinfo=['skip'] + ['all'] * (len(spans) - 1),  # Disable hover for this trace
             legendgroup=f'Shot {shot_number} - Modes',
             legendgrouptitle_text=f'Shot {shot_number} - Modes',
         ),
-        secondary_y=True,
+        # secondary_y=True,
     )
+
+
+def single_window_lines_plotly(
+    target_samples: torch.Tensor,
+    generated_samples: Optional[torch.Tensor] = None,
+    conditioning_input: Optional[dict] = None,
+    labels: Optional[np.ndarray] = None,
+    title: str = "",
+    show_c: bool = True,
+    legend_loc: str = "top right",
+    label_bars: bool = True,
+    **kwargs
+):
+    """
+    Print-friendly plot for a single window (no batch), with 3 explicit subplots:
+    1. x channels
+    2. c channels (if present)
+    3. label bar (if present)
+    All share the x axis.
+    """
+    C = get_current_config()
+    CHANNEL_NAMES = C.data.cols.x
+    history_length = C.data.history_length
+    seq_length = C.data.seq_length
+    COLOR_SCALE = plt_colors.qualitative.Plotly
+    C_COLOR_SCALE = plt_colors.qualitative.Pastel
+    if target_samples.dim() == 3:
+        B, n_channels, n_timepoints = target_samples.shape
+        assert B == 1, "Single window plot expects a batch size of 1 or no batch dim."
+    else:
+        n_channels, n_timepoints = target_samples.shape
+
+    # Determine subplot rows
+    has_c = show_c and conditioning_input is not None and "c" in conditioning_input
+    has_labels = label_bars and labels is not None
+    nrows = 1 + int(has_c) + int(has_labels)
+    row_x = 1
+    row_c = 2 if has_c else None
+    row_label = 3 if has_c and has_labels else (2 if has_labels else None)
+
+    fig = plotly_make_subplots(
+        rows=nrows,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.01,
+        row_heights=[0.5, 0.4, 0.1][:nrows],
+        specs=[[{"secondary_y": False}] for _ in range(nrows)],
+    )
+    # Add vertical black solid line at x=0 to all subplots
+    for row in range(1, nrows + 1):
+        fig.add_shape(
+            type="line",
+            x0=0,
+            x1=0,
+            y0=0,
+            y1=1,
+            line=dict(
+                color="black",
+                width=1,
+                dash="solid",
+            ),
+            xref="x" + (str(row) if row > 1 else ""),
+            yref="paper",
+            opacity=.8,
+            layer="above"
+        )
+    # Annotate left and right windows with LaTeX labels
+    fig.add_annotation(
+        text=r"$W_H$",
+        x=-history_length * 0.5,
+        y=0.9,
+        xref=f"x{row_x}",
+        yref="paper",
+        showarrow=False,
+        font=dict(size=18, color="black"),
+        align="center",
+        bgcolor="rgba(255,255,255,0.0)",
+        borderpad=2,
+        row=1,
+        col=1,
+    )
+    fig.add_annotation(
+        text=r"$W_F$",
+        x=seq_length * 0.5,
+        y=.9,
+        xref=f"x{row_x}",
+        yref="paper",
+        showarrow=False,
+        font=dict(size=18, color="black"),
+        align="center",
+        bgcolor="rgba(255,255,255,0.0)",
+        borderpad=2,
+        row=1,
+        col=1,
+    )
+    # X channels subplot
+    for channel_i in range(n_channels):
+        channel_color = COLOR_SCALE[channel_i % len(COLOR_SCALE)]
+        channel_name = CHANNEL_NAMES[channel_i]
+        fig.add_trace(
+            go.Scatter(
+                x=np.arange(seq_length),
+                y=target_samples.squeeze()[channel_i, :],
+                mode='lines',
+                line=dict(color=channel_color, width=2),
+                opacity=0.9,
+                name=f'{channel_name}',
+                legendgroup=f'x',
+                legendgrouptitle_text=r"Observables $\mathbf{x}_W$",
+            ),
+            row=row_x, col=1
+        )
+        if generated_samples is not None:
+            fig.add_trace(
+                go.Scatter(
+                    x=np.arange(seq_length),
+                    y=generated_samples.squeeze()[channel_i, :],
+                    mode='lines',
+                    line=dict(dash='dot', color=channel_color, width=2),
+                    opacity=0.9,
+                    name=f'{channel_name} (predicted)',
+                    legendgroup=f'{channel_name}',
+                ),
+                row=row_x, col=1
+            )
+        show_history = conditioning_input is not None and "x_history" in conditioning_input
+        if show_history:
+            x_history = conditioning_input['x_history'].squeeze()
+            fig.add_trace(
+                go.Scatter(
+                    x=np.arange(-history_length, 0),
+                    y=x_history[channel_i, :],
+                    mode='lines',
+                    line=dict(color=channel_color, width=2, dash='solid'),
+                    opacity=0.8,
+                    name=f'{channel_name} (history)',
+                    showlegend=False,
+                    legendgroup=f'x',
+                ),
+                row=row_x, col=1
+            )
+    # C channels subplot
+    if has_c:
+        c_input = conditioning_input["c"].squeeze()
+        c_channels = c_input.shape[0]
+        c_axis_values = np.arange(-history_length, seq_length)
+        C_CHANNEL_NAMES = C.data.cols.c
+        for channel_j in range(c_channels):
+            channel_color = C_COLOR_SCALE[channel_j % len(C_COLOR_SCALE)]
+            channel_name = C_CHANNEL_NAMES[channel_j]
+            fig.add_trace(
+                go.Scatter(
+                    x=c_axis_values,
+                    y=c_input[channel_j, :],
+                    mode='lines',
+                    line=dict(color=channel_color, width=2),
+                    opacity=0.9,
+                    name=f'{channel_name}',
+                    legendgroup=f'(C)',
+                    legendgrouptitle_text=r"Controls $\mathbf{c}_W$",
+                ),
+                row=row_c,
+                col=1
+            )
+    # Label bar subplot
+    if has_labels:
+        add_mode_bars(fig, history_length, seq_length, 1, labels.squeeze(), 0, "Human", showlegend=False)
+        # Move the last two bar traces to the label bar row
+        # (Plotly doesn't support bar row assignment directly, so we move them after creation)
+        for i in [-2, -1]:
+            fig.data[i].update(xaxis=f'x{row_label}', yaxis=f'y{row_label}')
+    # Layout
+    fig.update_layout(
+        title=title,
+        template='ggplot2',
+        font=dict(family="serif", size=14),
+        hovermode='closest',
+        margin=dict(l=10, r=20, t=10, b=20),
+        height=500,
+        width=950,
+        legend=dict(
+            orientation="v",
+            yanchor="bottom",
+            y=0.001,
+            yref='paper',
+            # xanchor="left",
+            # x=1,
+            font=dict(size=10),
+            bgcolor="rgba(0,0,0,0)",
+            # valign="middle",  # Use vertical space
+            itemsizing="constant",
+            # traceorder="normal",
+        ),
+        barmode='stack',
+        barcornerradius=1,
+    )
+    print(nrows)
+    middle_time = conditioning_input['position_sequence'].squeeze()[-seq_length]
+
+    x_ticks = list(range(-250, 251, 50))
+    ticktext = x_ticks.copy()
+    ticktext[len(x_ticks)//2] = f"$t={middle_time:0.3f}$"
+    fig.update_xaxes(
+        range=(-history_length, seq_length), showticklabels=False, showgrid=True,
+        ticks="",
+        tickvals=x_ticks,
+    )
+    # bottom X axis
+    fig.update_xaxes(
+        range=(-history_length - 1, seq_length + 1),
+        showticklabels=True,
+        title_text="Time steps (0.1ms/step)",
+        showgrid=False,
+        row=nrows,
+        col=1,
+        tickvals=x_ticks,
+        ticktext=ticktext,
+        ticks="inside"
+    )
+    # Remove y ticks on the last subplot (label bar)
+    if row_label is not None:
+        fig.update_yaxes(showticklabels=False, row=row_label, col=1)
+    fig.update_yaxes(title_text="$\mathbf{x}$", showticklabels=True, range=(-0.05,1.01), row=1, col=1)
+    fig.update_yaxes(title_text="$\mathbf{c}$", showticklabels=True, range=(-0.02,1.02), row=2, col=1)
+    fig.update_yaxes(title_text="$\mathbf{y}$", showticklabels=False, ticks='', row=3, col=1)
+    # Add manual legend entries for the bars: H (red), D (orange), L (blue)
+    fig.add_trace(
+        go.Bar(
+            x=[None],
+            y=[0],
+            marker=dict(color="red", opacity=0.5),
+            name="High",
+            showlegend=True,
+            legendgroup="Modes",
+            legendgrouptitle_text="Confinement Modes",
+        ),
+        row=row_label if row_label is not None else nrows,
+        col=1
+    )
+    fig.add_trace(
+        go.Bar(
+            x=[None],
+            y=[None],
+            marker=dict(color="orange", opacity=0.5),
+            name="Dithering",
+            showlegend=True,
+            legendgroup="Modes",
+        ),
+        row=row_label if row_label is not None else nrows, col=1
+    )
+    fig.add_trace(
+        go.Bar(
+            x=[None],
+            y=[None],
+            marker=dict(color="lightskyblue", opacity=0.5),
+            name="Low",
+            showlegend=True,
+            legendgroup="Modes",
+        ),
+        row=row_label if row_label is not None else nrows, col=1
+    )
+    # if has_c:
+    #     fig.update_yaxes(range=(-1.1, 1.1), row=row_c, col=1)
+    if wandb.run.disabled:  # type: ignore
+        fig.show()
+    return fig
