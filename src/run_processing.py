@@ -14,7 +14,7 @@ rich.traceback.install()
 
 # %%
 # data_dir = 'shots/'
-DATA_INPUT_DIR = "/Users/milan/Code/fusion/data/"
+DATA_INPUT_DIR = "/Users/milan/Code/fusion/data/LHD_labeled_TCV"
 DATA_SET_NAME = "LHD_labeled_TCV"
 DATE = pd.Timestamp.now().strftime("%Y_%m_%d")
 
@@ -52,9 +52,7 @@ def index_shot_names(data_dir: str) -> tuple[dict[int, str], dict[int, str]]:
     sig_all = {int(re.findall(r'\d+', x)[0]): x for x in rich.progress.track(sig_all_names, "Indexing shots")}
     shot_no_list = list(sig_all.keys())
     label_all = glob.glob(data_dir + 'TCV_*_*_labeled.csv')
-    label_all = {
-        int(x.split("TCV_")[1].split("_")[0]): x for x in rich.progress.track(label_all, "Indexing labels")
-    }
+    label_all = {int(x.split("TCV_")[1].split("_")[0]): x for x in rich.progress.track(label_all, "Indexing labels")}
     label_no_list = list(label_all.keys())
     assert set(shot_no_list
               ) <= set(label_no_list), f"Not all shots have labels: {set(shot_no_list) - set(label_no_list)}"
@@ -92,9 +90,7 @@ def analyze_nans(one_shot_df: pd.DataFrame) -> tuple[pd.DataFrame, tuple[int, in
     consecutive_non_nans = {}
     for col in nan_cols:
         # Split groups by NaNs via cumsum, then get the maximum length of consecutive non-NaNs
-        around_nan_windows = one_shot_df[col].notnull().astype(int).groupby(
-            one_shot_df[col].isnull().cumsum()
-        )
+        around_nan_windows = one_shot_df[col].notnull().astype(int).groupby(one_shot_df[col].isnull().cumsum())
         consecutive_non_nans[col] = around_nan_windows.sum().max()
     # get start and end step of the longest window of non-NaNs over all columns:
     usable_rows = one_shot_df.dropna()
@@ -196,9 +192,7 @@ def combine_all_shots(
         label = pd.read_csv(label_all[shotno])
         rich.print("Reading shot", shotno, "Length:", len(sig), "Label length:", len(label))
         if len(sig) < min_steps_filter:
-            rich.print(
-                f"Skipping shot {shotno} because it has less than {min_steps_filter} steps ({len(sig)})"
-            )
+            rich.print(f"Skipping shot {shotno} because it has less than {min_steps_filter} steps ({len(sig)})")
             too_short += 1
             continue
 
@@ -248,7 +242,6 @@ def combine_all_shots(
         ### Handle NaNs ###
         # count amount of columns with any nans
         raw_nan_summary, longest_window = analyze_nans(shot_out)
-        nan_summaries.append(raw_nan_summary)  # for later analysis
         # Replace nans in NBI with 0, as per yoeri's suggestion
         shot_out.loc[shot_out["NBI"].isnull(), "NBI"] = 0
         nan_summary, (start_usable, end_usable) = analyze_nans(shot_out)
@@ -260,6 +253,7 @@ def combine_all_shots(
         )
         # Other columns with too many NaNs are problmeatic, so we drop the shot
         if not nan_summary.empty and nan_summary["Small C-ratio"].any():
+            nan_summaries.append(nan_summary)  # for later analysis
             rich.print(
                 f"Shot {shotno} has columns with too many NaNs ({nan_summary.index.tolist()}). Dropping the shot."
             )
@@ -278,7 +272,9 @@ def combine_all_shots(
     print(f"Label shot number discrepancy: {label_shot_num_discrepancy}")
     print(f"Rejected shots due to too many NaNs: {nan_rejects}")
     rich.print(f"Memory usage: {memory / 1e6} MB")
-
+    nan_summary_df = pd.concat(nan_summaries)
+    rich.print(nan_summary_df.sort_index())
+    rich.print(nan_summary_df.index.value_counts())
     return pd.concat(all_shot_dfs)
 
 
@@ -325,9 +321,7 @@ def compare_data_sets(input_dirs: list[str], shot_lists: dict[str, list[int]] = 
     for name, shot_set in shot_sets.items():
         new_elements = set(shot_set) - total_set
         total_set |= set(shot_set)
-        print(
-            f"Total shots in {name}: {len(shot_set)} (+ adding {len(new_elements)} new shots to the total.)"
-        )
+        print(f"Total shots in {name}: {len(shot_set)} (+ adding {len(new_elements)} new shots to the total.)")
     print("Total unique shot set: ", len(total_set))
     # Compare the sets
     for i, (name, shot_set) in enumerate(shot_sets.items()):
@@ -350,7 +344,7 @@ def compare_data_sets(input_dirs: list[str], shot_lists: dict[str, list[int]] = 
 if __name__ == "__main__":
     sig_all, label_all = index_shot_names(DATA_INPUT_DIR)
     data_df = combine_all_shots(sig_all, label_all)
-    out_path = f"./data/{DATA_SET_NAME}.parquet"
+    out_path = f"./data/{DATE}-{DATA_SET_NAME}.parquet"
     data_df.to_parquet(out_path)
     generate_report(data=data_df)
     print("Saved to ", out_path)
@@ -358,7 +352,7 @@ if __name__ == "__main__":
     #%%
     exit(0)
 #%%
-generate_report("data/" + DATA_SET_NAME + ".parquet")
+generate_report("data/" + DATE + DATA_SET_NAME + ".parquet")
 
 #%%
 data_set_dirs = [
