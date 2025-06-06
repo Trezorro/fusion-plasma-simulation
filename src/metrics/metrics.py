@@ -687,9 +687,12 @@ class MomentsErrorsMetric(torchmetrics.Metric):
         super().__init__()
         C = get_current_config()
         self.channel_names = C.data.cols.x
+        self.future_length = C.data.seq_length
         for moment in MOMENT_NAMES:
             self.add_state(f"magnitude_{moment}", default=torch.zeros(len(self.channel_names)), dist_reduce_fx="sum")
             self.add_state(f"diff_{moment}", default=torch.zeros(len(self.channel_names)), dist_reduce_fx="sum")
+        self.add_state(f"sq_error", default=torch.zeros(len(self.channel_names)), dist_reduce_fx="sum")
+
         self.add_state("count", default=torch.tensor(0), dist_reduce_fx="sum")
 
     def update(self, pred: torch.Tensor, target: torch.Tensor):
@@ -697,6 +700,10 @@ class MomentsErrorsMetric(torchmetrics.Metric):
         magnitudes_target = moments(target)
         first_diff_pred = moments(first_difference(pred))
         first_diff_target = moments(first_difference(target))
+        sq_error = torch.sum(
+            torch.pow(pred[:, :, -self.future_length:] - target[:, :, -self.future_length:], 2), dim=(0, 2)
+        ) / self.future_length  # Sum over batch and time dimension and normalize per time step
+        self.add_to_state(f"sq_error", sq_error)
 
         for moment in MOMENT_NAMES:
             self.add_to_state(
@@ -713,6 +720,10 @@ class MomentsErrorsMetric(torchmetrics.Metric):
 
     def compute(self):
         metrics = {}
+        # Calculate the mean squared error for the squared error
+        metrics[f"/error/mse/mean"] = self.sq_error.mean() / self.count.float()
+        for i, channel_name in enumerate(self.channel_names):
+            metrics[f"/error/mse/{channel_name}"] = self.sq_error[i].item() / self.count.float()
         for moment in MOMENT_NAMES:
             magnitude_mean = getattr(self, f"magnitude_{moment}") / self.count.float()
             diff_mean = getattr(self, f"diff_{moment}") / self.count.float()
