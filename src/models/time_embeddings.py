@@ -111,7 +111,7 @@ class TimeEmbedding(nn.Module):
         # If using learned embedding, transform with the MLP
         emb = self.act(self.lin1(emb))
         emb = self.lin2(emb)
-        return emb.view(*t.shape, self.projection_channels)  # [batch_size, projection_channels]
+        return emb.view(*t.shape, self.projection_channels)  # [batch_size, (T), projection_channels]
 
 
 class DummyTimeEmbedding(nn.Module):

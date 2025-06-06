@@ -526,7 +526,6 @@ class AttentionBlock(nn.Module):
         * `n_channels` is the number of channels in the input
         * `n_heads` is the number of heads in multi-head attention
         * `d_k` is the number of dimensions in each head
-        * `norm_groups` is the number of groups for [group normalization](../../normalization/group_norm/index.html)
         """
         super().__init__()
         logger.debug(
