@@ -9,3 +9,20 @@ test_cache_mode: create # create or use
 evaluation:
   n_steps: 40 # enough for rk4
   solve_method: rk4 # dopri5, euler, midpoint
+  # plot_functions:
+  # # every item has to have a 'key' key.
+  # # n are optional through defaults in PlotsCallback
+  # # all other keys are passed as kwargs to the plot function
+  # # - key: 2d_flow_plot
+  # #   n: 64
+  # - key: animated_traces
+  #   n: 5
+  # - key: multi_channel_lines
+  #   n: 16
+  #   buttons: true
+  # Prominence histograms
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/dml_energy_delta
+  #   channel_name: DML
+  #   measure: energy_delta
+  #   n: 64

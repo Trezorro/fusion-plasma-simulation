@@ -31,6 +31,7 @@ class ModeTransitionMetric(torchmetrics.Metric):
         "div"  # divergence
     ]
     VIEW_OPTIONS = ["target", "pred", "error", "sq_err"]
+    WINDOW_OF_INFLUENCE_SPILL = 15 # the surrogate model looks ahead 15 steps past where it assigns a label.
 
     def __init__(
         self,
@@ -39,36 +40,39 @@ class ModeTransitionMetric(torchmetrics.Metric):
         super().__init__()
         self.condition = condition_history
         self.C = get_current_config()
-        self.history_length = self.C.data.history_length
-        self.future_length = self.C.data.seq_length
-        self.add_state(f"transition_counts_pred", default=torch.zeros(1,3,3), dist_reduce_fx="cat")
-        self.add_state(f"transition_counts_target", default=torch.zeros(1,3,3), dist_reduce_fx="cat")
-        self.add_state(f"transition_counts_sq_error", default=torch.zeros(3,3), dist_reduce_fx="sum")
-        self.add_state(f"total_hits", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.history_length = self.C.data.history_length - self.WINDOW_OF_INFLUENCE_SPILL
+        self.future_length = self.C.data.seq_length + self.WINDOW_OF_INFLUENCE_SPILL
+        self.add_state(f"transition_counts_pred", default=torch.zeros(4, 4), dist_reduce_fx="sum")
+        self.add_state(f"transition_gt0_pred", default=torch.zeros(4, 4), dist_reduce_fx="sum")
+        self.add_state(f"transition_counts_target", default=torch.zeros(4, 4), dist_reduce_fx="sum")
+        self.add_state(f"transition_gt0_target", default=torch.zeros(4, 4), dist_reduce_fx="sum")
+        self.add_state(f"transition_counts_sq_error", default=torch.zeros(4,4), dist_reduce_fx="sum")
+        self.add_state(f"total_hits", default=torch.zeros(1, dtype=torch.int32), dist_reduce_fx="sum")
 
     def update(self, surr_labels_pred, surr_labels_target):
         # history should of course be the same as it is conditioning information
         history = surr_labels_target[:, :self.history_length]
-        future_pred = surr_labels_pred[:, self.history_length:]
-        future_target = surr_labels_target[:, self.history_length:]
+        future_pred_y = surr_labels_pred[:, self.history_length:]
+        future_target_y = surr_labels_target[:, self.history_length:]
 
         # Get mask for samples that satisfy the condition
-        mask = self.test_condition(history)
+        sample_mask = self.test_condition(history)
 
         # Only keep samples where mask is True and at least one sample is selected
-        if mask.any():
+        if sample_mask.any():
             # Compute transition matrices for pred and target
-            pred_trans = transition_matrix(future_pred[mask])  # (M, 3, 3)
-            target_trans = transition_matrix(future_target[mask])  # (M, 3, 3)
-            sq_error = torch.square(pred_trans-target_trans)
+            pred_trans = transition_matrix(future_pred_y[sample_mask])  # (M, 3, 3)
+            target_trans = transition_matrix(future_target_y[sample_mask])  # (M, 3, 3)
+            expanded_pred = self._expand_transition_matrix(pred_trans) # (M, 4 ,4)
+            expanded_target = self._expand_transition_matrix(target_trans)  # (M, 4 ,4)
 
             # Sum over batch and add to state
-            self.transition_counts_pred = torch.concat((self.transition_counts_pred, pred_trans), dim=0)
-            self.transition_counts_target = torch.concat((self.transition_counts_target, target_trans), dim=0)
-            # self.transition_counts_pred += pred_trans.sum(dim=0, keepdim=True)
-            # self.transition_counts_target += target_trans.sum(dim=0, keepdim=True)
-            self.transition_counts_sq_error += sq_error.sum(dim=0)
-            self.total_hits += mask.sum()
+            self.transition_counts_pred += expanded_pred.sum(dim=0)
+            self.transition_gt0_pred += (expanded_pred > 0).sum(dim=0)
+            self.transition_counts_target += expanded_target.sum(dim=0)
+            self.transition_gt0_target += (expanded_target > 0).sum(dim=0)
+            self.transition_counts_sq_error += torch.square( expanded_pred - expanded_target ).sum(dim=0) # calculate to/from any totals before calculating error
+            self.total_hits += sample_mask.sum()
 
 
     def test_condition(self, history):
@@ -92,29 +96,75 @@ class ModeTransitionMetric(torchmetrics.Metric):
         else:
             raise ValueError(f"Unknown condition operation: {op}")
 
+    @staticmethod
+    def _expand_transition_matrix(transition_counts_matrix: torch.Tensor):
+        """Add a 4th row/column for from_any/to_any. Supports optional batch dim.
+
+        Only off-diagonal transitions are counted. i.e. Not L->L, D->D, H->H
+        """
+        if transition_counts_matrix.dim() == 2:
+            # Single matrix, shape (3,3)
+            mat = transition_counts_matrix.clone()
+            mat.fill_diagonal_(0)
+            expanded = torch.zeros(4, 4, dtype=mat.dtype, device=mat.device)
+            expanded[:3, :3] = mat
+            expanded[3, :3] = mat.sum(dim=0)
+            expanded[:3, 3] = mat.sum(dim=1)
+            expanded[3, 3] = mat.sum()
+            return expanded
+        elif transition_counts_matrix.dim() == 3:
+            # Batched, shape (B,3,3)
+            B = transition_counts_matrix.shape[0]
+            mat = transition_counts_matrix.clone()
+            # Zero diagonals for each batch
+            idx = torch.arange(3, device=mat.device)
+            mat[:, idx, idx] = 0
+            expanded = torch.zeros(B, 4, 4, dtype=mat.dtype, device=mat.device)
+            expanded[:, :3, :3] = mat
+            expanded[:, 3, :3] = mat.sum(dim=1)
+            expanded[:, :3, 3] = mat.sum(dim=2)
+            expanded[:, 3, 3] = mat.sum(dim=(1,2))
+            return expanded
+        else:
+            raise ValueError("Input must be 2D or 3D tensor of shape (3,3) or (B,3,3)")
+
     def compute(self):
         """Output expected number of transitions and P(eta>0) for each from-to pair, for pred, target, and squared error views."""
         out = {}
-        # Remove the batch dimension (cat) if present
-        pred_counts = self.transition_counts_pred.sum(dim=0)
-        target_counts = self.transition_counts_target.sum(dim=0)
-        sq_error_counts = self.transition_counts_sq_error  # already summed in update
+        # Reduce over the super-batch dimension (concatenate dim) and calculate from/to any totals
         total_hits = self.total_hits.item() if hasattr(self.total_hits, 'item') else float(self.total_hits)
+        n = max(total_hits, 1)
 
-        for from_idx, from_name in enumerate(["L", "D", "H"]):
-            for to_idx, to_name in enumerate(["L", "D", "H"]):
+        # Difference in Proportions with confidence interval
+        p1 = self.transition_gt0_pred / n
+        p2 = self.transition_gt0_target / n
+        delta = p1 - p2
+        # Manual SE + CI
+        SE = torch.sqrt((p1 * (1 - p1) + p2 * (1 - p2)) / n)
+        # CI_lower = delta - 1.96 * SE
+        # CI_upper = delta + 1.96 * SE
+
+        for from_idx, from_name in enumerate(["L", "D", "H", "any"]):
+            for to_idx, to_name in enumerate(["L", "D", "H", "any"]):
                 key_base = f"{self.condition}/from_{from_name}/to_{to_name}"
-                pred_val = pred_counts[from_idx, to_idx].item()
-                target_val = target_counts[from_idx, to_idx].item()
-                sq_err_val = sq_error_counts[from_idx, to_idx].item()
+                pred_sum_entry = self.transition_counts_pred[from_idx, to_idx].item()
+                target_sum_entry = self.transition_counts_target[from_idx, to_idx].item()
+                pred_gt0_entry = self.transition_gt0_pred[from_idx, to_idx].item()
+                target_gt0_entry = self.transition_gt0_target[from_idx, to_idx].item()
+                delta_entry = delta[from_idx, to_idx].item()
+                SE_entry = SE[from_idx, to_idx].item()
+                sq_err_val = self.transition_counts_sq_error[from_idx, to_idx].item()
                 # Expectation (mean number of transitions per sample)
-                out[f"{key_base}/expect/pred"] = pred_val / max(total_hits, 1)
-                out[f"{key_base}/expect/target"] = target_val / max(total_hits, 1)
-                out[f"{key_base}/expect/sq_err"] = sq_err_val / max(total_hits, 1)
+                out[f"{key_base}/expect/pred"] = pred_sum_entry / n
+                out[f"{key_base}/expect/target"] = target_sum_entry / n
+                out[f"{key_base}/expect/sq_err"] = sq_err_val / n
                 # Probability of at least one transition (gt0)
-                out[f"{key_base}/p_gt0/pred"] = float(pred_val > 0)
-                out[f"{key_base}/p_gt0/target"] = float(target_val > 0)
-                out[f"{key_base}/p_gt0/sq_err"] = float(sq_err_val > 0)
+                out[f"{key_base}/p_gt0/pred"] = pred_gt0_entry / n
+                out[f"{key_base}/p_gt0/target"] = target_gt0_entry / n
+                out[f"{key_base}/p_gt0/delta_CI_lower"] = delta_entry - 1.96 * SE_entry
+                out[f"{key_base}/p_gt0/delta_CI_upper"] = delta_entry + 1.96 * SE_entry
+                out[f"{key_base}/p_gt0/delta"] = delta_entry
+                out[f"{key_base}/p_gt0/match"] = abs(delta_entry) <= 1.96 * SE_entry
         return out
 
 #%%

@@ -16,11 +16,13 @@
             "args": [
                 "epochs=6",
                 "skip_log_summary=True",
-                // "evaluation.plot_functions=null",
-                "evaluation.n_steps=4",
-                "evaluation.max_n=5",
-                "data.seq_length=64",
+                "reeval=True",
+                "evaluation.plot_functions=null",
+                "evaluation.n_steps=2",
+                "evaluation.max_n=10",
+                // "data.seq_length=64",
                 "batch_size=10",
+                "data.batch_size=10",
                 "model.params.batch_rematch_factor=1",
                 "model.params.step_every_nth_match=null"
             ],

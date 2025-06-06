@@ -287,7 +287,7 @@ class FlowModule(L.LightningModule):
                 L_not_in_Wh=ModeTransitionMetric('L_not_in_Wh'),
                 D_not_in_Wh=ModeTransitionMetric('D_not_in_Wh'),
                 H_not_in_Wh=ModeTransitionMetric('H_not_in_Wh'),
-            )
+            ), prefix="/mode/", 
         )
         self.dice_metric = DiceScore(3, input_format='index')
         # self.mode_metrics = mode_metrics_collection
@@ -315,26 +315,33 @@ class FlowModule(L.LightningModule):
             )  # both pred and target have shape B, Wh+Wf, and
             if self.test_cache is not None and self.test_cache_mode == 'create':
                 self.test_cache.set_from_batch(meta['shot_number'].cpu(), meta['start_i'].cpu(), generated_samples.cpu(), surr_labels_pred, surr_labels_target)
-        surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=torch.int)
-        surr_labels_target = torch.tensor(surr_labels_target, device=self.device, dtype=torch.int)
-        
-        # TODO: the metrics don't need the interpolated versions of the labels. and they often need the transitions only.
-        # Metrics
-        logger.debug("sur_labels shape: %s", surr_labels_pred.shape)
 
+        pred_labels = torch.tensor(
+            surr_labels_pred, device=self.device, dtype=torch.int
+        )
+        target_labels = torch.tensor(
+            surr_labels_target, device=self.device, dtype=torch.int
+        )
+
+        # Metrics
         metrics_out = self.moments_metrics(generated_samples, target_samples)
-        metrics_out |= self.mode_test_metrics(surr_labels_pred, surr_labels_target)
+        # label metrics:
+        
+        metrics_out |= self.mode_test_metrics(pred_labels, target_labels) # requires full W to split off history itself
         # Ensure both inputs are long tensors with class indices for DiceScore
-        pred_labels = surr_labels_pred[:, -Wf_length:].long()
-        target_labels = surr_labels_target[:, -Wf_length:].long()
-        metrics_out['/dice'] = self.dice_metric(pred_labels, target_labels)
-        self.log_dict(metrics.prefix_metrics(metrics_out, 'test'), prog_bar=True, on_step=True, on_epoch=False)
+        WINDOW_OF_INFLUENCE_SPILL = 15 # the surrogate model looks ahead 15 steps past where it assigns a label.
+        metrics_out['/dice'] = self.dice_metric(
+            pred_labels[:, -Wf_length - WINDOW_OF_INFLUENCE_SPILL:].long(),
+            target_labels[:, -Wf_length - WINDOW_OF_INFLUENCE_SPILL:].long()
+        )
+        metrics_out['_step'] = batch_idx
+        self.log_dict(metrics.prefix_metrics(metrics_out, 'test/step'), prog_bar=True, on_step=True, on_epoch=False)
 
     def on_test_epoch_end(self):
         test_metrics = self.moments_metrics.compute()
-        test_metrics |= metrics.prefix_metrics(self.mode_test_metrics.compute(), '/mode')
+        test_metrics |= self.mode_test_metrics.compute()
         test_metrics['/dice'] = self.dice_metric.compute()
-        epoch_metrics = metrics.prefix_metrics(test_metrics, 'test')
+        epoch_metrics = metrics.prefix_metrics(test_metrics, 'test/final')
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
         self.moments_metrics.reset()
         self.mode_test_metrics.reset()
