@@ -60,7 +60,7 @@ class TestStepHDFCache:
                                 grp.create_dataset("surr_labels_gen", data=surr_labels_gen[i], dtype="i2")
                             # Store surr_labels_target (same for all in batch)
                             if not "surr_labels_target" in grp:
-                                grp.create_dataset("surr_labels_target", data=surr_labels_target, dtype="i2")
+                                grp.create_dataset("surr_labels_target", data=surr_labels_target[i], dtype="i2")
             case "w":
                 with h5py.File(self.h5_path, "a") as f:
                     for i, (shot_num, start_idx) in enumerate(zip(shot_nums, start_idxs)):
