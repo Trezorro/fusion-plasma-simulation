@@ -1,9 +1,9 @@
 # This will be merged into the inherited config from the base run
 
-base_run: chan_brown_smC # ID or unique name
+base_run: seq_brown_smC # ID or unique name
 prefer_model_alias: latest # null just takes the one with latest, can be best or latest.
 
-test_cache_name: chan_brown_smC-rk4_40 #${ run_name }
+test_cache_name: seq_brown_smC-2-rk4_40 #${ run_name }
 test_cache_mode: create # create or use
 
 evaluation:
