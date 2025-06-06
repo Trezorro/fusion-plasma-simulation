@@ -9,10 +9,10 @@ features:
   - learning_rate_scheduler
 
 epochs: 120
-limit_train_batches: 120
-limit_val_batches: 25
+limit_train_batches: 150
+limit_val_batches: 30
 batch_size: 128
-patience: 12
+patience: 20
 gradient_clip_val: 10  # in testing, lower values did not help prevent loss explosions. This is just a safeguard
 skip_log_summary: false
 
@@ -25,7 +25,7 @@ evaluation:
   solve_method: rk4 # dopri5, euler, midpoint
   max_n: 64
   val_every_n_epochs: 5
-  train_every_n_epochs: 10
+  train_every_n_epochs: 20
   scrutinize_epochs: 5  # Epochs equal or lower than this will always be fully evaluated. -1 to disable
   plot_functions:
     # every item has to have a 'key' key.
@@ -186,10 +186,10 @@ evaluation:
       method: spectral_entropy
       log_key: spectral_entropy_plot
       n: 64
-    - key: entropy_plot
-      method: perm_entropy
-      log_key: permutation_entropy_plot
-      n: 64
+    # - key: entropy_plot
+    #   method: perm_entropy
+    #   log_key: permutation_entropy_plot
+    #   n: 64
 
 
 # model: model.yaml # To be replaced by respective yaml file content
@@ -198,7 +198,7 @@ evaluation:
 model: 
   Class: FlowModule
   params:
-    prior: 'brownian'  # normal, copy, brownian, levy, resample
+    prior: 'normal'  # normal, copy, brownian, levy, resample
     prior_sigma: 0.3 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
     ot_method: null  # null to disable
     ot_replace: true  # Default false
@@ -217,10 +217,10 @@ model:
       apex_hidden_channels: 64  # Default 128
       # activation: GELU  # Default GELU # TODO implement configurable activation
       time_embedding: sinusoidal+mlp  # default: sinusoidal, with optional +mlp, other: dummy
-      time_embedding_d: 8  # Default 32 
+      time_embedding_d: 32  # Default 32 
       positional_encoding: sinusoidal+mlp  # Default sinusoidal, other: sinusoidal+mlp, dummy
       positional_encoding_d: 32
-      positional_encoding_c: 4  # Only used if using +mlp
+      positional_encoding_c: 8  # Only used if using +mlp
       ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
       is_attn: [true, false, false, false] # Default [false, false, false, false]
       mid_attn: true # Default false
