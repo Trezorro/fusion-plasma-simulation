@@ -1,5 +1,6 @@
 # @title Utility code: styles, functions, generators, visualization
 from typing import Optional
+import pysdtw
 import torch
 import wandb
 import numpy as np
@@ -506,9 +507,13 @@ def multi_channel_lines_plotly(
     num_samples = min(n, num_samples)  # Number of traces to visualize
     COLOR_SCALE = plt_colors.qualitative.Plotly
     C_COLOR_SCALE = plt_colors.qualitative.Set2
-    mse = ((target_samples[:num_samples] - generated_samples[:num_samples])**2).mean().item()
-    subtitle = f"MSE: {mse:.4f}" + (f" | {subtitle}" if subtitle else "")
+    mse = ((target_samples[:num_samples] - generated_samples[:num_samples])**2).mean((1, 2))
+    sdtw_func = pysdtw.SoftDTW(gamma=1e-06, use_cuda=False)
+    dtw_per_sample = sdtw_func(
+        target_samples[:num_samples].permute(0, 2, 1), generated_samples[:num_samples].permute(0, 2, 1)
+    )
 
+    subtitle = f"MSE: {mse.mean().item():.4f}" + (f" | {subtitle}" if subtitle else "")
     # Initialize the figure
     fig = plotly_make_subplots(
         rows=1,
@@ -705,10 +710,10 @@ def multi_channel_lines_plotly(
                 'visible': not_target
             }])
         ]
-        for shot_sample_id in shot_ids:
+        for shot_i, shot_sample_id in enumerate(shot_ids):
             main_button_list.append(
                 dict(
-                    label=shot_sample_id,
+                    label=f"{shot_sample_id} (DTW:{dtw_per_sample[shot_i]:.3f}, MSE:{mse[shot_i]:.3f})",
                     args=[{
                         "visible": [shot_sample_id in trace.legendgroup for trace in fig.data]
                     }],
@@ -932,7 +937,7 @@ def add_mode_bars(
             legendgroup=f'Shot {shot_number} - Modes',
             hoverinfo='skip',  # Disable hover for this trace
         ),
-        # secondary_y=True,
+        secondary_y=True,
     )
 
     fig.add_trace(
@@ -954,7 +959,7 @@ def add_mode_bars(
             legendgroup=f'Shot {shot_number} - Modes',
             legendgrouptitle_text=f'Shot {shot_number} - Modes',
         ),
-        # secondary_y=True,
+        secondary_y=True,
     )
 
 
@@ -1002,7 +1007,9 @@ def single_window_lines_plotly(
         shared_xaxes=True,
         vertical_spacing=0.01,
         row_heights=[0.5, 0.4, 0.1][:nrows],
-        specs=[[{"secondary_y": False}] for _ in range(nrows)],
+        specs=[[{
+            "secondary_y": False
+        }] for _ in range(nrows)],
     )
     # Add vertical black solid line at x=0 to all subplots
     for row in range(1, nrows + 1):
@@ -1066,7 +1073,8 @@ def single_window_lines_plotly(
                 legendgroup=f'x',
                 legendgrouptitle_text=r"Observables $\mathbf{x}_W$",
             ),
-            row=row_x, col=1
+            row=row_x,
+            col=1
         )
         if generated_samples is not None:
             fig.add_trace(
@@ -1079,11 +1087,12 @@ def single_window_lines_plotly(
                     name=f'{channel_name} (predicted)',
                     legendgroup=f'{channel_name}',
                 ),
-                row=row_x, col=1
+                row=row_x,
+                col=1
             )
         show_history = conditioning_input is not None and "x_history" in conditioning_input
         if show_history:
-            x_history = conditioning_input['x_history'].squeeze()
+            x_history = conditioning_input['x_history'].squeeze()  # type: ignore
             fig.add_trace(
                 go.Scatter(
                     x=np.arange(-history_length, 0),
@@ -1095,11 +1104,12 @@ def single_window_lines_plotly(
                     showlegend=False,
                     legendgroup=f'x',
                 ),
-                row=row_x, col=1
+                row=row_x,
+                col=1
             )
     # C channels subplot
     if has_c:
-        c_input = conditioning_input["c"].squeeze()
+        c_input = conditioning_input["c"].squeeze()  # type: ignore
         c_channels = c_input.shape[0]
         c_axis_values = np.arange(-history_length, seq_length)
         C_CHANNEL_NAMES = C.data.cols.c
@@ -1122,11 +1132,13 @@ def single_window_lines_plotly(
             )
     # Label bar subplot
     if has_labels:
-        add_mode_bars(fig, history_length, seq_length, 1, labels.squeeze(), 0, "Human", showlegend=False)
+        add_mode_bars(
+            fig, history_length, seq_length, 1, labels.squeeze(), 0, "Human", showlegend=False
+        )  # type: ignore
         # Move the last two bar traces to the label bar row
         # (Plotly doesn't support bar row assignment directly, so we move them after creation)
         for i in [-2, -1]:
-            fig.data[i].update(xaxis=f'x{row_label}', yaxis=f'y{row_label}')
+            fig.data[i].update(xaxis=f'x{row_label}', yaxis=f'y{row_label}')  # type: ignore
     # Layout
     fig.update_layout(
         title=title,

@@ -3,23 +3,23 @@
 base_run: seq_brown_smC # ID or unique name
 prefer_model_alias: latest # null just takes the one with latest, can be best or latest.
 
-test_cache_name: seq_brown_smC-2-rk4_40 #${ run_name }
-test_cache_mode: create # create or use
+test_cache_name: seq_brown_smC-rk4_40 #${ run_name }
+test_cache_mode: use # create or use
 
 evaluation:
   n_steps: 40 # enough for rk4
   solve_method: rk4 # dopri5, euler, midpoint
-  # plot_functions:
-  # # every item has to have a 'key' key.
-  # # n are optional through defaults in PlotsCallback
-  # # all other keys are passed as kwargs to the plot function
-  # # - key: 2d_flow_plot
-  # #   n: 64
-  # - key: animated_traces
-  #   n: 5
-  # - key: multi_channel_lines
-  #   n: 16
-  #   buttons: true
+  plot_functions:
+  # every item has to have a 'key' key.
+  # n are optional through defaults in PlotsCallback
+  # all other keys are passed as kwargs to the plot function
+  # - key: 2d_flow_plot
+  #   n: 64
+  - key: animated_traces
+    n: 5
+  - key: multi_channel_lines
+    n: 16
+    buttons: true
   # Prominence histograms
   # - key: histogram  # see histograms.py
   #   log_key: peak_histogram/dml_energy_delta

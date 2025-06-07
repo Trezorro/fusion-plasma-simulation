@@ -27,12 +27,14 @@ def pipenvdiff():
     packages_1, packages_2 = data_1_loaded[DEFAULT], data_2_loaded[DEFAULT]
 
     # Naive way to do it, not optimal one
-    for package_name, package_info in packages_1.items():
-        if package_name in packages_2.keys():
-            p1_version = _remove_equal(package_info[VERSION])
-            p2_version = _remove_equal(packages_2[package_name][VERSION])
+    for package_name, package_info in packages_2.items():
+        if package_name in packages_1.keys():
+            p1_version = _remove_equal(packages_1[package_name][VERSION])
+            p2_version = _remove_equal(package_info[VERSION])
             if not p1_version == p2_version:
                 print(f'{package_name}: {p1_version} -> {p2_version}')
+        else:
+            print(f'{package_name} added with version {_remove_equal(package_info[VERSION])}')
 
 
 if __name__ == "__main__":

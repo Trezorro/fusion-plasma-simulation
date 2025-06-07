@@ -3,6 +3,7 @@ from collections import namedtuple, abc
 import logging
 
 import numpy as np
+import pysdtw
 import torch
 from scipy.signal import find_peaks
 from scipy.stats import wasserstein_distance
@@ -692,19 +693,25 @@ class MomentsErrorsMetric(torchmetrics.Metric):
             self.add_state(f"magnitude_{moment}", default=torch.zeros(len(self.channel_names)), dist_reduce_fx="sum")
             self.add_state(f"diff_{moment}", default=torch.zeros(len(self.channel_names)), dist_reduce_fx="sum")
         self.add_state(f"sq_error", default=torch.zeros(len(self.channel_names)), dist_reduce_fx="sum")
+        self.add_state(f"DTW", default=torch.zeros(1), dist_reduce_fx="sum")
 
         self.add_state("count", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.sdtw = pysdtw.SoftDTW(gamma=0.000001, use_cuda=torch.cuda.is_available())
+
 
     def update(self, pred: torch.Tensor, target: torch.Tensor):
         magnitudes_pred = moments(pred)
         magnitudes_target = moments(target)
         first_diff_pred = moments(first_difference(pred))
         first_diff_target = moments(first_difference(target))
-        sq_error = torch.sum(
-            torch.pow(pred[:, :, -self.future_length:] - target[:, :, -self.future_length:], 2), dim=(0, 2)
-        ) / self.future_length  # Sum over batch and time dimension and normalize per time step
-        self.add_to_state(f"sq_error", sq_error)
+        pred_wf = pred[:, :, -self.future_length:]
+        target_wf = target[:, :, -self.future_length:]
+        # Sum over batch and time dimension and normalize per time step:
+        sq_error = torch.sum( torch.pow(pred_wf - target_wf, 2), dim=(0, 2) ) / self.future_length
+        self.sq_error+= sq_error
 
+        dtw = self.sdtw(pred_wf.permute(0, 2, 1), target_wf.permute(0, 2, 1))
+        self.DTW+= dtw.sum()
         for moment in MOMENT_NAMES:
             self.add_to_state(
                 f"magnitude_{moment}",
@@ -722,6 +729,7 @@ class MomentsErrorsMetric(torchmetrics.Metric):
         metrics = {}
         # Calculate the mean squared error for the squared error
         metrics[f"/error/mse/mean"] = self.sq_error.mean() / self.count.float()
+        metrics[f"/error/softDTW"] = self.DTW / self.count.float()
         for i, channel_name in enumerate(self.channel_names):
             metrics[f"/error/mse/{channel_name}"] = self.sq_error[i].item() / self.count.float()
         for moment in MOMENT_NAMES:
