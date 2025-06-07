@@ -99,6 +99,8 @@ class TestStepHDFCache:
                 shot_t_group = f[group_path]
                 shot_t_group["generated_x"].read_direct(generated_x_batch, np.s_[:], np.s_[i, :, :])
                 shot_t_group["surr_labels_gen"].read_direct(surr_labels_gen_batch, np.s_[:], np.s_[i, :])
-                shot_t_group["surr_labels_target"].read_direct(surr_labels_target_batch, np.s_[:], np.s_[i, :])
+                shot_t_group["surr_labels_target"].read_direct(
+                    surr_labels_target_batch, np.s_[0, :], np.s_[i, :]
+                )  # TODO: REMOVE TEMP HACK WITH BAD DATA STRUCTURE
             logger.debug("Got %s entries from cache.", i+1)
         return generated_x_batch, surr_labels_gen_batch, surr_labels_target_batch
