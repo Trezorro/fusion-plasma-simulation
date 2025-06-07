@@ -91,51 +91,70 @@ class PlotsCallback(L.Callback):
             log_key = params.pop("log_key", key)  # if log_key is present, use it instead of key
             n = params.pop("n", self.max_n)
             logger.debug(f"Calling plot function {key} with params {params} and n={n}. Will log as {log_key}.")
-            fig = plot_fn(**evaluation_output, n=n, title_base=title_base, **params)
-            wandb.log({f"{trainval}/{log_key}": fig, "trainer/global_step": global_step}, commit=False)
+            try:
+                fig = plot_fn(**evaluation_output, n=n, title_base=title_base, **params)
+                wandb.log({f"{trainval}/{log_key}": fig, "trainer/global_step": global_step}, commit=False)
+            except Exception as e:
+                logger.error(f"At plot function {key}: {e}",)
+                logger.debug("Plot function parameters: %s", params)
+                logger.exception(e)
+                logger.info("Continuing like nothing happened... (☞ﾟヮﾟ)☞")
+                
 
     def on_validation_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
         logger.debug(f"on_validation_epoch_end called at epoch {trainer.current_epoch}")
-        if not wandb.run.disabled:
-            prune_online_checkpoints(wandb.run)
-        # Skip for all other epochs
-        if (trainer.current_epoch % self.val_every_n_epochs == 1) or trainer.current_epoch <= self.scrutinize_epochs:
-            if torch.cuda.is_available():
-                logger.info(torch.cuda.memory_summary(device=None, abbreviated=False))
-            # Generate images
-            logger.info(f"Evaluating model for EPOCH {trainer.current_epoch} on validation data.")
-            data_set = trainer.datamodule.test_dataloader().dataset
-            batch = next(
-                iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=True))
-            )  # this can be in general function
-            logger.debug("Calling evaluate for validation data.")
-            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps, solve_method=self.solve_method)
-            logger.debug("Evaluation done. Calling plotters.")
-            title_base = f"{wandb.run.name} |  Epoch <b>{trainer.current_epoch}</b>"
-            self.call_plot_functions(evaluation_output, "val", trainer.global_step, title_base)
-            logger.debug("Plotters done.")
-            val_metrics = prefix_metrics(evaluation_output['metrics'], prefix='val')  # Add prefix
-            wandb.log(val_metrics | {"trainer/global_step": trainer.global_step}, commit=False)
+        try:
+            if not wandb.run.disabled:
+                prune_online_checkpoints(wandb.run)
+            # Skip for all other epochs
+            if (trainer.current_epoch % self.val_every_n_epochs == 1) or trainer.current_epoch <= self.scrutinize_epochs:
+                if torch.cuda.is_available():
+                    logger.info(torch.cuda.memory_summary(device=None, abbreviated=False))
+                # Generate images
+                logger.info(f"Evaluating model for EPOCH {trainer.current_epoch} on validation data.")
+                data_set = trainer.datamodule.test_dataloader().dataset
+                batch = next(
+                    iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=True))
+                )  # this can be in general function
+                logger.debug("Calling evaluate for validation data.")
+                evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps, solve_method=self.solve_method)
+                logger.debug("Evaluation done. Calling plotters.")
+                title_base = f"{wandb.run.name} |  Epoch <b>{trainer.current_epoch}</b>"
+                self.call_plot_functions(evaluation_output, "val", trainer.global_step, title_base)
+                logger.debug("Plotters done.")
+                val_metrics = prefix_metrics(evaluation_output['metrics'], prefix='val')  # Add prefix
+                wandb.log(val_metrics | {"trainer/global_step": trainer.global_step}, commit=False)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as e:
+            logger.error("During single batch test set plotting: %s", e)
+            logger.exception(e)
 
     def on_train_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
         logger.debug(f"on_train_epoch_end called at epoch {trainer.current_epoch}")
         if self.train_every_n_epochs and (
             (trainer.current_epoch % self.train_every_n_epochs == 0) or trainer.current_epoch <= self.scrutinize_epochs
         ):
-            logger.info(f"Evaluating model for EPOCH {trainer.current_epoch} on train data.")
-            # Generate images
-            data_set = trainer.train_dataloader.dataset
-            batch = next(
-                iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
-            )  # this can be in general function
-            logger.debug("Calling evaluate for train data.")
-            evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps, solve_method=self.solve_method)
-            logger.debug("Evaluation done. Calling plotters.")
-            title_base = f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
-            self.call_plot_functions(evaluation_output, "train", trainer.global_step, title_base)
-            logger.debug("Plotters done.")
-            train_metrics = prefix_metrics(evaluation_output['metrics'], prefix='train')  # Add prefix
-            wandb.log(train_metrics | {"trainer/global_step": trainer.global_step}, commit=False)
+            try:
+                logger.info(f"Evaluating model for EPOCH {trainer.current_epoch} on train data.")
+                # Generate images
+                data_set = trainer.train_dataloader.dataset
+                batch = next(
+                    iter(data.DataLoader(data_set, batch_size=self.max_n, shuffle=False))
+                )  # this can be in general function
+                logger.debug("Calling evaluate for train data.")
+                evaluation_output = pl_module.evaluate(batch, n_steps=self.n_steps, solve_method=self.solve_method)
+                logger.debug("Evaluation done. Calling plotters.")
+                title_base = f"TRAINDATA | {wandb.run.name} | Epoch {trainer.current_epoch}"
+                self.call_plot_functions(evaluation_output, "train", trainer.global_step, title_base)
+                logger.debug("Plotters done.")
+                train_metrics = prefix_metrics(evaluation_output['metrics'], prefix='train')  # Add prefix
+                wandb.log(train_metrics | {"trainer/global_step": trainer.global_step}, commit=False)
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except Exception as e:
+                logger.error("During single batch TRAIN set plotting: %s", e)
+                logger.exception(e)
 
     def on_train_epoch_start(self, trainer: L.Trainer, pl_module: L.LightningModule):
         logger.info(f" =========== Starting training for EPOCH {trainer.current_epoch}=========== ")
