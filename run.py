@@ -22,12 +22,20 @@ if is_reeval_run(): # Based on cli arguments
     base_run, conf = consolidate_base_reeval_configs()
     base_checkpoint_path = find_and_download_model(base_run, prefer_alias=conf.get('prefer_model_alias', 'latest'))
 else:
-    logger.info("Training new model, initializing new wandb run.")
     conf = load_config_from_file('fm_toy')
-    base_checkpoint_path = None
+    if "resume_id" in conf:
+        logger.info("RESUME MODE. This job %s is resuming run %s with ID: %s.", conf.get('run_name', '?'), conf.get('resume_name', '?'), conf.get('resume_id') )
+        base_checkpoint_path = find_and_download_model(conf.get('resume_name'))
+        conf['run_name'] = conf['resume_name']
+    else:
+        logger.info("Training new model, initializing new wandb run.", )
+        base_checkpoint_path = None
+
 run = wandb.init(
     name=conf.get("run_name", None), # None: Wandb picks a name for us
     project=PROJECT,
+    id=conf.get("resume_id", None),
+    resume='allow',
     config=conf,
     # mode="offline",
 )
@@ -111,7 +119,7 @@ trainer = L.Trainer(
     enable_progress_bar=wandb.run.disabled,
     max_epochs=C["epochs"],
     logger=wandb_logger,
-    fast_dev_run=False,
+    fast_dev_run=2,
     profiler='simple',
     limit_train_batches=C.limit_train_batches,
     limit_val_batches=C.limit_val_batches,
