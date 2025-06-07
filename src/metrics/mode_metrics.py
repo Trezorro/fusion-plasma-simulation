@@ -31,7 +31,6 @@ class ModeTransitionMetric(torchmetrics.Metric):
         "div"  # divergence
     ]
     VIEW_OPTIONS = ["target", "pred", "error", "sq_err"]
-    WINDOW_OF_INFLUENCE_SPILL = 15 # the surrogate model looks ahead 15 steps past where it assigns a label.
 
     def __init__(
         self,
@@ -40,8 +39,9 @@ class ModeTransitionMetric(torchmetrics.Metric):
         super().__init__()
         self.condition = condition_history
         self.C = get_current_config()
-        self.history_length = self.C.data.history_length - self.WINDOW_OF_INFLUENCE_SPILL
-        self.future_length = self.C.data.seq_length + self.WINDOW_OF_INFLUENCE_SPILL
+        WINDOW_OF_INFLUENCE_SPILL = min(15,self.C.data.history_length) # the surrogate model looks ahead 15 steps past where it assigns a label.
+        self.history_length = self.C.data.history_length - WINDOW_OF_INFLUENCE_SPILL
+        self.future_length = self.C.data.seq_length + WINDOW_OF_INFLUENCE_SPILL
         self.add_state(f"transition_counts_pred", default=torch.zeros(4, 4), dist_reduce_fx="sum")
         self.add_state(f"transition_gt0_pred", default=torch.zeros(4, 4), dist_reduce_fx="sum")
         self.add_state(f"transition_counts_target", default=torch.zeros(4, 4), dist_reduce_fx="sum")

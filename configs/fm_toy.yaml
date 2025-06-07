@@ -198,7 +198,7 @@ evaluation:
 model: 
   Class: FlowModule
   params:
-    prior: 'resample'  # normal, copy, brownian, levy, resample, constant
+    prior: 'normal'  # normal, copy, brownian, levy, resample, constant
     prior_sigma: 0.3 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
     ot_method: null  # null to disable
     ot_replace: true  # Default false
@@ -210,7 +210,7 @@ model:
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
-      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
+      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 5 # Default 3
       c_channels: 0  # Default 0 disables conditioning on C
@@ -261,7 +261,7 @@ data:
   file: 2024_05_01-NaNsFiltered.parquet
   batch_size: ${ batch_size }
   seq_length: 256
-  history_length: ${ data.seq_length } # default null / 0, if positive int, will include x_history in the conditioning_inputs
+  history_length: 8 # default null / 0, if positive int, will include x_history in the conditioning_inputs
   crop_margin: 1024  # Determines the unused period at start and end of each shot for preprocessing
   overfit_on_shots: null  # list of ints or null
   allowed_start_indices: null  # list of ints or null
