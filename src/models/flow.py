@@ -287,7 +287,8 @@ class FlowModule(L.LightningModule):
                 L_not_in_Wh=ModeTransitionMetric('L_not_in_Wh'),
                 D_not_in_Wh=ModeTransitionMetric('D_not_in_Wh'),
                 H_not_in_Wh=ModeTransitionMetric('H_not_in_Wh'),
-            ), prefix="/mode/", 
+            ),
+            prefix="/mode/",
         )
         self.dice_metric = DiceScore(3, input_format='index')
         # self.mode_metrics = mode_metrics_collection
@@ -299,7 +300,9 @@ class FlowModule(L.LightningModule):
         data_module = self.trainer.datamodule
         Wf_length = data_module.seq_length
         if self.test_cache is not None and self.test_cache_mode == 'use':
-            generated_samples, surr_labels_pred, surr_labels_target = self.test_cache.get(meta['shot_number'].cpu(), meta['start_i'].cpu())
+            generated_samples, surr_labels_pred, surr_labels_target = self.test_cache.get(
+                meta['shot_number'].cpu(), meta['start_i'].cpu()
+            )
             generated_samples = torch.tensor(generated_samples, device=self.device, dtype=torch.float32)
         else:
             prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
@@ -314,22 +317,21 @@ class FlowModule(L.LightningModule):
                 meta, generated_samples, target_samples, data_module=data_module
             )  # both pred and target have shape B, Wh+Wf, and
             if self.test_cache is not None and self.test_cache_mode == 'create':
-                self.test_cache.set_from_batch(meta['shot_number'].cpu(), meta['start_i'].cpu(), generated_samples.cpu(), surr_labels_pred, surr_labels_target)
+                self.test_cache.set_from_batch(
+                    meta['shot_number'].cpu(), meta['start_i'].cpu(), generated_samples.cpu(), surr_labels_pred,
+                    surr_labels_target
+                )
 
-        pred_labels = torch.tensor(
-            surr_labels_pred, device=self.device, dtype=torch.int
-        )
-        target_labels = torch.tensor(
-            surr_labels_target, device=self.device, dtype=torch.int
-        )
+        pred_labels = torch.tensor(surr_labels_pred, device=self.device, dtype=torch.int)
+        target_labels = torch.tensor(surr_labels_target, device=self.device, dtype=torch.int)
 
         # Metrics
         metrics_out = self.moments_metrics(generated_samples, target_samples)
         # label metrics:
-        
-        metrics_out |= self.mode_test_metrics(pred_labels, target_labels) # requires full W to split off history itself
+
+        metrics_out |= self.mode_test_metrics(pred_labels, target_labels)  # requires full W to split off history itself
         # Ensure both inputs are long tensors with class indices for DiceScore
-        WINDOW_OF_INFLUENCE_SPILL = 15 # the surrogate model looks ahead 15 steps past where it assigns a label.
+        WINDOW_OF_INFLUENCE_SPILL = 15  # the surrogate model looks ahead 15 steps past where it assigns a label.
         metrics_out['/dice'] = self.dice_metric(
             pred_labels[:, -Wf_length - WINDOW_OF_INFLUENCE_SPILL:].long(),
             target_labels[:, -Wf_length - WINDOW_OF_INFLUENCE_SPILL:].long()
@@ -562,9 +564,7 @@ class FlowModule(L.LightningModule):
             logger.warning(
                 f"Gradient norm is very high: {total_norm} at EPOCH {self.current_epoch}, step {self.global_step}"
             )
-        self.clip_gradients(
-            optimizer, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm="norm"
-        )
+        self.clip_gradients(optimizer, gradient_clip_val=self.gradient_clip_val, gradient_clip_algorithm="norm")
 
     def log_summary(self, config: DictConfig):
         """
@@ -578,8 +578,8 @@ class FlowModule(L.LightningModule):
         """
         conditioning_shape = {
             'x_history':
-                (config.batch_size, config.model.params.model_params.input_channels, config.data.seq_length),
-            'position_sequence': (config.batch_size, config.data.seq_length * 2),
+                (config.batch_size, config.model.params.model_params.input_channels, config.data.history_length),
+            'position_sequence': (config.batch_size, config.data.history_length + config.data.seq_length),
             'c':
                 (
                     config.batch_size, config.model.params.model_params.c_channels,

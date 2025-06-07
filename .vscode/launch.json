@@ -15,7 +15,7 @@
             },
             "args": [
                 "epochs=6",
-                "skip_log_summary=True",
+                // "skip_log_summary=True",
                 // "reeval=True",
                 "evaluation.plot_functions=null",
                 "evaluation.n_steps=6",
