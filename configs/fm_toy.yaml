@@ -15,7 +15,7 @@ features:
 epochs: 120
 limit_train_batches: 150
 limit_val_batches: 30
-batch_size: 64
+batch_size: 128
 patience: 20
 gradient_clip_val: 10  # in testing, lower values did not help prevent loss explosions. This is just a safeguard
 skip_log_summary: false
@@ -206,15 +206,15 @@ model:
     prior_sigma: 0.3 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
     ot_method: null  # null to disable
     ot_replace: true  # Default false
-    batch_rematch_factor: 10  # Default 1
-    step_every_nth_match: 2  # Default 1 # TODO
+    batch_rematch_factor: 5  # Default 1
+    step_every_nth_match: 1  # Default 1 # TODO
     gradient_clip_val: ${ gradient_clip_val }
     solve_method: ${ evaluation.solve_method }
     flow_steps: ${ evaluation.n_steps }
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
-      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
+      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 5 # Default 3
       c_channels: 0  # Default 0 disables conditioning on C
@@ -265,7 +265,7 @@ data:
   file: 2024_05_01-NaNsFiltered.parquet
   batch_size: ${ batch_size }
   seq_length: 256
-  history_length: 512 # default null / 0, if positive int, will include x_history in the conditioning_inputs
+  history_length: ${ data.seq_length } # default null / 0, if positive int, will include x_history in the conditioning_inputs
   crop_margin: 1024  # Determines the unused period at start and end of each shot for preprocessing
   overfit_on_shots: null  # list of ints or null
   allowed_start_indices: null  # list of ints or null
