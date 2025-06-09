@@ -77,7 +77,7 @@ class TestStepHDFCache:
                         # Store surr_labels_target (same for all in batch)
                         if "surr_labels_target" in grp:
                             del grp["surr_labels_target"]
-                        grp.create_dataset("surr_labels_target", data=surr_labels_target, dtype="i2")
+                        grp.create_dataset("surr_labels_target", data=surr_labels_target[i], dtype="i2")
         logger.debug("Set %s entries in cache.", i+1)
 
     def get(self, shot_nums, start_idxs):
