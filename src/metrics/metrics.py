@@ -524,9 +524,9 @@ def batch_get_peakprops(
         batch (torch.Tensor): A batch of time series data with shape (B, C, T).
 
     Returns:
-        list: A transposed list of PeakProps namedtuples for each time series in the batch. (C, B)
+        list: A  list of PeakProps namedtuples for each time series in the batch. ( B, C)
     """
-    logger.debug(f"Finding peaks in batch of shape {batch.shape}")
+    # logger.debug(f"Finding peaks in batch of shape {batch.shape}")
     if dml_channel_index is None or pd_channel_index is None:
         peak_results = [
             [

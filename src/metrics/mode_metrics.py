@@ -79,6 +79,10 @@ class ModeTransitionMetric(torchmetrics.Metric):
         """Return a batch mask, where 1 is a sample that satisfies the history condition."""
         if self.condition in ("any_Wh", "any"):
             return torch.ones(history.size(0), dtype=torch.bool, device=history.device)  # All True
+        if self.condition == "mixed":  # if there are multiple modes in the history
+            first_entry = history[:, 0:1]
+            is_mixed = (history[:, 1:] != first_entry).any(dim=1)
+            return is_mixed
         # e.g., "L_only_Wh" -> mode="L", op="only_Wh"
         mode, op = self.condition.split("_", 1)
         mode_map = {"L": 0, "D": 1, "H": 2}

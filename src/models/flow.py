@@ -15,6 +15,7 @@ from src.optimal_transport import OTPlanSampler
 import src.metrics.metrics as metrics
 from src.metrics.evaluate_modes import generate_surrogate_labels, generate_surrogate_labels_batched
 from src.metrics.mode_metrics import ModeTransitionMetric
+from src.metrics.peak_metric import PeakMetric
 
 import logging
 from tqdm import tqdm
@@ -278,6 +279,7 @@ class FlowModule(L.LightningModule):
         self.mode_test_metrics = torchmetrics.MetricCollection(
             dict(
                 any_Wh=ModeTransitionMetric('any_Wh'),
+                mixed=ModeTransitionMetric('mixed'),
                 L_only_Wh=ModeTransitionMetric('L_only_Wh'),
                 D_only_Wh=ModeTransitionMetric('D_only_Wh'),
                 H_only_Wh=ModeTransitionMetric('H_only_Wh'),
@@ -291,6 +293,16 @@ class FlowModule(L.LightningModule):
             prefix="/mode/",
         )
         self.dice_metric = DiceScore(3, input_format='index')
+        self.peak_metrics = torchmetrics.MetricCollection(
+            dict(
+                any_Wh=PeakMetric('any_Wh'),
+                mixed=PeakMetric('mixed'),
+                L_only_Wh=PeakMetric('L_only_Wh'),
+                D_only_Wh=PeakMetric('D_only_Wh'),
+                H_only_Wh=PeakMetric('H_only_Wh'),
+            ),
+            prefix="/",
+        )
         # self.mode_metrics = mode_metrics_collection
         # self.train_metrics = mode_metrics_collection.clone(prefix='train/')
         # self.mode_test_metrics = mode_metrics_collection.clone(prefix='test/')
@@ -327,6 +339,8 @@ class FlowModule(L.LightningModule):
 
         # Metrics
         metrics_out = self.moments_metrics(generated_samples, target_samples)
+        peak_metrics_out = self.peak_metrics(generated_samples, target_samples, conditioning_input['label'] - 1)
+        metrics_out |= peak_metrics_out
         # label metrics:
 
         metrics_out |= self.mode_test_metrics(pred_labels, target_labels)  # requires full W to split off history itself
@@ -342,6 +356,7 @@ class FlowModule(L.LightningModule):
     def on_test_epoch_end(self):
         test_metrics = self.moments_metrics.compute()
         test_metrics |= self.mode_test_metrics.compute()
+        test_metrics |= self.peak_metrics.compute()
         test_metrics['/dice'] = self.dice_metric.compute()
         epoch_metrics = metrics.prefix_metrics(test_metrics, 'test/final')
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
