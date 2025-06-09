@@ -28,6 +28,7 @@ antropy = "*"
 kaleido = "*"
 torchdiffeq = "*"
 pysdtw = "*"
+tables = "*"
 
 [dev-packages]
 jupyter = "*"
@@ -62,9 +63,6 @@ python_version = "3.11.3"
 # first make venv: python -m venv fusion
 # source ~/fusion/bin/activate
 # pip install pyarrow torchinfo omegaconf lightning wandb pytest pot antropy "plotly<6.0.0"
-
-
-
 ## CHANGES
 ## 7 jun 2025
 # aiohttp: 3.12.6 -> 3.12.9

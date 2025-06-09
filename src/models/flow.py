@@ -360,6 +360,10 @@ class FlowModule(L.LightningModule):
         test_metrics['/dice'] = self.dice_metric.compute()
         epoch_metrics = metrics.prefix_metrics(test_metrics, 'test/final')
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
+
+        for sub_metric in self.peak_metrics.children():
+            sub_metric.extract_df_all(self.test_cache)
+
         self.moments_metrics.reset()
         self.mode_test_metrics.reset()
         self.dice_metric.reset()

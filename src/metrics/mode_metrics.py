@@ -137,6 +137,8 @@ class ModeTransitionMetric(torchmetrics.Metric):
         out = {}
         # Reduce over the super-batch dimension (concatenate dim) and calculate from/to any totals
         total_hits = self.total_hits.item() if hasattr(self.total_hits, 'item') else float(self.total_hits)
+        if total_hits == 0:
+            return {}
         n = max(total_hits, 1)
 
         # Difference in Proportions with confidence interval

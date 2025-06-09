@@ -6,6 +6,7 @@ import torchmetrics
 from src.config import get_current_config
 from src.metrics.metrics import batch_get_peakprops, prefix_metrics
 from scipy.stats import wasserstein_distance
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -230,3 +231,102 @@ class PeakMetric(torchmetrics.Metric):
         metrics_out['total_hits'] = self.total_hits.item()
         logger.debug("Done %d hits for condition %s", self.total_hits.item(), self.condition)
         return prefix_metrics(metrics_out, self.condition)
+
+    def extract_df_all(self, cache_obj=None):
+        base_df = pd.DataFrame(columns=['condition', 'channel_name', 'measure', 'distribution', 'value'])
+        if self.total_hits == 0:
+            return base_df
+        for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
+            measures = self.BASE_MEASURES
+            if channel_name == "DML":
+                measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
+            for measure in measures:
+                base_df = pd.concat((base_df, self.extract_df(channel_name, measure)))
+        if cache_obj is not None:
+            base_df.to_hdf(cache_obj.h5_path, key=f'peaks/{self.condition}', mode='a')
+        return base_df
+
+    def extract_df(self, channel_name, measure):
+        """
+        Extract a DataFrame with the peak properties for the given channel and measure.
+        Returns a DataFrame with columns: 'pred', 'target', 'error' (if applicable).
+        """
+
+        if measure.startswith('count'):
+            pred_list = getattr(self, f"list:{channel_name}/counts_pred").cpu().numpy()
+            target_list = getattr(self, f"list:{channel_name}/counts_target").cpu().numpy()
+        else:
+            pred_list = getattr(self, f"prop_list_pred:{channel_name}/{measure}").cpu().numpy()
+            target_list = getattr(self, f"prop_list_target:{channel_name}/{measure}").cpu().numpy()
+        # Data frame: Distribution, condition, value
+        pred_df = pd.DataFrame(
+            dict(
+                condition=self.condition,
+                channel_name=channel_name,
+                measure=measure,
+                distribution='Generated',
+                value=pred_list
+            )
+        )
+        target_df = pd.DataFrame(
+            dict(
+                condition=self.condition,
+                channel_name=channel_name,
+                measure=measure,
+                distribution='Real',
+                value=target_list
+            )
+        )
+        out_df = pd.concat([pred_df, target_df], ignore_index=True)
+        return out_df
+
+    def make_histogram(
+        self,
+        channel_name,
+        measure,
+        df=None,
+    ):
+        import plotly.express as px
+        import wandb
+        from src.plotters.helpers import as_wandb_image
+        COLOR_SCALE = ['#636EFA', '#00CC96', '#EF553B', "#999999"]
+        if df is None:
+            df = self.extract_df(channel_name, measure)
+        subtitle = ''
+        fig = px.histogram(
+            df,
+            x="value",
+            color="condition",
+            barmode="stack",
+            facet_col="distribution",
+            histnorm="probability density",
+            color_discrete_sequence=COLOR_SCALE,
+            title=f"Histogram of Peak <b>{measure.capitalize()}s</b> "
+            f"for Channel: <b>{channel_name}</b>{subtitle}",
+            labels={
+                "value": f"<b>{measure.capitalize()}s</b>",
+                "condition": "condition $W_H$",
+                "distribution": "Distribution",
+            },
+            marginal="violin",
+            nbins=100,
+            category_orders={
+                "condition": ['L_only_Wh', 'D_only_Wh', 'H_only_Wh', 'mixed'],
+                "distribution": ["Generated", "Real"],
+            },
+        )
+
+        fig.update_layout(
+            hovermode="x",
+            # legend_title_text="Mode",
+            margin=dict(l=20, r=20, t=120, b=20),
+            violingap=0,
+            violingroupgap=0,
+            violinmode='overlay',
+            title=dict(font=dict(size=18)),
+            width=1300,  # Increase plot width
+            height=910,  # Increase plot height
+        )
+        fig.for_each_annotation(lambda a: a.update(text=f"<b>{a.text.split('=')[1]}</b>") if '=' in a.text else None)
+        wandb_image = as_wandb_image(fig, format="png", show=wandb.run.disabled)
+        return wandb_image

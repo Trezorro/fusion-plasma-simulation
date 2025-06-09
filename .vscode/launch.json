@@ -21,9 +21,10 @@
                 "evaluation.n_steps=6",
                 "evaluation.max_n=8",
                 // "data.seq_length=64",
-                "limit_test_batches=3",
+                "limit_val_batches=1",
+                "limit_test_batches=10",
                 "batch_size=10",
-                "data.batch_size=10",
+                "data.batch_size=256",
                 "model.params.batch_rematch_factor=1",
                 "model.params.step_every_nth_match=null",
                 // "test_cache_name=debuggingtestcache"
