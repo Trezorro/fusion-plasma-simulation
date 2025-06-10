@@ -1,9 +1,9 @@
 # This will be merged into the inherited config from the base run
 
-base_run: doublehistory_seq_normal_smC_BIG2 # ID or unique name
+base_run: seq_levy_smC_BIG # ID or unique name
 prefer_model_alias: best # null just takes the one with latest, can be best or latest.
 
-test_cache_name: doublehistory_seq_normal_smC_BIG2_cache2 #${ run_name }
+test_cache_name: R_seq_levy_smC_BIG #${ run_name }
 test_cache_mode: create # create or use
 
 evaluation:
