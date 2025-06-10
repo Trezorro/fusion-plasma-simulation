@@ -97,13 +97,15 @@ class PeakMetric(torchmetrics.Metric):
             raise ValueError(f"Unknown condition operation: {op}")
 
     def add_to_state(self, state_name: str, new_value):
-        setattr(self, state_name, getattr(self, state_name) + new_value)
+        target = getattr(self, state_name)
+        setattr(self, state_name, getattr(self, state_name) + torch.tensor(new_value, device=target.device))
 
     def append_to_state(self, state_name: str, new_value):
         getattr(self, state_name).append(new_value)
 
     def cat_with_state(self, state_name: str, new_value):
-        setattr(self, state_name, torch.cat((getattr(self, state_name), torch.tensor(new_value).view(-1))))
+        target = getattr(self, state_name)
+        setattr(self, state_name, torch.cat((target, torch.tensor(new_value, device=target.device).view(-1))))
 
     def update(self, pred, target, labels):
         # history should of course be the same as it is conditioning information
