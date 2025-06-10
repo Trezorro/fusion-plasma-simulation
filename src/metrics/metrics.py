@@ -368,8 +368,8 @@ class PeakProps(
         """
         Factory method to create a PeakProps instance from the output of scipy's find_peaks.
         """
-        if isinstance(trace, torch.Tensor):
-            trace = trace.cpu().numpy()
+        # if isinstance(trace, torch.Tensor):
+        trace = trace.cpu().numpy()
         peak_positions, props = find_peaks(trace, prominence=prominence, width=width, rel_height=rel_height)
         # for every peak, find the trace minimum in the range of the peak width
         if pd_trace is None:

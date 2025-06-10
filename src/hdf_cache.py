@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import logging
+from src.config import get_current_config
 
 logger = logging.getLogger(__name__)
 
@@ -84,16 +85,19 @@ class TestStepHDFCache:
         logger.debug("Set %s entries in cache.", i + 1)
 
     def get(self, shot_nums, start_idxs):
-        """
-        Retrieve cached data for a given shot_num and start_idx.
+        """ Retrieve cached data for a given shot_num and start_idx.
+        
         Returns a dict with keys: generated_x, surr_labels_gen, surr_labels_target
 
         Raises KeyError if the cache for the given shot_num and start_idx does not exist.
         """
+        C = get_current_config()
+        C.data.history_length
+        C.data.seq_length
         batch_size = len(shot_nums)
-        generated_x_batch = np.zeros((batch_size, 5, 256), dtype=np.float32)
-        surr_labels_gen_batch = np.zeros((batch_size, 256 * 2), dtype=np.int16) - 1
-        surr_labels_target_batch = np.zeros((batch_size, 256 * 2), dtype=np.int16) - 1
+        generated_x_batch = np.zeros((batch_size, 5, C.data.seq_length), dtype=np.float32)
+        surr_labels_gen_batch = np.zeros((batch_size, C.data.history_length + C.data.seq_length), dtype=np.int16) - 1
+        surr_labels_target_batch = np.zeros_like(surr_labels_gen_batch) - 1
         with h5py.File(self.h5_path, "r") as f:
             for i, (shot_num, start_idx) in enumerate(zip(shot_nums, start_idxs)):
                 group_path = f"{shot_num}/{start_idx}"
