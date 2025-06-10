@@ -1,4 +1,5 @@
 #%%
+import pandas as pd
 import torch
 from src.config import get_current_config
 import torchmetrics
@@ -39,14 +40,16 @@ class ModeTransitionMetric(torchmetrics.Metric):
         super().__init__()
         self.condition = condition_history
         self.C = get_current_config()
-        WINDOW_OF_INFLUENCE_SPILL = min(15,self.C.data.history_length) # the surrogate model looks ahead 15 steps past where it assigns a label.
+        WINDOW_OF_INFLUENCE_SPILL = min(
+            15, self.C.data.history_length
+        )  # the surrogate model looks ahead 15 steps past where it assigns a label.
         self.history_length = self.C.data.history_length - WINDOW_OF_INFLUENCE_SPILL
         self.future_length = self.C.data.seq_length + WINDOW_OF_INFLUENCE_SPILL
         self.add_state(f"transition_counts_pred", default=torch.zeros(4, 4), dist_reduce_fx="sum")
         self.add_state(f"transition_gt0_pred", default=torch.zeros(4, 4), dist_reduce_fx="sum")
         self.add_state(f"transition_counts_target", default=torch.zeros(4, 4), dist_reduce_fx="sum")
         self.add_state(f"transition_gt0_target", default=torch.zeros(4, 4), dist_reduce_fx="sum")
-        self.add_state(f"transition_counts_sq_error", default=torch.zeros(4,4), dist_reduce_fx="sum")
+        self.add_state(f"transition_counts_sq_error", default=torch.zeros(4, 4), dist_reduce_fx="sum")
         self.add_state(f"total_hits", default=torch.zeros(1, dtype=torch.int32), dist_reduce_fx="sum")
 
     def update(self, surr_labels_pred, surr_labels_target):
@@ -63,7 +66,7 @@ class ModeTransitionMetric(torchmetrics.Metric):
             # Compute transition matrices for pred and target
             pred_trans = transition_matrix(future_pred_y[sample_mask])  # (M, 3, 3)
             target_trans = transition_matrix(future_target_y[sample_mask])  # (M, 3, 3)
-            expanded_pred = self._expand_transition_matrix(pred_trans) # (M, 4 ,4)
+            expanded_pred = self._expand_transition_matrix(pred_trans)  # (M, 4 ,4)
             expanded_target = self._expand_transition_matrix(target_trans)  # (M, 4 ,4)
 
             # Sum over batch and add to state
@@ -71,9 +74,10 @@ class ModeTransitionMetric(torchmetrics.Metric):
             self.transition_gt0_pred += (expanded_pred > 0).sum(dim=0)
             self.transition_counts_target += expanded_target.sum(dim=0)
             self.transition_gt0_target += (expanded_target > 0).sum(dim=0)
-            self.transition_counts_sq_error += torch.square( expanded_pred - expanded_target ).sum(dim=0) # calculate to/from any totals before calculating error
+            self.transition_counts_sq_error += torch.square(expanded_pred - expanded_target).sum(
+                dim=0
+            )  # calculate to/from any totals before calculating error
             self.total_hits += sample_mask.sum()
-
 
     def test_condition(self, history):
         """Return a batch mask, where 1 is a sample that satisfies the history condition."""
@@ -127,18 +131,18 @@ class ModeTransitionMetric(torchmetrics.Metric):
             expanded[:, :3, :3] = mat
             expanded[:, 3, :3] = mat.sum(dim=1)
             expanded[:, :3, 3] = mat.sum(dim=2)
-            expanded[:, 3, 3] = mat.sum(dim=(1,2))
+            expanded[:, 3, 3] = mat.sum(dim=(1, 2))
             return expanded
         else:
             raise ValueError("Input must be 2D or 3D tensor of shape (3,3) or (B,3,3)")
 
     def compute(self):
         """Output expected number of transitions and P(eta>0) for each from-to pair, for pred, target, and squared error views."""
-        out = {}
         # Reduce over the super-batch dimension (concatenate dim) and calculate from/to any totals
         total_hits = self.total_hits.item() if hasattr(self.total_hits, 'item') else float(self.total_hits)
+        out = {f"{self.condition}/total_hits": total_hits}
         if total_hits == 0:
-            return {}
+            return out
         n = max(total_hits, 1)
 
         # Difference in Proportions with confidence interval
@@ -154,12 +158,12 @@ class ModeTransitionMetric(torchmetrics.Metric):
             for to_idx, to_name in enumerate(["L", "D", "H", "any"]):
                 key_base = f"{self.condition}/from_{from_name}/to_{to_name}"
                 pred_sum_entry = self.transition_counts_pred[from_idx, to_idx].item()
+                sq_err_val = self.transition_counts_sq_error[from_idx, to_idx].item()
                 target_sum_entry = self.transition_counts_target[from_idx, to_idx].item()
                 pred_gt0_entry = self.transition_gt0_pred[from_idx, to_idx].item()
                 target_gt0_entry = self.transition_gt0_target[from_idx, to_idx].item()
                 delta_entry = delta[from_idx, to_idx].item()
                 SE_entry = SE[from_idx, to_idx].item()
-                sq_err_val = self.transition_counts_sq_error[from_idx, to_idx].item()
                 # Expectation (mean number of transitions per sample)
                 out[f"{key_base}/expect/pred"] = pred_sum_entry / n
                 out[f"{key_base}/expect/target"] = target_sum_entry / n
@@ -172,6 +176,37 @@ class ModeTransitionMetric(torchmetrics.Metric):
                 out[f"{key_base}/p_gt0/delta"] = delta_entry
                 out[f"{key_base}/p_gt0/match"] = abs(delta_entry) <= 1.96 * SE_entry
         return out
+
+    def extract_df_all(self, cache_obj=None):
+        if self.total_hits == 0:
+            return pd.DataFrame(columns=["L", "D", "H", "any"], index=["L", "D", "H", "any"])
+        p1 = self.transition_gt0_pred / self.total_hits
+        p2 = self.transition_gt0_target / self.total_hits
+        delta = p1 - p2
+        SE = torch.sqrt((p1 * (1 - p1) + p2 * (1 - p2)) / self.total_hits)
+        lower = delta - 1.96 * SE
+        upper = delta + 1.96 * SE
+        # Manual SE + CI
+        # Cache delta, SE, lower, upper if cache_obj is provided
+        if cache_obj is not None:
+            for name, arr in zip(['delta', 'SE', 'CI_lower', 'CI_upper'], [delta, SE, lower, upper]):
+                df = pd.DataFrame(
+                    columns=["L", "D", "H", "any"],
+                    index=["L", "D", "H", "any"],
+                    data=arr.cpu().numpy() if hasattr(arr, 'cpu') else arr
+                )
+                df.to_hdf(cache_obj.h5_path, key=f'modes/{self.condition}/{name}', mode='a')
+        for state in [
+            "transition_counts_pred", "transition_counts_target", "transition_counts_sq_error", "transition_gt0_pred",
+            "transition_gt0_target"
+        ]:
+            df = pd.DataFrame(
+                columns=["L", "D", "H", "any"],
+                index=["L", "D", "H", "any"],
+                data=getattr(self, state) / self.total_hits
+            )
+            if cache_obj is not None:
+                df.to_hdf(cache_obj.h5_path, key=f'modes/{self.condition}/{state}', mode='a')
 
 #%%
 def transition_matrix(x: torch.Tensor) -> torch.Tensor:

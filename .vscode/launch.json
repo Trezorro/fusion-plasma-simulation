@@ -22,12 +22,14 @@
                 "evaluation.max_n=8",
                 // "data.seq_length=64",
                 "limit_val_batches=1",
-                "limit_test_batches=10",
-                "batch_size=10",
-                "data.batch_size=256",
+                "limit_test_batches=2",
+                "batch_size=20",
+                "data.batch_size=20",
                 "model.params.batch_rematch_factor=1",
                 "model.params.step_every_nth_match=null",
-                // "test_cache_name=debuggingtestcache"
+                "base_run=seq_normal_smC_BIG4",
+                "test_cache_name=seq_normal_smC_BIG4_reeval_rk440",
+                "test_cache_mode=use"
             ],
             "justMyCode": true
             

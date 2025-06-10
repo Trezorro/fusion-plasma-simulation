@@ -383,7 +383,8 @@ class FlowModule(L.LightningModule):
 
         for sub_metric in self.peak_metrics.children():
             sub_metric.extract_df_all(self.test_cache)
-
+        for sub_metric in self.mode_test_metrics.children():
+            sub_metric.extract_df_all(self.test_cache)
         self.moments_metrics.reset()
         self.mode_test_metrics.reset()
         self.dice_metric.reset()
