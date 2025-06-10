@@ -288,7 +288,7 @@ class PeakMetric(torchmetrics.Metric):
         df = pd.concat(dfs)
         subgroups_df = df.query("condition!='any_Wh'")
         all_condition_df = df.query("condition=='any_Wh'")
-        for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
+        for channel_i, channel_name in enumerate(self.CHANNEL_NAMES + ['all']):
             measures = self.BASE_MEASURES + ['count']
             if channel_name == "DML":
                 measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
@@ -299,25 +299,34 @@ class PeakMetric(torchmetrics.Metric):
 
     def save_histogram(self, channel_name, measure, df=None, subgroup='split'):
         import plotly.express as px
+        facet_mode = channel_name == 'all'
         logger.debug("Making histogram for channel '%s' and measure '%s'.", channel_name, measure)
         COLOR_SCALE = ['#636EFA', '#00CC96', '#EF553B', "#999999", "#555555"]
         if df is None:
+            if facet_mode:
+                raise ValueError("DataFrame must be provided for 'all' channels.")
             df = self.extract_df(channel_name, measure)
+        elif facet_mode:
+            df = df.query(f"measure=='{measure}'")
         else:
             df = df.query(f"channel_name=='{channel_name}' & measure=='{measure}'")
         fig = px.histogram(
             df,
             x="value",
             color="condition",
-            barmode="stack",
+            barmode="overlay",
+            opacity=0.8,
             facet_col="distribution",
-            histnorm="probability density",
+            facet_row='channel_name' if facet_mode else None,
+            histnorm="probability",
             color_discrete_sequence=COLOR_SCALE,
             title=f"<b>{channel_name}</b> peak {measure.capitalize()}s",
             labels={
                 "value": f"<b>Peak {measure.capitalize()}s</b>",
                 "condition": "condition $W_H$",
+                "channel_name": "Signal",
                 "distribution": "Distribution",
+                "probability": "$p(n)$"
             },
             marginal="box",
             nbins=75,
@@ -350,12 +359,14 @@ class PeakMetric(torchmetrics.Metric):
         # Hide facet column titles
         fig.for_each_annotation(lambda a: a.update(text=f"<b>{a.text.split('=')[1]}</b>") if '=' in a.text else None)
         fig.update_xaxes(title_font_size=12, title_standoff=6)
+        fig.update_yaxes(title_font_size=12, title_standoff=6, title_text="")
+        fig.update_yaxes(title_font_size=12, title_standoff=6, title_text="$p(n)$", row=3 if facet_mode else 1, col=1)
         # Update Subplot titles:
         out_folder = Path(f"output/pdfplots/{self.C.run_name}")
         out_folder.mkdir(parents=True, exist_ok=True)
         fig.write_image(out_folder / "throwaway.pdf", format="pdf")  # prevents an ugly mathjax overlay being included
         time.sleep(1)
-        sizes = [(600, 500), (800, 500), (1200, 600), (1300, 910)]
+        sizes = [(600, 500), (800, 500), (1200, 600), (1300, 910), (800, 1200)]
         for w, h in sizes:
             size_folder = out_folder / f"{subgroup}_{w}x{h}"
             size_folder.mkdir(parents=False, exist_ok=True)
@@ -371,3 +382,20 @@ class PeakMetric(torchmetrics.Metric):
         # fig.update_xaxes(title_text='Heights')
         fig.write_image(out_file_pdf, format='pdf', width=750, height=500)
         print(f"Saved plot to {out_file_pdf}")
+
+
+def test_pdf():
+    import plotly.express as px
+
+    # Create dummy data
+    df = pd.DataFrame({"x": range(10), "y": np.random.randn(10)})
+
+    # Create a simple scatter plot
+    fig = px.scatter(df, x="x", y="y", title="Dummy Plot")
+
+    # Save to PDF
+    fig.write_image("output/dummy_plot.pdf", format="pdf")
+    print("Saved dummy_plot.pdf")
+
+
+test_pdf()
