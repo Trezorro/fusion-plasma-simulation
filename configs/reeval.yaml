@@ -1,10 +1,10 @@
 # This will be merged into the inherited config from the base run
 
-base_run: seq_normal_smC_BIG4 # ID or unique name
+base_run: doublehistory_seq_normal_smC_BIG2 # ID or unique name
 prefer_model_alias: best # null just takes the one with latest, can be best or latest.
 
-test_cache_name: seq_normal_smC_BIG4_reeval_rk440 #${ run_name }
-test_cache_mode: use # create or use
+test_cache_name: doublehistory_seq_normal_smC_BIG2_cache2 #${ run_name }
+test_cache_mode: create # create or use
 
 evaluation:
   n_steps: 40 # enough for rk4

@@ -30,7 +30,7 @@ evaluation:
   max_n: 64
   val_every_n_epochs: 5
   train_every_n_epochs: 20
-  scrutinize_epochs: 5  # Epochs equal or lower than this will always be fully evaluated. -1 to disable
+  scrutinize_epochs: 3  # Epochs equal or lower than this will always be fully evaluated. -1 to disable
   plot_functions:
     # every item has to have a 'key' key.
     # n are optional through defaults in PlotsCallback

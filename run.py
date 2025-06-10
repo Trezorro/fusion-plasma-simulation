@@ -32,16 +32,17 @@ else:
         base_checkpoint_path = None
 
 run = wandb.init(
-    name=conf.get("run_name", None), # None: Wandb picks a name for us
+    name=conf.get("run_name", None),  # None: Wandb picks a name for us
     project=PROJECT,
     id=conf.get("resume_id", None),
     resume='allow',
     config=conf,
+    tags=['reeval'] if is_reeval_run() else None
     # mode="offline",
 )
 RUN_ID = wandb.run.id
 RUN_NAME = wandb.run.name
-C = get_current_config(wandb_only=True) # clean synchronized config object from wandb
+C = get_current_config(wandb_only=True)  # clean synchronized config object from wandb
 logger.info("Running with config:\n%s", pretty_config(C))
 
 logger.info("Run initialized, importing torch and lightning.")
