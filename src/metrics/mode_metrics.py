@@ -190,21 +190,14 @@ class ModeTransitionMetric(torchmetrics.Metric):
         # Cache delta, SE, lower, upper if cache_obj is provided
         if cache_obj is not None:
             for name, arr in zip(['delta', 'SE', 'CI_lower', 'CI_upper'], [delta, SE, lower, upper]):
-                df = pd.DataFrame(
-                    columns=["L", "D", "H", "any"],
-                    index=["L", "D", "H", "any"],
-                    data=arr.cpu().numpy() if hasattr(arr, 'cpu') else arr
-                )
+                df = pd.DataFrame(columns=["L", "D", "H", "any"], index=["L", "D", "H", "any"], data=arr.cpu().numpy())
                 df.to_hdf(cache_obj.h5_path, key=f'modes/{self.condition}/{name}', mode='a')
         for state in [
             "transition_counts_pred", "transition_counts_target", "transition_counts_sq_error", "transition_gt0_pred",
             "transition_gt0_target"
         ]:
-            df = pd.DataFrame(
-                columns=["L", "D", "H", "any"],
-                index=["L", "D", "H", "any"],
-                data=getattr(self, state) / self.total_hits
-            )
+            value = getattr(self, state) / self.total_hits
+            df = pd.DataFrame(columns=["L", "D", "H", "any"], index=["L", "D", "H", "any"], data=value.cpu().numpy())
             if cache_obj is not None:
                 df.to_hdf(cache_obj.h5_path, key=f'modes/{self.condition}/{state}', mode='a')
 

@@ -4,7 +4,7 @@ base_run: seq_levy_smC_BIG # ID or unique name
 prefer_model_alias: best # null just takes the one with latest, can be best or latest.
 
 test_cache_name: R_seq_levy_smC_BIG #${ run_name }
-test_cache_mode: create # create or use
+test_cache_mode: use # create or use
 
 evaluation:
   n_steps: 40 # enough for rk4
