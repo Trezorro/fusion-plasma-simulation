@@ -380,9 +380,10 @@ class FlowModule(L.LightningModule):
         test_metrics['/dice'] = self.dice_metric.compute()
         epoch_metrics = metrics.prefix_metrics(test_metrics, 'test/final')
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
-
+        peak_dfs = []
         for sub_metric in self.peak_metrics.children():
-            sub_metric.extract_df_all(self.test_cache)
+            peak_dfs.append(sub_metric.extract_df_all(self.test_cache))
+        sub_metric.make_histograms(peak_dfs)
         for sub_metric in self.mode_test_metrics.children():
             sub_metric.extract_df_all(self.test_cache)
         self.moments_metrics.reset()

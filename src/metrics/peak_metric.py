@@ -1,5 +1,6 @@
 #%%
 import logging
+import time
 import numpy as np
 import torch
 import torchmetrics
@@ -7,6 +8,7 @@ from src.config import get_current_config
 from src.metrics.metrics import batch_get_peakprops, prefix_metrics
 from scipy.stats import wasserstein_distance
 import pandas as pd
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +192,7 @@ class PeakMetric(torchmetrics.Metric):
         logger.debug("Computing metrics for %d hits for condition %s", self.total_hits.item(), self.condition)
 
         for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
-            measures = self.BASE_MEASURES
+            measures = self.BASE_MEASURES  # + count done manually
             if channel_name == "DML":
                 measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
             #  overal distribution of peak counts in windows:
@@ -239,7 +241,7 @@ class PeakMetric(torchmetrics.Metric):
         if self.total_hits == 0:
             return base_df
         for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
-            measures = self.BASE_MEASURES
+            measures = self.BASE_MEASURES + ['count']
             if channel_name == "DML":
                 measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
             for measure in measures:
@@ -282,19 +284,27 @@ class PeakMetric(torchmetrics.Metric):
         out_df = pd.concat([pred_df, target_df], ignore_index=True)
         return out_df
 
-    def make_histogram(
-        self,
-        channel_name,
-        measure,
-        df=None,
-    ):
+    def make_histograms(self, dfs: list[pd.DataFrame]):
+        df = pd.concat(dfs)
+        subgroups_df = df.query("condition!='any_Wh'")
+        all_condition_df = df.query("condition=='any_Wh'")
+        for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
+            measures = self.BASE_MEASURES + ['count']
+            if channel_name == "DML":
+                measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
+            for measure in measures:
+                self.save_histogram(channel_name, measure, subgroups_df)
+                if len(all_condition_df) > 0:
+                    self.save_histogram(channel_name, measure, all_condition_df, subgroup='all')
+
+    def save_histogram(self, channel_name, measure, df=None, subgroup='split'):
         import plotly.express as px
-        import wandb
-        from src.plotters.helpers import as_wandb_image
-        COLOR_SCALE = ['#636EFA', '#00CC96', '#EF553B', "#999999"]
+        logger.debug("Making histogram for channel '%s' and measure '%s'.", channel_name, measure)
+        COLOR_SCALE = ['#636EFA', '#00CC96', '#EF553B', "#999999", "#555555"]
         if df is None:
             df = self.extract_df(channel_name, measure)
-        subtitle = ''
+        else:
+            df = df.query(f"channel_name=='{channel_name}' & measure=='{measure}'")
         fig = px.histogram(
             df,
             x="value",
@@ -303,32 +313,61 @@ class PeakMetric(torchmetrics.Metric):
             facet_col="distribution",
             histnorm="probability density",
             color_discrete_sequence=COLOR_SCALE,
-            title=f"Histogram of Peak <b>{measure.capitalize()}s</b> "
-            f"for Channel: <b>{channel_name}</b>{subtitle}",
+            title=f"<b>{channel_name}</b> peak {measure.capitalize()}s",
             labels={
-                "value": f"<b>{measure.capitalize()}s</b>",
+                "value": f"<b>Peak {measure.capitalize()}s</b>",
                 "condition": "condition $W_H$",
                 "distribution": "Distribution",
             },
-            marginal="violin",
-            nbins=100,
+            marginal="box",
+            nbins=75,
             category_orders={
-                "condition": ['L_only_Wh', 'D_only_Wh', 'H_only_Wh', 'mixed'],
+                "condition": ['L_only_Wh', 'D_only_Wh', 'H_only_Wh', 'mixed', 'any_Wh'],
                 "distribution": ["Generated", "Real"],
             },
         )
 
         fig.update_layout(
+            font=dict(family="serif", size=14),
             hovermode="x",
-            # legend_title_text="Mode",
-            margin=dict(l=20, r=20, t=120, b=20),
-            violingap=0,
-            violingroupgap=0,
-            violinmode='overlay',
+            margin=dict(l=20, r=10, t=50, b=10),
+            title_x=0.5,
+            legend=dict(
+                title_text=r"$\mathbf{y}_{W_H}$",
+                orientation="h",
+                font_size=16,
+                y=-0.01,
+                yanchor="bottom",
+                yref='container'
+            ),
+            boxgap=0.1,
+            boxgroupgap=0,
+            boxmode='overlay',
             title=dict(font=dict(size=18)),
-            width=1300,  # Increase plot width
-            height=910,  # Increase plot height
+            width=1000,  # Increase plot width
+            height=800,  # Increase plot height
         )
+        # Hide facet column titles
         fig.for_each_annotation(lambda a: a.update(text=f"<b>{a.text.split('=')[1]}</b>") if '=' in a.text else None)
-        wandb_image = as_wandb_image(fig, format="png", show=wandb.run.disabled)
-        return wandb_image
+        fig.update_xaxes(title_font_size=12, title_standoff=6)
+        # Update Subplot titles:
+        out_folder = Path(f"output/pdfplots/{self.C.run_name}")
+        out_folder.mkdir(parents=True, exist_ok=True)
+        fig.write_image(out_folder / "throwaway.pdf", format="pdf")  # prevents an ugly mathjax overlay being included
+        time.sleep(1)
+        sizes = [(600, 500), (800, 500), (1200, 600), (1300, 910)]
+        for w, h in sizes:
+            size_folder = out_folder / f"{subgroup}_{w}x{h}"
+            size_folder.mkdir(parents=False, exist_ok=True)
+            out_file_pdf = size_folder / f"{measure}_for_{channel_name}.pdf"
+            fig.write_image(out_file_pdf, format='pdf', width=w, height=h)
+            print(f"Saved plot to {out_file_pdf}")
+        out_file_pdf = out_folder / f"atom_{subgroup}_{measure}_for_{channel_name}.pdf"
+        fig.update_layout(
+            showlegend=False,
+            title_text='',
+            margin=dict(l=0, r=0, t=15, b=0),
+        )
+        # fig.update_xaxes(title_text='Heights')
+        fig.write_image(out_file_pdf, format='pdf', width=750, height=500)
+        print(f"Saved plot to {out_file_pdf}")

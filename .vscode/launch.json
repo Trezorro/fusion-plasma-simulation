@@ -27,8 +27,8 @@
                 "data.batch_size=20",
                 "model.params.batch_rematch_factor=1",
                 "model.params.step_every_nth_match=null",
-                "base_run=seq_normal_smC_BIG4",
-                "test_cache_name=seq_normal_smC_BIG4_reeval_rk440",
+                "base_run=doublehistory_seq_normal_smC_BIG2",
+                "test_cache_name=doublehistory_seq_normal_smC_BIG2_cache2",
                 "test_cache_mode=use"
             ],
             "justMyCode": true
