@@ -3,7 +3,9 @@ from typing import Literal
 import h5py
 from pathlib import Path
 import numpy as np
+import torch
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,6 +31,7 @@ class TestStepHDFCache:
         r: Read: No setting allowed, just reading. If a key is not present, a whole batch get will fail.
         a: Setting will skip any present values without overwriting, saving a little bit of I/O. Reading same as r.
     """
+
     def __init__(self, cache_filename: str = "test_step_cache", mode: Literal['w', 'r', 'a'] = "w"):
         self.base_dir = get_cache_dir()
         self.h5_path = self.base_dir / (cache_filename + '.h5')
@@ -78,7 +81,7 @@ class TestStepHDFCache:
                         if "surr_labels_target" in grp:
                             del grp["surr_labels_target"]
                         grp.create_dataset("surr_labels_target", data=surr_labels_target[i], dtype="i2")
-        logger.debug("Set %s entries in cache.", i+1)
+        logger.debug("Set %s entries in cache.", i + 1)
 
     def get(self, shot_nums, start_idxs):
         """
@@ -89,8 +92,8 @@ class TestStepHDFCache:
         """
         batch_size = len(shot_nums)
         generated_x_batch = np.zeros((batch_size, 5, 256), dtype=np.float32)
-        surr_labels_gen_batch = np.zeros((batch_size, 256*2), dtype=np.int16) - 1
-        surr_labels_target_batch = np.zeros((batch_size, 256*2), dtype=np.int16) -1
+        surr_labels_gen_batch = np.zeros((batch_size, 256 * 2), dtype=np.int16) - 1
+        surr_labels_target_batch = np.zeros((batch_size, 256 * 2), dtype=np.int16) - 1
         with h5py.File(self.h5_path, "r") as f:
             for i, (shot_num, start_idx) in enumerate(zip(shot_nums, start_idxs)):
                 group_path = f"{shot_num}/{start_idx}"
@@ -100,5 +103,16 @@ class TestStepHDFCache:
                 shot_t_group["generated_x"].read_direct(generated_x_batch, np.s_[:], np.s_[i, :, :])
                 shot_t_group["surr_labels_gen"].read_direct(surr_labels_gen_batch, np.s_[:], np.s_[i, :])
                 shot_t_group["surr_labels_target"].read_direct(surr_labels_target_batch, np.s_[:], np.s_[i, :])
-            logger.debug("Got %s entries from cache.", i+1)
-        return generated_x_batch, surr_labels_gen_batch, surr_labels_target_batch
+            logger.debug("Got %s entries from cache.", i + 1)
+        return torch.tensor(generated_x_batch), surr_labels_gen_batch, surr_labels_target_batch
+
+    def find_cached_idxs(self, shot_number):
+        """
+        Find all start_idxs that have been cached for a given shot_number.
+        Returns a list of start_idxs.
+        """
+        with h5py.File(self.h5_path, "r") as f:
+            if str(shot_number) not in f:
+                return []
+            shot_group = f[str(shot_number)]
+            return sorted(int(k) for k in shot_group.keys() if k.isdigit())

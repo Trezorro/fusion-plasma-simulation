@@ -6,7 +6,7 @@ import torch
 from torch.utils import data
 import random
 import lightning as L
-
+from torch.utils.data import default_collate
 import wandb
 from src.data_generators import create_gaussian_data, create_square_data, create_spiral_data, create_heart_data, create_two_gaussians_data, create_smiley_data
 import logging
@@ -213,7 +213,6 @@ class SourceTargetDS(data.Dataset):
         return self.source_data[idx], self.target_data[idx]
 
 
-
 class FusionShotDataset(data.Dataset):
     """
     
@@ -240,7 +239,7 @@ class FusionShotDataset(data.Dataset):
 
     def __init__(
         self,
-        subset_df,
+        subset_df: pd.DataFrame,
         cols: DictConfig,
         seq_length=200,
         crop_margin=0,
@@ -251,7 +250,7 @@ class FusionShotDataset(data.Dataset):
         **kwargs
     ):
         super().__init__()
-        self.data = subset_df
+        self.data: pd.DataFrame = subset_df
         self.columns_C = list(cols.get('c', []))
         self.columns_X = list(cols.x)
         self.label = cols.get('label', None)
@@ -306,6 +305,9 @@ class FusionShotDataset(data.Dataset):
 
     def __getitem__(self, idx):
         shot_number, start_i = self.viable_indices[idx]
+        return self.get_shot_window(shot_number, start_i)
+
+    def get_shot_window(self, shot_number, start_i):
         shot_data = self.data[self.data['ShotNum'] == shot_number]
         end_i = start_i + self.seq_length
         x = shot_data[self.columns_X].iloc[start_i:end_i].values.T
@@ -339,6 +341,19 @@ class FusionShotDataset(data.Dataset):
         assert not np.isnan(x).any(
         ), "NaNs found in the output window. Often caused by division by zero in normalization."
         return meta, conditioning_input, x
+
+    def quick_window(self, shot_number, time, limit_to_idx: Optional[Sequence] = None, repeat=1):
+        """Convenience function for plotting a specific window Wh and Wf around time t. """
+        shot_data_index = self.data[self.data['ShotNum'] == shot_number].index
+        start_idx = shot_data_index.get_indexer([time], method='nearest')[0]
+        logger.info("Shot %s at t=%s is at start index %s", shot_number, time, start_idx)
+        if limit_to_idx is not None:
+            start_idx = limit_to_idx[pd.Index(limit_to_idx).get_indexer([start_idx], method='nearest')[0]]
+            logger.info(
+                "Adjusted to available indeces, we get idx %s with time %.4f", start_idx, shot_data_index[start_idx]
+            )
+        sample = self.get_shot_window(shot_number, start_idx)
+        return default_collate([sample] * repeat)
 
 
 class FusionShotDataModule(L.LightningDataModule):

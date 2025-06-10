@@ -368,13 +368,15 @@ class PeakProps(
         """
         Factory method to create a PeakProps instance from the output of scipy's find_peaks.
         """
+        if isinstance(trace, torch.Tensor):
+            trace = trace.cpu().numpy()
         peak_positions, props = find_peaks(trace, prominence=prominence, width=width, rel_height=rel_height)
         # for every peak, find the trace minimum in the range of the peak width
         if pd_trace is None:
             # For non-DML signals, we only need the peak positions and properties
             return cls(
                 X=peak_positions,
-                Y=trace[peak_positions].numpy(),
+                Y=trace[peak_positions],
                 prominences=props["prominences"],
                 bases=props["width_heights"],
                 left_ips=props["left_ips"],
@@ -408,7 +410,7 @@ class PeakProps(
             energy_base_pos = np.array(
                 [window_l[i] + trace[window_l[i]:extended_window_r[i]].argmin(0) for i in range(len(peak_positions))]
             )
-            energy_delta = (trace[peak_positions] - trace[energy_base_pos]).numpy()
+            energy_delta = (trace[peak_positions] - trace[energy_base_pos])
             # get peaks from the pd_trace
             pd_peak_positions, pd_props = find_peaks(
                 pd_trace, prominence=prominence, width=width, rel_height=rel_height
@@ -423,7 +425,7 @@ class PeakProps(
             pd_prominence_sums = np.array(pd_prominence_sums)
             return cls(
                 X=peak_positions,
-                Y=trace[peak_positions].numpy(),
+                Y=trace[peak_positions],
                 prominences=props["prominences"],
                 bases=props["width_heights"],
                 left_ips=props["left_ips"],
@@ -555,6 +557,9 @@ def batch_get_peakprops(
                     sample_channel_results.append(
                         PeakProps.from_find_peaks(trace, prominence=prominence, width=width, rel_height=rel_height)
                     )
+            sample_channel_results.append(
+                PeakProps.from_find_peaks(sample[pd_channel_index], prominence=0.1, width=width, rel_height=rel_height)
+            )
     return peak_results
 
 

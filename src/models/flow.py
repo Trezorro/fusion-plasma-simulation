@@ -307,10 +307,24 @@ class FlowModule(L.LightningModule):
         # self.train_metrics = mode_metrics_collection.clone(prefix='train/')
         # self.mode_test_metrics = mode_metrics_collection.clone(prefix='test/')
 
-    def test_step(self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int):
-        meta, conditioning_input, target_samples = batch
+    # def predict_step():
+    #     pass
+
+    def test_step(self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int = -1):
         data_module = self.trainer.datamodule
-        Wf_length = data_module.seq_length
+        meta, conditioning_input, target_samples = batch
+        generated_samples, surr_labels_pred, surr_labels_target = self.inference(batch, data_module)
+
+        metrics_out = self.update_metrics(
+            generated_samples, target_samples, conditioning_input, surr_labels_pred, surr_labels_target, data_module
+        )
+        metrics_out['_step'] = batch_idx
+        self.log_dict(metrics.prefix_metrics(metrics_out, 'test/step'), prog_bar=True, on_step=True, on_epoch=False)
+        return generated_samples, surr_labels_pred, surr_labels_target, metrics_out
+
+    @torch.inference_mode()
+    def inference(self, batch, data_module):
+        meta, conditioning_input, target_samples = batch
         if self.test_cache is not None and self.test_cache_mode == 'use':
             generated_samples, surr_labels_pred, surr_labels_target = self.test_cache.get(
                 meta['shot_number'].cpu(), meta['start_i'].cpu()
@@ -334,6 +348,11 @@ class FlowModule(L.LightningModule):
                     surr_labels_target
                 )
 
+        return generated_samples, surr_labels_pred, surr_labels_target
+
+    def update_metrics(
+        self, generated_samples, target_samples, conditioning_input, surr_labels_pred, surr_labels_target, data_module
+    ):
         pred_labels = torch.tensor(surr_labels_pred, device=self.device, dtype=torch.int)
         target_labels = torch.tensor(surr_labels_target, device=self.device, dtype=torch.int)
 
@@ -346,12 +365,13 @@ class FlowModule(L.LightningModule):
         metrics_out |= self.mode_test_metrics(pred_labels, target_labels)  # requires full W to split off history itself
         # Ensure both inputs are long tensors with class indices for DiceScore
         WINDOW_OF_INFLUENCE_SPILL = 15  # the surrogate model looks ahead 15 steps past where it assigns a label.
+        Wf_length = data_module.seq_length
         metrics_out['/dice'] = self.dice_metric(
             pred_labels[:, -Wf_length - WINDOW_OF_INFLUENCE_SPILL:].long(),
             target_labels[:, -Wf_length - WINDOW_OF_INFLUENCE_SPILL:].long()
         )
-        metrics_out['_step'] = batch_idx
-        self.log_dict(metrics.prefix_metrics(metrics_out, 'test/step'), prog_bar=True, on_step=True, on_epoch=False)
+
+        return metrics_out
 
     def on_test_epoch_end(self):
         test_metrics = self.moments_metrics.compute()
@@ -373,7 +393,7 @@ class FlowModule(L.LightningModule):
         self,
         batch: tuple[dict, dict, torch.Tensor],
         n_steps=50,
-        solve_method="simple",
+        solve_method="rk4",
         data_module: Optional[L.LightningDataModule] = None,
     ):
         """Evaluates the model on a given batch of data. Batch will be moved to the correct device.
@@ -405,6 +425,7 @@ class FlowModule(L.LightningModule):
         self.model.eval()
         # Use lightnings manner of moving to correct current device:
         meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch)
+        logger.debug("Evaluating batch shape %s", target_samples.shape)
         prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
         generated_samples, trajectories = self.integrate_path(
             prior_samples,
@@ -413,23 +434,27 @@ class FlowModule(L.LightningModule):
             method=solve_method,
             save_trajectories=True
         )
-
         # surrogate labels
         if data_module is None:
             data_module = self.trainer.datamodule
         surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
             meta, generated_samples, target_samples, data_module=data_module
         )
-        # Metrics
-        metrics_out = metrics.get_moments_errors_per_channel(generated_samples, target_samples)
         self.model.train()  # Reset model to training mode
-        meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
-            (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
-            device='cpu'  # type: ignore
+        # Metrics
+
+        metrics_out = self.update_metrics(
+            generated_samples, target_samples, conditioning_input, surr_labels_pred, surr_labels_target, data_module
         )
+        # metrics_out = metrics.get_moments_errors_per_channel(generated_samples, target_samples)
+        # meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
+        #     (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
+        #     device='cpu'  # type: ignore
+        # )
         # TODO do metric calculation elsewhere
         metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
         peak_metrics, peak_features = metrics.get_peak_metrics(generated_samples, target_samples)
+        self.init_metrics() # reset everything
         return dict(
             meta=meta,
             conditioning_input=conditioning_input,
@@ -437,7 +462,7 @@ class FlowModule(L.LightningModule):
             prior_samples=prior_samples,
             generated_samples=generated_samples,
             trajectories=trajectories,
-            metrics=metrics_out | peak_metrics,
+            metrics=metrics_out,
             peak_features=peak_features,
             surr_labels_pred=surr_labels_pred,
             surr_labels_target=surr_labels_target
