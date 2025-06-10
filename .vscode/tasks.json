@@ -55,6 +55,12 @@
         "type": "shell",
         "command": "rsync -avzv mtresoor@snellius.surf.nl:/home/mtresoor/fusion-plasma-simulation/output/traces output/snellius/traces",
         "problemMatcher": []
+      },
+      {
+        "label": "Sync pdf plots",
+        "type": "shell",
+        "command": "rsync -avzv mtresoor@snellius.surf.nl:/home/mtresoor/fusion-plasma-simulation/output/pdfplots/ output/pdfplots/",
+        "problemMatcher": []
       }
     ],
   "inputs": [

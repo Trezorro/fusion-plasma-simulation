@@ -374,18 +374,23 @@ class FlowModule(L.LightningModule):
         return metrics_out
 
     def on_test_epoch_end(self):
+        logger.info("Computing final metrics.")
         test_metrics = self.moments_metrics.compute()
         test_metrics |= self.mode_test_metrics.compute()
         test_metrics |= self.peak_metrics.compute()
         test_metrics['/dice'] = self.dice_metric.compute()
         epoch_metrics = metrics.prefix_metrics(test_metrics, 'test/final')
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
+        logger.info("Test Metrics logged. Extracting peak metrics to cache.")
         peak_dfs = []
         for sub_metric in self.peak_metrics.children():
             peak_dfs.append(sub_metric.extract_df_all(self.test_cache))
+        logger.info("Peak metrics saved to cache. Generating histograms...")
         sub_metric.make_histograms(peak_dfs)
+        logger.info("Histograms saved! Extracting mode metrics to cache...")
         for sub_metric in self.mode_test_metrics.children():
             sub_metric.extract_df_all(self.test_cache)
+        logger.info("Done. Resetting metrics.")
         self.moments_metrics.reset()
         self.mode_test_metrics.reset()
         self.dice_metric.reset()
