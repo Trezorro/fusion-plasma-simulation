@@ -292,17 +292,22 @@ def add_mode_bars(
     showlegend=False,
     secondary_y=False
 ):
-    BAR_WIDTH = 25
+    BAR_WIDTH = 10
     MODE_COLORS = ["grey", "lightskyblue", "orange", "red"]
     MODE_NAMES = ["Unknown", "L", "D", "H"]
-    bar_y_placement = layer * BAR_WIDTH - 0.5 *BAR_WIDTH
+    bar_y_placement = layer * BAR_WIDTH  # - 0.5 * BAR_WIDTH
+    if group == 'real':
+        bar_y_placement -= BAR_WIDTH *0.2
     fig.update_yaxes(
-        range=(-BAR_WIDTH, (BAR_WIDTH) * layer),
-        showticklabels=False,
+        range=(-0.8 * BAR_WIDTH, (BAR_WIDTH) * (layer + 0.5)),
+        showticklabels=True,
+        ticks='',
+        tickvals=[-1.5]+list(range(BAR_WIDTH+2, layer * BAR_WIDTH + 3, BAR_WIDTH)),
+        ticktext=['Real', '', '', 'Gen', '', ''],
         secondary_y=False,
         fixedrange=True,
         showgrid=False,
-        row=3
+        row=row
     )
     spans = []
     modes = []
@@ -334,7 +339,7 @@ def add_mode_bars(
                 color="black",
                 opacity=0,
             ),
-            yaxis=f'y3',
+            yaxis=f'y{row}',
             showlegend=False,  # Bar chart does not need a separate legend
             # name=f'Shot #{shot_number} - Start',
             # legendgroup=f'Shot {shot_number} - Modes',
@@ -347,13 +352,13 @@ def add_mode_bars(
         go.Bar(
             x=spans,
             y=(bar_y_placement,) * len(spans),
-            width=BAR_WIDTH,
+            width=BAR_WIDTH * (1.3 if group == 'real' else 1),
             orientation='h',
             marker=dict(
                 color=colors,
-                opacity=0.5 if group == 'human' else 0.4,
+                opacity=0.8 if group == 'real' else 0.5,
             ),
-            yaxis=f'y3',
+            yaxis=f'y{row}',
             hovertemplate=
             "Mode: %{customdata[3]}<br>Shot #%{customdata[0]}<br>Time steps: %{customdata[1]} - %{customdata[2]}<br>(%{x} steps)",
             customdata=custom_data,
@@ -407,7 +412,7 @@ def multi_sample_single_window_lines_plotly(
         cols=1,
         shared_xaxes=True,
         vertical_spacing=0.01,
-        row_heights=[0.5]*xrows+[0.2, 0.2],
+        row_heights=[0.5] * xrows + [0.2, 0.2],
         specs=[[{
             "secondary_y": False
         }] for _ in range(nrows)],
@@ -462,15 +467,18 @@ def multi_sample_single_window_lines_plotly(
     # X channels subplot
     for channel_i in range(n_channels):
         channel_color = COLOR_SCALE[channel_i % len(COLOR_SCALE)]
-        darker_ch_color =plt_colors.find_intermediate_color('rgb(0,0,0)',plt_colors.label_rgb(plt_colors.hex_to_rgb(channel_color)), 0.7, 'rgb')
+        darker_ch_color = plt_colors.find_intermediate_color(
+            'rgb(0,0,0)', plt_colors.label_rgb(plt_colors.hex_to_rgb(channel_color)), 0.7, 'rgb'
+        )
         channel_name = CHANNEL_NAMES[channel_i]
+        ####  TARGET TRACE  ####
         fig.add_trace(
             go.Scatter(
                 x=np.arange(seq_length),
                 y=target_samples[0, channel_i, :],
                 mode='lines',
-                line=dict(color=darker_ch_color, width=1),
-                opacity=0.9,
+                line=dict(color=darker_ch_color, width=2),
+                opacity=1,
                 name=f'{channel_name} (Real)',
                 legendgroup=f'X',
                 legendgrouptitle_text=r"Observables $\mathbf{x}_W$",
@@ -479,15 +487,16 @@ def multi_sample_single_window_lines_plotly(
             col=1
         )
         if generated_samples is not None:
+            ####  GENERATED TRACES  ####
             for i, sample in enumerate(generated_samples):
                 fig.add_trace(
                     go.Scatter(
                         x=np.arange(seq_length),
                         y=sample[channel_i, :],
                         mode='lines',
-                        line=dict(dash='solid', color=channel_color, width=1),
-                        showlegend=i==0,
-                        opacity=0.7,
+                        line=dict(dash='solid', color=channel_color, width=1.2),
+                        showlegend=i == 0,
+                        opacity=0.5,
                         name=f'{channel_name} (Generated)',
                         legendgroup=f'X',
                     ),
@@ -536,10 +545,10 @@ def multi_sample_single_window_lines_plotly(
             )
     # Label bar subplot
     if surr_labels_target is not None:
-        add_mode_bars(fig, history_length, seq_length, surr_labels_target[0]+1, layer=0, group="real", row=label_row)
+        add_mode_bars(fig, history_length, seq_length, surr_labels_target[0] + 1, layer=0, group="real", row=label_row)
     if surr_labels_pred is not None:
         for i, label_sequence in enumerate(surr_labels_pred):
-            add_mode_bars(fig, history_length, seq_length, label_sequence+1, layer=i+1, group="gen", row=label_row)
+            add_mode_bars(fig, history_length, seq_length, label_sequence + 1, layer=i + 1, group="gen", row=label_row)
         # Move the last two bar traces to the label bar row
         # (Plotly doesn't support bar row assignment directly, so we move them after creation)
 
@@ -568,11 +577,10 @@ def multi_sample_single_window_lines_plotly(
         barmode='stack',
         barcornerradius=1,
     )
-    print(nrows)
-    middle_time = conditioning_input['position_sequence'][0,-seq_length]
-
-    x_ticks = list(range(-250, 251, 50))
+    ### AXES AND TICKS ###
+    x_ticks = list(range(-500, 501, 50))
     ticktext = x_ticks.copy()
+    middle_time = conditioning_input['position_sequence'][0, -seq_length]
     ticktext[len(x_ticks) // 2] = f"$t={middle_time:0.3f}$"
     fig.update_xaxes(
         range=(-history_length, seq_length),
@@ -594,14 +602,16 @@ def multi_sample_single_window_lines_plotly(
         ticks="inside"
     )
     # Remove y ticks on the last subplot (label bar)
-    if label_row is not None:
-        fig.update_yaxes(showticklabels=False, row=label_row, col=1)
     for i, x_col in enumerate(CHANNEL_NAMES):
-        fig.update_yaxes(title_text=f"$\\mathbf{{x}}_\\text{{{x_col}}}$", showticklabels=True, 
-                        #  range=(-0.05, 1.01), 
-                         row=1+i, col=1)
+        fig.update_yaxes(
+            title_text=f"$\\mathbf{{x}}_\\text{{{x_col}}}$",
+            showticklabels=True,
+            #  range=(-0.05, 1.01),
+            row=1 + i,
+            col=1
+        )
     fig.update_yaxes(title_text="$\mathbf{c}$", showticklabels=True, range=(-0.02, 1.02), row=row_c, col=1)
-    fig.update_yaxes(title_text="$\mathbf{y}$", showticklabels=False, ticks='', row=label_row, col=1)
+    fig.update_yaxes(title_text="$\mathbf{y}$", showticklabels=True, row=label_row, col=1)
     # DUMMY BARS
     # Add manual legend entries for the bars: H (red), D (orange), L (blue)
     fig.add_trace(
