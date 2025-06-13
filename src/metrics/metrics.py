@@ -396,8 +396,8 @@ class PeakProps(
                 pd_prominence=np.array([]),
             )
         else:  # This means that this is a DML signal and we should calculate the DML-PD energy relationship
-            peak_widths = props["widths"]
-            half_width = peak_widths / 2
+            dml_peak_widths = props["widths"]
+            half_width = dml_peak_widths / 2
             window_l = (peak_positions - half_width).astype(np.int32)
             window_r = np.ceil(peak_positions + half_width).astype(np.int32)
             # If the next peak is even further away, we will extend the energy delta window to the next peak
@@ -412,27 +412,26 @@ class PeakProps(
             )
             energy_delta = (trace[peak_positions] - trace[energy_base_pos])
             # get peaks from the pd_trace
-            pd_peak_positions, pd_props = find_peaks(
-                pd_trace, prominence=prominence, width=width, rel_height=rel_height
-            )
-            pd_prominence_sums = []
+            pd_peak_positions, pd_props = find_peaks(pd_trace, prominence=0.15, width=width, rel_height=rel_height)
+            pd_prominence_window_sums = []
             # sum up the PD prominences of peaks in the same window
-            for window in zip(window_l, extended_window_r):
+            for window in zip(window_l, extended_window_r): # as many as there are DML peaks
                 # get the peaks in the window
                 pd_peaks_in_window = (pd_peak_positions >= window[0]) & (pd_peak_positions < window[1])
                 # sum up the prominences of the peaks in the window
-                pd_prominence_sums.append(np.sum(pd_props["prominences"][pd_peaks_in_window], axis=0))
-            pd_prominence_sums = np.array(pd_prominence_sums)
+                pd_prominence_window_sums.append(np.sum(pd_props["prominences"][pd_peaks_in_window], axis=0))
+            pd_prominence_window_sums = np.array(pd_prominence_window_sums)
+            fulfilled_dml_peaks = (pd_prominence_window_sums > 0.15)
             return cls(
-                X=peak_positions,
-                Y=trace[peak_positions],
-                prominences=props["prominences"],
-                bases=props["width_heights"],
-                left_ips=props["left_ips"],
-                right_ips=props["right_ips"],
-                energy_delta=energy_delta,
-                energy_base_x=energy_base_pos,
-                pd_prominence=pd_prominence_sums,
+                X=peak_positions[fulfilled_dml_peaks],
+                Y=trace[peak_positions[fulfilled_dml_peaks]],
+                prominences=props["prominences"][fulfilled_dml_peaks],
+                bases=props["width_heights"][fulfilled_dml_peaks],
+                left_ips=props["left_ips"][fulfilled_dml_peaks],
+                right_ips=props["right_ips"][fulfilled_dml_peaks],
+                energy_delta=energy_delta[fulfilled_dml_peaks],
+                energy_base_x=energy_base_pos[fulfilled_dml_peaks],
+                pd_prominence=pd_prominence_window_sums[fulfilled_dml_peaks],
             )
 
     def __add__(self, other: "PeakProps") -> "PeakProps":
@@ -560,8 +559,8 @@ def batch_get_peakprops(
                         PeakProps.from_find_peaks(trace, prominence=prominence, width=width, rel_height=rel_height)
                     )
             sample_channel_results.append(
-                PeakProps.from_find_peaks(
-                    sample[pd_channel_index], prominence=0.15, width=width, rel_height=rel_height
+                PeakProps.from_find_peaks( # BIG PD peaks for elms
+                    sample[pd_channel_index], prominence=0.1, width=width, rel_height=rel_height
                 )
             )
     return peak_results
