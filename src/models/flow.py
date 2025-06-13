@@ -353,12 +353,15 @@ class FlowModule(L.LightningModule):
     def update_metrics(
         self, generated_samples, target_samples, conditioning_input, surr_labels_pred, surr_labels_target, data_module
     ):
+        """GPU tensor hungry, batch accumulating metrics."""
         pred_labels = torch.tensor(surr_labels_pred, device=self.device, dtype=torch.int)
         target_labels = torch.tensor(surr_labels_target, device=self.device, dtype=torch.int)
 
         # Metrics
         metrics_out = self.moments_metrics(generated_samples, target_samples)
-        peak_metrics_out = self.peak_metrics(generated_samples, target_samples, conditioning_input['label'] - 1)
+        peak_metrics_out = self.peak_metrics(
+            generated_samples, target_samples, conditioning_input['label'] - 1, c_W=conditioning_input['c']
+        )
         metrics_out |= peak_metrics_out
         # label metrics:
 
@@ -381,16 +384,16 @@ class FlowModule(L.LightningModule):
         test_metrics['/dice'] = self.dice_metric.compute()
         epoch_metrics = metrics.prefix_metrics(test_metrics, 'test/final')
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
-        logger.info("Test Metrics logged. Extracting peak metrics to cache.")
+        logger.info("Test Metrics logged. Extracting mode metrics to cache...")
+        for sub_metric in self.mode_test_metrics.children():
+            sub_metric.extract_df_all(self.test_cache)
+        logger.info("Mode metrics saved! Extracting peak metrics to cache.")
         peak_dfs = []
         for sub_metric in self.peak_metrics.children():
             peak_dfs.append(sub_metric.extract_df_all(self.test_cache))
         logger.info("Peak metrics saved to cache. Generating histograms...")
         sub_metric.make_histograms(peak_dfs)
-        logger.info("Histograms saved! Extracting mode metrics to cache...")
-        for sub_metric in self.mode_test_metrics.children():
-            sub_metric.extract_df_all(self.test_cache)
-        logger.info("Done. Resetting metrics.")
+        logger.info("Histograms done! Testing Done. Resetting metrics.")
         self.moments_metrics.reset()
         self.peak_metrics.reset()
         self.mode_test_metrics.reset()
@@ -461,7 +464,7 @@ class FlowModule(L.LightningModule):
         )
         # TODO do metric calculation elsewhere
         metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
-        _peak_metrics, peak_features = metrics.get_peak_metrics(generated_samples, target_samples)
+        _peak_metrics, peak_features = metrics.cpu_batch_peak_metrics(generated_samples, target_samples)
         self.init_metrics() # reset everything
         return dict(
             meta=meta,

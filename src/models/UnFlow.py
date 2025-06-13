@@ -85,7 +85,7 @@ class UnFlowModule(FlowModule):
         meta, conditioning_input, target_samples, prior_samples, generated_samples = self._apply_batch_transfer_handler(
             (meta, conditioning_input, target_samples, prior_samples, generated_samples), device=torch.device('cpu'))
         metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
-        peak_metrics, peak_features = metrics.get_peak_metrics(generated_samples, target_samples)
+        peak_metrics, peak_features = metrics.cpu_batch_peak_metrics(generated_samples, target_samples)
         trajectories = torch.stack((prior_samples, generated_samples))
         return dict(
             meta=meta,

@@ -560,12 +560,14 @@ def batch_get_peakprops(
                         PeakProps.from_find_peaks(trace, prominence=prominence, width=width, rel_height=rel_height)
                     )
             sample_channel_results.append(
-                PeakProps.from_find_peaks(sample[pd_channel_index], prominence=0.1, width=width, rel_height=rel_height)
+                PeakProps.from_find_peaks(
+                    sample[pd_channel_index], prominence=0.15, width=width, rel_height=rel_height
+                )
             )
     return peak_results
 
 
-def get_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, dict]:
+def cpu_batch_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[dict, dict]:
     """Return a dict with the sample peak metrics and a dict with intermediate results for plotting.
 
     For measure in {'height', 'prominence', 'width', 'base'} we will calculate the wasserstein distance between the target and predicted distributions of that measure:
@@ -703,8 +705,7 @@ class MomentsErrorsMetric(torchmetrics.Metric):
         self.add_state(f"DTW", default=torch.zeros(1), dist_reduce_fx="sum")
 
         self.add_state("count", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.sdtw = pysdtw.SoftDTW(gamma=0.000001, use_cuda=torch.cuda.is_available())
-
+        self.sdtw = pysdtw.SoftDTW(gamma=0.000001, use_cuda=torch.cuda.is_available())  # No bandwidth (unleashed dog)
 
     def update(self, pred: torch.Tensor, target: torch.Tensor):
         magnitudes_pred = moments(pred)
@@ -714,11 +715,11 @@ class MomentsErrorsMetric(torchmetrics.Metric):
         pred_wf = pred[:, :, -self.future_length:]
         target_wf = target[:, :, -self.future_length:]
         # Sum over batch and time dimension and normalize per time step:
-        sq_error = torch.sum( torch.pow(pred_wf - target_wf, 2), dim=(0, 2) ) / self.future_length
-        self.sq_error+= sq_error
+        sq_error = torch.sum(torch.pow(pred_wf - target_wf, 2), dim=(0, 2)) / self.future_length
+        self.sq_error += sq_error
 
         dtw = self.sdtw(pred_wf.permute(0, 2, 1), target_wf.permute(0, 2, 1))
-        self.DTW+= dtw.sum()
+        self.DTW += dtw.sum()  # TODO: should be mean maybe?
         for moment in MOMENT_NAMES:
             self.add_to_state(
                 f"magnitude_{moment}",

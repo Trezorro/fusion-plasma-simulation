@@ -2,11 +2,12 @@
 import logging
 import time
 import numpy as np
+from sklearn import metrics
 import torch
 import torchmetrics
 from src.config import get_current_config
 from src.metrics.metrics import batch_get_peakprops, prefix_metrics
-from scipy.stats import wasserstein_distance
+from scipy.stats import wasserstein_distance, wasserstein_distance_nd
 import pandas as pd
 from pathlib import Path
 
@@ -46,9 +47,12 @@ class PeakMetric(torchmetrics.Metric):
         super().__init__()
         self.condition = condition_history
         self.C = get_current_config()
-        self.CHANNEL_NAMES = self.C.data.cols.x
+        self.CHANNEL_NAMES = self.C.data.cols.x + [
+            'PD large peaks'
+        ]  # NOTE: hack together with batch_get_peakprops for type 1 ELMS
         self.dml_channel_index = self.CHANNEL_NAMES.index("DML") if "DML" in self.CHANNEL_NAMES else None
         self.pd_channel_index = self.CHANNEL_NAMES.index("PD") if "PD" in self.CHANNEL_NAMES else None
+        self.nbi_channel_index = self.C.data.cols.c.index("NBI-median") if "NBI-median" in self.C.data.cols.c else None
         self.history_length = self.C.data.history_length
         self.future_length = self.C.data.seq_length
         for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
@@ -56,6 +60,10 @@ class PeakMetric(torchmetrics.Metric):
             if channel_name == "DML":
                 measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
             # pairwise_distances = {f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}": 0. for measure in measures}
+            if self.nbi_channel_index is not None and channel_name == 'PD large peaks':
+                self.add_state(f"prop_list_pred:PD large peaks/NBI", default=torch.zeros(0), dist_reduce_fx="cat")
+                self.add_state(f"prop_list_target:PD large peaks/NBI", default=torch.zeros(0), dist_reduce_fx="cat")
+
             for measure in measures:
                 self.add_state(f"pair_dists_sum:{channel_name}/{measure}", default=torch.zeros(1), dist_reduce_fx="sum")
                 self.add_state(f"prop_list_pred:{channel_name}/{measure}", default=torch.zeros(0), dist_reduce_fx="cat")
@@ -70,6 +78,9 @@ class PeakMetric(torchmetrics.Metric):
                 f"list:{channel_name}/counts_target", default=torch.zeros(0, dtype=torch.int32), dist_reduce_fx="cat"
             )
             self.add_state(f"sum:{channel_name}/counts_sq_error", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state(
+            f"list:NBI/window_means", default=torch.zeros(0, dtype=torch.float32), dist_reduce_fx="cat"
+        )  # the NBI means of the windows hit by this condition, in parallel with peak counts.
 
         self.add_state(f"total_hits", default=torch.zeros(1, dtype=torch.int32), dist_reduce_fx="sum")
 
@@ -107,9 +118,20 @@ class PeakMetric(torchmetrics.Metric):
 
     def cat_with_state(self, state_name: str, new_value):
         target = getattr(self, state_name)
-        setattr(self, state_name, torch.cat((target, torch.tensor(new_value, device=target.device).view(-1))))
+        if not isinstance(new_value, torch.Tensor):
+            new_value = torch.tensor(new_value, device=target.device)
+        setattr(self, state_name, torch.cat((target, new_value.view(-1))))
 
-    def update(self, pred, target, labels):
+    def get_numpy_state(self, state_name: str):
+        target = getattr(self, state_name)
+        if isinstance(target, torch.Tensor):
+            return target.cpu().numpy()
+        elif isinstance(target, list):
+            return np.array(target)
+        else:
+            raise ValueError(f"Unknown state type for {state_name}: {type(target)}")
+
+    def update(self, pred, target, labels, c_W):
         # history should of course be the same as it is conditioning information
         history_labels = labels[:, :self.history_length]
 
@@ -124,6 +146,12 @@ class PeakMetric(torchmetrics.Metric):
             "Computing pred and target peak properties for %d samples satisfying condition '%s'.", num_selected_samples,
             self.condition
         )
+        if self.nbi_channel_index is not None:
+            nbi_traces = c_W[sample_mask, self.nbi_channel_index, -self.future_length:]
+            nbi_window_means = nbi_traces.mean(dim=-1)
+            # in parallel with counts, take the mean nbi per window, for the PD big channel (type 1 ELMS)
+            self.cat_with_state(f"list:NBI/window_means", nbi_window_means)
+
         pred_peaks_batch = batch_get_peakprops(
             pred[sample_mask], dml_channel_index=self.dml_channel_index, pd_channel_index=self.pd_channel_index
         )  # (B, C)
@@ -135,6 +163,7 @@ class PeakMetric(torchmetrics.Metric):
             measures = self.BASE_MEASURES
             if channel_name == "DML":
                 measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
+
             # pairwise_distances = {f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}": 0. for measure in measures}
             # counts_target = []
             # counts_pred = []
@@ -151,8 +180,15 @@ class PeakMetric(torchmetrics.Metric):
                 self.add_to_state(
                     f"sum:{channel_name}/counts_sq_error", np.square(pred_sample_num_peaks - target_sample_num_peaks)
                 )
+                if self.nbi_channel_index is not None and channel_name == 'PD large peaks':
+                    pred_NBI_matches = nbi_traces[sample_i, pred_sample.X]
+                    target_NBI_matches = nbi_traces[sample_i, target_sample.X]
+                    self.cat_with_state(f"prop_list_pred:PD large peaks/NBI", pred_NBI_matches)
+                    self.cat_with_state(f"prop_list_target:PD large peaks/NBI", target_NBI_matches)
+
                 for measure in measures:
                     self.add_to_state(f"pair_dists_sum:{channel_name}/{measure}", getattr(pair_wasserstein, measure))
+                    # map measure to which property to access in the window of peaks
                     match measure:
                         case "height":
                             self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_sample.Y)
@@ -232,9 +268,55 @@ class PeakMetric(torchmetrics.Metric):
                 metrics_out[f"peak_{measure}/marginal_wasserstein/{channel_name}"] = wasserstein_distance(
                     pred_property_list, target_property_list
                 )
+
+        # Per window count vs NBI level
+        pred_joint_nbi_pd_window, target_joint_nbi_pd_window = self.get_nbi_pd_count_per_window_sample()
+        metrics_out["peak_NBI_distr/2d_wasserstein/NBIwindow_PD_large_count"] = wasserstein_distance_nd(
+            pred_joint_nbi_pd_window, target_joint_nbi_pd_window
+        )
+        # Per peak prominence vs NBI level, if there is any peaks not filtered out:
+        if len(getattr(self, "prop_list_pred:PD large peaks/NBI")) > 0:
+            pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence = self.get_nbi_pdlarge_full_sample()
+            metrics_out["peak_NBI_distr/2d_wasserstein/NBI_PD_large_prominence"] = wasserstein_distance_nd(
+                pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence
+            )
+
         metrics_out['total_hits'] = self.total_hits.item()
         logger.debug("Done %d hits for condition %s", self.total_hits.item(), self.condition)
         return prefix_metrics(metrics_out, self.condition)
+
+    def get_nbi_pd_count_per_window_sample(self):
+        pred_joint_nbi_pd_window = torch.stack(
+            (getattr(self, "list:NBI/window_means"), getattr(self, "list:PD large peaks/counts_pred")),
+            dim=1  #2D observations, dim 0 is N observations.
+        ).cpu().numpy()
+        target_joint_nbi_pd_window = torch.stack(
+            (getattr(self, "list:NBI/window_means"), getattr(self, "list:PD large peaks/counts_target")),
+            dim=1  #2D observations, dim 0 is N observations.
+        ).cpu().numpy()
+
+        return pred_joint_nbi_pd_window, target_joint_nbi_pd_window
+
+    def get_nbi_pdlarge_full_sample(self):
+        pred_joint_nbi_pd_prominence = torch.stack(
+            (
+                getattr(self,
+                        "prop_list_pred:PD large peaks/NBI"), getattr(self, "prop_list_pred:PD large peaks/prominence")
+            ),
+            dim=1  #2D observations, dim 0 is N observations.
+        ).cpu().numpy()
+        if pred_joint_nbi_pd_prominence.shape == (0, 2):
+            pred_joint_nbi_pd_prominence = np.array([[0, 0]])
+        target_joint_nbi_pd_prominence = torch.stack(
+            (
+                getattr(self, "prop_list_target:PD large peaks/NBI"),
+                getattr(self, "prop_list_target:PD large peaks/prominence")
+            ),
+            dim=1  #2D observations, dim 0 is N observations.
+        ).cpu().numpy()
+        if target_joint_nbi_pd_prominence.shape == (0, 2):
+            target_joint_nbi_pd_prominence = np.array([[0, 0]])
+        return pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence
 
     def extract_df_all(self, cache_obj=None):
         base_df = pd.DataFrame(columns=['condition', 'channel_name', 'measure', 'distribution', 'value'])
@@ -288,7 +370,7 @@ class PeakMetric(torchmetrics.Metric):
         df = pd.concat(dfs)
         subgroups_df = df.query("condition!='any_Wh'")
         all_condition_df = df.query("condition=='any_Wh'")
-        for channel_i, channel_name in enumerate(self.CHANNEL_NAMES + ['all']):
+        for channel_i, channel_name in enumerate(['all'] + self.CHANNEL_NAMES):
             measures = self.BASE_MEASURES + ['count']
             if channel_name == "DML":
                 measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
@@ -296,6 +378,8 @@ class PeakMetric(torchmetrics.Metric):
                 self.save_histogram(channel_name, measure, subgroups_df)
                 if len(all_condition_df) > 0:
                     self.save_histogram(channel_name, measure, all_condition_df, subgroup='all')
+
+    def save_nbi_joint_histogram(self)
 
     def save_histogram(self, channel_name, measure, df=None, subgroup='split'):
         import plotly.express as px
@@ -365,18 +449,21 @@ class PeakMetric(torchmetrics.Metric):
         fig.update_yaxes(title_font_size=12, title_standoff=6, title_text="")
         fig.update_yaxes(title_font_size=12, title_standoff=6, title_text="$p(n)$", row=3 if facet_mode else 1, col=1)
         # Update Subplot titles:
+        self.dump_figure_to_pdfs(fig, subgroup, measure, channel_name)
+
+    def dump_figure_to_pdfs(self, fig, subgroup, measure, channel_name):
+        SIZES = [(600, 500), (800, 500), (1200, 600), (1300, 910), (800, 1200), (600, 1000)]
         out_folder = Path(f"output/pdfplots/{self.C.run_name}")
         out_folder.mkdir(parents=True, exist_ok=True)
         fig.write_image(out_folder / "throwaway.pdf", format="pdf")  # prevents an ugly mathjax overlay being included
         time.sleep(1)
-        sizes = [(600, 500), (800, 500), (1200, 600), (1300, 910), (800, 1200)]
-        for w, h in sizes:
+        for w, h in SIZES:
             size_folder = out_folder / f"{subgroup}_{w}x{h}"
             size_folder.mkdir(parents=False, exist_ok=True)
-            out_file_pdf = size_folder / f"{measure}_for_{channel_name}.pdf"
+            out_file_pdf = size_folder / f"chan_{channel_name}_{measure}.pdf"
             fig.write_image(out_file_pdf, format='pdf', width=w, height=h)
             print(f"Saved plot to {out_file_pdf}")
-        out_file_pdf = out_folder / f"atom_{subgroup}_{measure}_for_{channel_name}.pdf"
+        out_file_pdf = out_folder / f"atom_{subgroup}_chan_{channel_name}_{measure}.pdf"
         fig.update_layout(
             showlegend=False,
             title_text='',
