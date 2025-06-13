@@ -7,9 +7,10 @@ import torch
 import torchmetrics
 from src.config import get_current_config
 from src.metrics.metrics import batch_get_peakprops, prefix_metrics
-from scipy.stats import wasserstein_distance, wasserstein_distance_nd
+from scipy.stats import wasserstein_distance
 import pandas as pd
 from pathlib import Path
+import ot
 
 logger = logging.getLogger(__name__)
 
@@ -121,15 +122,6 @@ class PeakMetric(torchmetrics.Metric):
         if not isinstance(new_value, torch.Tensor):
             new_value = torch.tensor(new_value, device=target.device)
         setattr(self, state_name, torch.cat((target, new_value.view(-1))))
-
-    def get_numpy_state(self, state_name: str):
-        target = getattr(self, state_name)
-        if isinstance(target, torch.Tensor):
-            return target.cpu().numpy()
-        elif isinstance(target, list):
-            return np.array(target)
-        else:
-            raise ValueError(f"Unknown state type for {state_name}: {type(target)}")
 
     def update(self, pred, target, labels, c_W):
         # history should of course be the same as it is conditioning information
@@ -271,19 +263,25 @@ class PeakMetric(torchmetrics.Metric):
 
         # Per window count vs NBI level
         pred_joint_nbi_pd_window, target_joint_nbi_pd_window = self.get_nbi_pd_count_per_window_sample()
-        metrics_out["peak_NBI_distr/2d_wasserstein/NBIwindow_PD_large_count"] = wasserstein_distance_nd(
+        metrics_out["peak_NBI_distr/2d_wasserstein/NBIwindow_PD_large_count"] = ot.sliced.sliced_wasserstein_distance(
             pred_joint_nbi_pd_window, target_joint_nbi_pd_window
         )
         # Per peak prominence vs NBI level, if there is any peaks not filtered out:
         if len(getattr(self, "prop_list_pred:PD large peaks/NBI")) > 0:
-            pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence = self.get_nbi_pdlarge_full_sample()
-            metrics_out["peak_NBI_distr/2d_wasserstein/NBI_PD_large_prominence"] = wasserstein_distance_nd(
-                pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence
-            )
+            pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence = self.get_nbi_pd_per_peak_distr("prominence")
+            metrics_out["peak_NBI_distr/2d_wasserstein/NBI_PD_large_prominence"
+                       ] = ot.sliced.sliced_wasserstein_distance(
+            pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence,
+                       )  # Reference: https://stats.stackexchange.com/a/404915
+            pred_joint_nbi_pd_width, target_joint_nbi_pd_width = self.get_nbi_pd_per_peak_distr("width")
+            metrics_out["peak_NBI_distr/2d_wasserstein/NBI_PD_large_width"
+                                ] = ot.sliced.sliced_wasserstein_distance(
+                                    pred_joint_nbi_pd_width, target_joint_nbi_pd_width,
+                                )
 
         metrics_out['total_hits'] = self.total_hits.item()
         logger.debug("Done %d hits for condition %s", self.total_hits.item(), self.condition)
-        return prefix_metrics(metrics_out, self.condition)
+        return prefix_metrics(metrics_out, self.condition)  # H_only_Wh/peak_prominence/marginal_wasserstein/DML
 
     def get_nbi_pd_count_per_window_sample(self):
         pred_joint_nbi_pd_window = torch.stack(
@@ -297,11 +295,12 @@ class PeakMetric(torchmetrics.Metric):
 
         return pred_joint_nbi_pd_window, target_joint_nbi_pd_window
 
-    def get_nbi_pdlarge_full_sample(self):
+    def get_nbi_pd_per_peak_distr(self, measure='prominence'):
+        """Uses the extra added PD peak channel filtered on 0.15 > prominence."""
         pred_joint_nbi_pd_prominence = torch.stack(
             (
                 getattr(self,
-                        "prop_list_pred:PD large peaks/NBI"), getattr(self, "prop_list_pred:PD large peaks/prominence")
+                        "prop_list_pred:PD large peaks/NBI"), getattr(self, f"prop_list_pred:PD large peaks/{measure}")
             ),
             dim=1  #2D observations, dim 0 is N observations.
         ).cpu().numpy()
@@ -310,7 +309,7 @@ class PeakMetric(torchmetrics.Metric):
         target_joint_nbi_pd_prominence = torch.stack(
             (
                 getattr(self, "prop_list_target:PD large peaks/NBI"),
-                getattr(self, "prop_list_target:PD large peaks/prominence")
+                getattr(self, f"prop_list_target:PD large peaks/{measure}")
             ),
             dim=1  #2D observations, dim 0 is N observations.
         ).cpu().numpy()
@@ -323,7 +322,7 @@ class PeakMetric(torchmetrics.Metric):
         if self.total_hits == 0:
             return base_df
         for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
-            measures = self.BASE_MEASURES + ['count']
+            measures = ['count'] + self.BASE_MEASURES
             if channel_name == "DML":
                 measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
             for measure in measures:
@@ -379,7 +378,87 @@ class PeakMetric(torchmetrics.Metric):
                 if len(all_condition_df) > 0:
                     self.save_histogram(channel_name, measure, all_condition_df, subgroup='all')
 
-    def save_nbi_joint_histogram(self)
+    def export_2d_NBI_distributions(self):
+        if self.total_hits.item() == 0:
+            logger.warning("No hits for condition '%s', skipping 2D NBI distributions export.", self.condition)
+            return
+        pred_joint_nbi_pd_window, target_joint_nbi_pd_window = self.get_nbi_pd_count_per_window_sample()
+        logger.debug("Exporting 2d histograms for %s pred peaks and %s target peaks.", pred_joint_nbi_pd_window[:,1].sum(), target_joint_nbi_pd_window[:,1].sum())
+        self.save_nbi_joint_histogram(pred_joint_nbi_pd_window, target_joint_nbi_pd_window, "NBI_PD_Count_per_window",
+                                      yaxis_title="Window $N(\\textbf{PD} Peaks \mid \\text{Prominence} > 0.15)$")
+        pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence = self.get_nbi_pd_per_peak_distr('prominence')
+        self.save_nbi_joint_histogram(
+            pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence, "NBI_PD_prominence_per_peak",
+            yaxis_title="PD Peak Prominence"
+        )
+        pred_joint_nbi_pd_width, target_joint_nbi_pd_width = self.get_nbi_pd_per_peak_distr('width')
+        self.save_nbi_joint_histogram(pred_joint_nbi_pd_width, target_joint_nbi_pd_width, "NBI_PD_width_per_peak",
+            yaxis_title="PD Peak Width"
+                                      )
+
+    def save_nbi_joint_histogram(
+        self, pred_distr, target_distr, subgroup='NBI_PD_Count', yaxis_title="Window N(PD Peaks) | Prominence > 0.15"
+    ):
+        """Saves PDFs, to be called at test epoch end."""
+        import datashader as ds
+        # pred_joint_nbi_pd_window, target_joint_nbi_pd_window = self.get_nbi_pd_count_per_window_sample()
+        peak_measure_max = max(1, np.max(pred_distr[:, 1]), np.max(target_distr[:, 1]))
+        RESOLUTION = 100
+        cvs = ds.Canvas(plot_width=RESOLUTION, plot_height=RESOLUTION, x_range=(0, 1), y_range=[0, peak_measure_max])
+        COLNAMES = ('NBI', 'Peaks per window')
+        agg_pred_matrix = cvs.points(pd.DataFrame(pred_distr, columns=COLNAMES), *COLNAMES)
+        agg_target_matrix = cvs.points(pd.DataFrame(target_distr, columns=COLNAMES), *COLNAMES)
+        import plotly.graph_objects as go
+
+        # Assume you have two 2D arrays: z_real, z_generated, and matching x/y axes
+        fig = go.Figure()
+
+        fig.add_trace(
+            go.Heatmap(
+                z=agg_target_matrix,#np.log10(agg_target_matrix, where=agg_target_matrix > 0),
+                x=np.linspace(0, 1, RESOLUTION),
+                y=np.linspace(0, peak_measure_max, RESOLUTION),
+                colorscale=[(0, 'rgba(0,0,255,0)'), (0.1, 'rgba(0,0,255,0.01)'),
+                            (1, 'rgba(0,0,255,1)')],  # transparent to blue
+                opacity=1,
+                name='Real',
+                showscale=True,
+                colorbar=dict(title="Real", len=0.5, y=0.75)
+            )
+        )
+        fig.add_trace(
+            go.Heatmap(
+                z=agg_pred_matrix,#np.log10(agg_pred_matrix, where=agg_target_matrix > 0),
+                colorscale=[(0, 'rgba(255,0,0,0)'), (0.1, 'rgba(255,0,0,0.01)'),
+                            (1, 'rgba(255,0,0,1)')],  # transparent to red
+                x=np.linspace(0, 1, RESOLUTION),
+                y=np.linspace(0, peak_measure_max, RESOLUTION),
+                opacity=0.8,
+                name='Generated',
+                showscale=True,
+                colorbar=dict(title="Generated", len=0.5, y=0.25)
+            )
+        )
+
+        fig.update_layout(
+            xaxis_title="NBI Power Input (normalized)",
+            yaxis_title=yaxis_title,
+            legend=dict(title="Distribution", orientation="h"),
+            font=dict(family="serif", size=14),
+            width=500,
+            height=500,
+            margin=dict(l=0, r=0, t=0, b=10),
+        )
+
+        number_peaks = len(pred_distr)
+        self.dump_figure_to_pdfs(
+            fig,
+            self.condition,
+            subgroup,
+            channel_name=f'PD_large-Npred_{number_peaks}',
+            plot_name='2D_hist',
+            limit_size=600
+        )
 
     def save_histogram(self, channel_name, measure, df=None, subgroup='split'):
         import plotly.express as px
@@ -449,28 +528,34 @@ class PeakMetric(torchmetrics.Metric):
         fig.update_yaxes(title_font_size=12, title_standoff=6, title_text="")
         fig.update_yaxes(title_font_size=12, title_standoff=6, title_text="$p(n)$", row=3 if facet_mode else 1, col=1)
         # Update Subplot titles:
-        self.dump_figure_to_pdfs(fig, subgroup, measure, channel_name)
+        self.dump_figure_to_pdfs(fig, subgroup, measure, channel_name, "histograms")
 
-    def dump_figure_to_pdfs(self, fig, subgroup, measure, channel_name):
-        SIZES = [(600, 500), (800, 500), (1200, 600), (1300, 910), (800, 1200), (600, 1000)]
-        out_folder = Path(f"output/pdfplots/{self.C.run_name}")
+    def dump_figure_to_pdfs(self, fig, subgroup, measure, channel_name, plot_name='histogram', limit_size=None):
+        SIZES = [
+            (w, h)
+            for w, h in
+            [(300, 250), (400, 450), (600, 500), (800, 500), (1200, 600), (1300, 910), (800, 1200), (600, 1000)]
+            if limit_size is None or (w <= limit_size and h <= limit_size)
+        ]
+        out_folder = Path(f"output/pdfplots/{self.C.run_name}") / plot_name / subgroup
         out_folder.mkdir(parents=True, exist_ok=True)
         fig.write_image(out_folder / "throwaway.pdf", format="pdf")  # prevents an ugly mathjax overlay being included
         time.sleep(1)
         for w, h in SIZES:
-            size_folder = out_folder / f"{subgroup}_{w}x{h}"
+            size_folder = out_folder / f"{w}x{h}"
             size_folder.mkdir(parents=False, exist_ok=True)
-            out_file_pdf = size_folder / f"chan_{channel_name}_{measure}.pdf"
+            out_file_pdf = size_folder / f"{channel_name}_{measure}.pdf"
             fig.write_image(out_file_pdf, format='pdf', width=w, height=h)
             print(f"Saved plot to {out_file_pdf}")
-        out_file_pdf = out_folder / f"atom_{subgroup}_chan_{channel_name}_{measure}.pdf"
+        out_file_pdf = out_folder / f"atom_{subgroup}_{channel_name}_{measure}.pdf"
         fig.update_layout(
             showlegend=False,
             title_text='',
             margin=dict(l=0, r=0, t=15, b=0),
+            font=dict(family="serif", size=10),
         )
         # fig.update_xaxes(title_text='Heights')
-        fig.write_image(out_file_pdf, format='pdf', width=750, height=500)
+        fig.write_image(out_file_pdf, format='pdf', width=500, height=400)
         print(f"Saved plot to {out_file_pdf}")
 
 
