@@ -392,6 +392,7 @@ class FlowModule(L.LightningModule):
             sub_metric.extract_df_all(self.test_cache)
         logger.info("Done. Resetting metrics.")
         self.moments_metrics.reset()
+        self.peak_metrics.reset()
         self.mode_test_metrics.reset()
         self.dice_metric.reset()
 
@@ -453,14 +454,14 @@ class FlowModule(L.LightningModule):
         metrics_out = self.update_metrics(
             generated_samples, target_samples, conditioning_input, surr_labels_pred, surr_labels_target, data_module
         )
-        # metrics_out = metrics.get_moments_errors_per_channel(generated_samples, target_samples)
-        # meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
-        #     (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
-        #     device='cpu'  # type: ignore
-        # )
+        metrics_out = metrics.get_moments_errors_per_channel(generated_samples, target_samples)
+        meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
+            (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
+            device='cpu'  # type: ignore
+        )
         # TODO do metric calculation elsewhere
         metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
-        peak_metrics, peak_features = metrics.get_peak_metrics(generated_samples, target_samples)
+        _peak_metrics, peak_features = metrics.get_peak_metrics(generated_samples, target_samples)
         self.init_metrics() # reset everything
         return dict(
             meta=meta,

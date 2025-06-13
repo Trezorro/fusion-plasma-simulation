@@ -356,6 +356,7 @@ class PeakMetric(torchmetrics.Metric):
             width=1000,  # Increase plot width
             height=800,  # Increase plot height
         )
+        fig.for_each_trace(selector={'type': 'box'}, fn=lambda box: box.update(boxpoints=False))
         # Hide facet column titles
         fig.for_each_annotation(lambda a: a.update(text=f"<b>{a.text.split('=')[1]}</b>") if '=' in a.text else None)
         fig.update_xaxes(title_font_size=12, title_standoff=6)
@@ -399,3 +400,5 @@ def test_pdf():
 
 
 test_pdf()
+
+# %%
