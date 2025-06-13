@@ -189,7 +189,7 @@ class PeakMetric(torchmetrics.Metric):
         metrics_out = {}
         if self.total_hits == 0:
             return metrics_out
-        logger.debug("Computing metrics for %d hits for condition %s", self.total_hits.item(), self.condition)
+        logger.debug("Peak: Computing metrics for %d hits for condition %s", self.total_hits.item(), self.condition)
 
         for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
             measures = self.BASE_MEASURES  # + count done manually
@@ -300,7 +300,9 @@ class PeakMetric(torchmetrics.Metric):
     def save_histogram(self, channel_name, measure, df=None, subgroup='split'):
         import plotly.express as px
         facet_mode = channel_name == 'all'
-        logger.debug("Making histogram for channel '%s' and measure '%s'.", channel_name, measure)
+        logger.debug(
+            "Making histogram for channel '%s' and measure '%s' (subgroup %s)", channel_name, measure, subgroup
+        )
         COLOR_SCALE = ['#636EFA', '#00CC96', '#EF553B', "#999999", "#555555"]
         if df is None:
             if facet_mode:
@@ -356,7 +358,7 @@ class PeakMetric(torchmetrics.Metric):
             width=1000,  # Increase plot width
             height=800,  # Increase plot height
         )
-        fig.for_each_trace(selector={'type': 'box'}, fn=lambda box: box.update(boxpoints=False))
+        fig.for_each_trace(selector={'type': 'box'}, fn=lambda box: box.update(boxpoints=False, notched=True))
         # Hide facet column titles
         fig.for_each_annotation(lambda a: a.update(text=f"<b>{a.text.split('=')[1]}</b>") if '=' in a.text else None)
         fig.update_xaxes(title_font_size=12, title_standoff=6)
