@@ -688,8 +688,6 @@ def plot_delta_prominence_scatter(dml_channel_index, pred_peaks_batch):
     fig.show()
 
 
-
-
 class MomentsErrorsMetric(torchmetrics.Metric):
     full_state_update = False  # metric state of one batch is independent of the state of other batches
 
@@ -719,7 +717,7 @@ class MomentsErrorsMetric(torchmetrics.Metric):
         self.sq_error += sq_error
 
         dtw = self.sdtw(pred_wf.permute(0, 2, 1), target_wf.permute(0, 2, 1))
-        self.DTW += dtw.sum()  # TODO: should be mean maybe?
+        self.DTW += dtw.sum()
         for moment in MOMENT_NAMES:
             self.add_to_state(
                 f"magnitude_{moment}",

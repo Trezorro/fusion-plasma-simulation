@@ -29,6 +29,7 @@ kaleido = "*"
 torchdiffeq = "*"
 pysdtw = "*"
 tables = "*"
+datashader = "*"
 
 [dev-packages]
 jupyter = "*"
