@@ -1,4 +1,6 @@
 from typing import Optional
+
+from matplotlib.colors import hex2color, hsv_to_rgb, rgb_to_hsv
 from src.config import get_current_config
 
 import numpy as np
@@ -487,13 +489,17 @@ def multi_sample_single_window_lines_plotly(
         )
         if generated_samples is not None:
             ####  GENERATED TRACES  ####
+            hsv_base = rgb_to_hsv(hex2color(channel_color))
             for i, sample in enumerate(generated_samples):
+                color = hsv_to_rgb(hsv_base)
+                color_str = plt_colors.label_rgb(plt_colors.convert_to_RGB_255(color))
                 fig.add_trace(
                     go.Scatter(
                         x=np.arange(seq_length),
                         y=sample[channel_i, :],
                         mode='lines',
-                        line=dict(dash='solid', color=channel_color, width=1.2),
+                        line=dict(dash='solid', color=color_str,
+                                  width=1),  # color must be hex or tuple in [0,1]^3
                         showlegend=i == 0,
                         opacity=0.5,
                         name=f'{channel_name} (Generated)',
@@ -502,6 +508,7 @@ def multi_sample_single_window_lines_plotly(
                     row=channel_i + 1,
                     col=1
                 )
+                hsv_base[0] = (hsv_base[0] +.1) % 1
         show_history = conditioning_input is not None and "x_history" in conditioning_input
         if show_history:
             x_history = conditioning_input['x_history'][0]  # type: ignore
