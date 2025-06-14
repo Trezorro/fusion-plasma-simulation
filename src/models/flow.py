@@ -319,7 +319,6 @@ class FlowModule(L.LightningModule):
         )
         metrics_out['_step'] = batch_idx
         self.log_dict(metrics.prefix_metrics(metrics_out, 'test/step'), prog_bar=True, on_step=True, on_epoch=False)
-        return generated_samples, surr_labels_pred, surr_labels_target, metrics_out
 
     @torch.inference_mode()
     def inference(self, batch, data_module):
@@ -472,7 +471,6 @@ class FlowModule(L.LightningModule):
             (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
             device='cpu'  # type: ignore
         )
-        # TODO do metric calculation elsewhere
         metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
         _peak_metrics, peak_features = metrics.cpu_batch_peak_metrics(generated_samples, target_samples)
         self.init_metrics() # reset everything

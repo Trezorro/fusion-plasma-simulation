@@ -49,27 +49,27 @@ class UnFlowModule(FlowModule):
         self.log("loss/val", loss, prog_bar=True)
         return loss
 
-    def test_step(self, batch, batch_idx):
+    @torch.inference_mode()
+    def inference(self, batch, data_module):
         meta, conditioning_input, target_samples = batch
-        noise_sample = self.get_prior_samples(conditioning_input, target_samples.size())
-        t_dummy = torch.ones(target_samples.size(0), device=self.device)
-        pred = self.model(noise_sample, t_dummy, conditioning_input=conditioning_input)
-        # Fallback for datamodule
-        data_module = getattr(self.trainer, 'datamodule', None)
-        if data_module is None:
-            raise RuntimeError("No datamodule found on trainer.")
-        Wf_length = data_module.seq_length
-        surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
-            meta, pred, target_samples, data_module
-        )
-        surr_labels_pred = torch.tensor(surr_labels_pred, device=self.device, dtype=torch.int)
-        surr_labels_target = torch.tensor(surr_labels_target, device=self.device, dtype=torch.int)
-        metrics_out = self.moments_metrics(pred, target_samples)
-        metrics_out |= self.mode_test_metrics(surr_labels_pred, surr_labels_target)
-        pred_labels = surr_labels_pred[:, -Wf_length:].long()
-        target_labels = surr_labels_target[:, -Wf_length:].long()
-        metrics_out['/dice'] = self.dice_metric(pred_labels, target_labels)
-        self.log_dict(metrics.prefix_metrics(metrics_out, 'test'), prog_bar=True, on_step=True, on_epoch=False)
+        if self.test_cache is not None and self.test_cache_mode == 'use':
+            generated_samples, surr_labels_pred, surr_labels_target = self.test_cache.get(
+                meta['shot_number'].cpu(), meta['start_i'].cpu()
+            )
+            generated_samples = torch.tensor(generated_samples, device=self.device, dtype=torch.float32)
+        else:
+            noise_sample = self.get_prior_samples(conditioning_input, target_samples.size())
+            t_dummy = torch.ones(target_samples.size(0), device=self.device)
+            x_pred = self.model(noise_sample, t_dummy, conditioning_input=conditioning_input)
+            surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
+                meta, x_pred, target_samples, data_module=data_module
+            )  # both pred and target have shape B, Wh+Wf, and
+            if self.test_cache is not None and self.test_cache_mode == 'create':
+                self.test_cache.set_from_batch(
+                    meta['shot_number'].cpu(), meta['start_i'].cpu(), x_pred.cpu(), surr_labels_pred, surr_labels_target
+                )
+
+        return generated_samples, surr_labels_pred, surr_labels_target
 
     @torch.inference_mode()
     def evaluate(self, batch, n_steps=1, data_module=None, **kwargs):
@@ -84,11 +84,9 @@ class UnFlowModule(FlowModule):
         for k, v in (meta | conditioning_input).items():
             logger.debug("Meta/conditioning input %s on device %s", k, v.device if isinstance(v, torch.Tensor) else "Not tensor!")
         prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
-        t = torch.ones(target_samples.size(0), device=self.device)
+        t_dummy = torch.ones(target_samples.size(0), device=self.device)
         logger.debug("prior.device %s", prior_samples.device)
-        generated_samples = self.model(prior_samples, t, conditioning_input=conditioning_input)
-        metrics_out = metrics.get_moments_errors_per_channel(generated_samples, target_samples)
-
+        generated_samples = self.model(prior_samples, t_dummy, conditioning_input=conditioning_input)
         if data_module is None:
             data_module = getattr(self.trainer, 'datamodule', None)
             if data_module is None:
@@ -96,10 +94,17 @@ class UnFlowModule(FlowModule):
         surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
             meta, generated_samples, target_samples, data_module
         )
+        self.model.train()  # Reset model to training mode
+        metrics_out = self.update_metrics(
+            generated_samples, target_samples, conditioning_input, surr_labels_pred, surr_labels_target, data_module
+        )
         meta, conditioning_input, target_samples, prior_samples, generated_samples = self._apply_batch_transfer_handler(
-            (meta, conditioning_input, target_samples, prior_samples, generated_samples), device=torch.device('cpu'))
+            (meta, conditioning_input, target_samples, prior_samples, generated_samples),
+            device='cpu'  # type: ignore
+        )
         metrics_out |= metrics.get_entropy_metrics(generated_samples, target_samples)
-        peak_metrics, peak_features = metrics.cpu_batch_peak_metrics(generated_samples, target_samples)
+        _peak_metrics, peak_features = metrics.cpu_batch_peak_metrics(generated_samples, target_samples)
+        self.init_metrics() # reset everything
         trajectories = torch.stack((prior_samples, generated_samples))
         return dict(
             meta=meta,
@@ -107,7 +112,7 @@ class UnFlowModule(FlowModule):
             target_samples=target_samples,
             prior_samples=prior_samples,
             generated_samples=generated_samples,
-            metrics=metrics_out | peak_metrics,
+            metrics=metrics_out,
             trajectories=trajectories,
             peak_features=peak_features,
             surr_labels_pred=surr_labels_pred,
