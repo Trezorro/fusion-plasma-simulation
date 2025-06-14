@@ -274,7 +274,7 @@ class FlowModule(L.LightningModule):
         return prior_samples
 
     def init_metrics(self):
-        self.moments_metrics = metrics.MomentsErrorsMetric()
+        self.moments_metrics = metrics.MomentsErrorsMetric().to(self.device)
         self.mode_test_metrics = torchmetrics.MetricCollection(
             dict(
                 any_Wh=ModeTransitionMetric('any_Wh'),
@@ -290,8 +290,8 @@ class FlowModule(L.LightningModule):
                 H_not_in_Wh=ModeTransitionMetric('H_not_in_Wh'),
             ),
             prefix="/mode/",
-        )
-        self.dice_metric = DiceScore(3, input_format='index')
+        ).to(self.device)
+        self.dice_metric = DiceScore(3, input_format='index').to(self.device)
         self.peak_metrics = torchmetrics.MetricCollection(
             dict(
                 any_Wh=PeakMetric('any_Wh'),
@@ -301,7 +301,7 @@ class FlowModule(L.LightningModule):
                 H_only_Wh=PeakMetric('H_only_Wh'),
             ),
             prefix="/",
-        )
+        ).to(self.device)
         # self.mode_metrics = mode_metrics_collection
         # self.train_metrics = mode_metrics_collection.clone(prefix='train/')
         # self.mode_test_metrics = mode_metrics_collection.clone(prefix='test/')
