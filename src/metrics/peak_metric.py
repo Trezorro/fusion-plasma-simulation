@@ -455,11 +455,10 @@ class PeakMetric(torchmetrics.Metric):
         number_peaks = len(pred_distr)
         dump_figure_to_pdfs(
             fig,
-            self.C.run_name,
+            plot_name='2D_hist',
             subgroup=subgroup,
             measure=self.condition,
             channel_name=f'PD_large-Npred_{number_peaks}',
-            plot_name='2D_hist',
             limit_size=600
         )
 
@@ -531,7 +530,7 @@ class PeakMetric(torchmetrics.Metric):
         fig.update_yaxes(title_font_size=12, title_standoff=6, title_text="")
         fig.update_yaxes(title_font_size=12, title_standoff=6, title_text="$p(n)$", row=3 if facet_mode else 1, col=1)
         # Update Subplot titles:
-        dump_figure_to_pdfs(fig, subgroup, measure, channel_name, "histograms")
+        dump_figure_to_pdfs(fig, "peakprop_histograms", subgroup, measure, channel_name)
 
 
 

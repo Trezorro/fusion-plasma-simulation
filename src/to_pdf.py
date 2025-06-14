@@ -1,8 +1,9 @@
 import time
 from pathlib import Path
+from src.config import get_current_config
 
-
-def dump_figure_to_pdfs(fig, run_name, subgroup, measure, channel_name, plot_name='histogram', limit_size=None):
+def dump_figure_to_pdfs(fig, plot_name, subgroup, measure, channel_name, limit_size=None):
+    run_name = get_current_config().run_name
     SIZES = [
         (w, h)
         for w, h in
