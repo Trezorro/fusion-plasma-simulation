@@ -71,7 +71,7 @@ df['cache_exists'] = df['test_cache_name'].apply(lambda v: (v+'.h5') in caches)
 # Drop columns starting with 'test/'
 df = df.loc[:, ~df.columns.str.startswith('test/')]
 # Reorder columns: group_cols + [cache_col] + rest
-important_cols = ['cache_exists'] +group_cols + ["Name",  cache_col, 'base_run', 'Created','test_cache_mode', "epoch"]
+important_cols = ['cache_exists'] +group_cols + ["Name",  cache_col, 'base_run', 'run_name', 'Created','test_cache_mode', "epoch"]
 other_cols = [col for col in df.columns if col not in important_cols]
 df = df[important_cols + other_cols]
 df
@@ -91,7 +91,7 @@ for group_keys, group_df in groups:
     print('  Caches:')
     for _, row in group_df.sort_values('Created').iterrows():
         print(
-            f"     {'✅' if row['cache_exists'] else ''} {row[cache_col]}   from  base run '{row['base_run']}' [{row['test_cache_mode']}]"
+            f"     {'✅' if row['cache_exists'] else ''} {row[cache_col]} {row['test_cache_mode']}ed from  base run '{row['base_run']}' "
         )
 
 
