@@ -6,9 +6,9 @@ prefer_model_alias: best # null just takes the one with latest, can be best or l
 test_cache_name: doublehistory_seq_normal_smC_BIG2_cache2 #test_tinyhistory # test_cache_unflow #  # tinyhistory_seq_normal_smC_BIG #${ run_name }
 test_cache_mode: use # create or use
 
-batch_size: 128
+batch_size: 256
 data:
-  batch_size: 128
+  batch_size: 256
 
 evaluation:
   n_steps: 40 # enough for rk4
