@@ -1,9 +1,9 @@
 # This will be merged into the inherited config from the base run
 
-base_run: chan_normal_smC_BIG_retry2 # ID or unique name
+base_run: chan_resample_smC_BIG # ID or unique name
 prefer_model_alias: best # null just takes the one with latest, can be best or latest.
 
-test_cache_name: chan_normal_smC_BIG_retry2 #test_tinyhistory # test_cache_unflow #  # tinyhistory_seq_normal_smC_BIG #${ run_name }
+test_cache_name: chan_resample_smC_BIG #test_tinyhistory # test_cache_unflow #  # tinyhistory_seq_normal_smC_BIG #${ run_name }
 test_cache_mode: use # create or use
 
 batch_size: 256
