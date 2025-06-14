@@ -91,7 +91,7 @@ for group_keys, group_df in groups:
     print('  Caches:')
     for _, row in group_df.sort_values('Created').iterrows():
         print(
-            f"     {'✅' if row['cache_exists'] else ''} {row[cache_col]} {row['test_cache_mode']}ed from  base run '{row['base_run']}' "
+            f"     {'✅' if row['cache_exists'] else ''} {row[cache_col]:<40s}       {row['test_cache_mode']}d in  - {row['run_name']}   - base run '{row['base_run']}' "
         )
 
 
