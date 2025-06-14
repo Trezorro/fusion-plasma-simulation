@@ -436,7 +436,7 @@ class FlowModule(L.LightningModule):
         """
         self.model.eval()
         # Use lightnings manner of moving to correct current device:
-        meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch)
+        meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch, device=self.device)
         logger.debug("Evaluating batch shape %s", target_samples.shape)
         prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
         generated_samples, trajectories = self.integrate_path(
