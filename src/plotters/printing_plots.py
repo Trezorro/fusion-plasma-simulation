@@ -501,14 +501,14 @@ def multi_sample_single_window_lines_plotly(
                         line=dict(dash='solid', color=color_str,
                                   width=1),  # color must be hex or tuple in [0,1]^3
                         showlegend=i == 0,
-                        opacity=0.5,
+                        opacity=0.7,
                         name=f'{channel_name} (Generated)',
                         legendgroup=f'X',
                     ),
                     row=channel_i + 1,
                     col=1
                 )
-                hsv_base[0] = (hsv_base[0] +.05) % 1
+                hsv_base[0] = (hsv_base[0] -.03) % 1
         show_history = conditioning_input is not None and "x_history" in conditioning_input
         if show_history:
             x_history = conditioning_input['x_history'][0]  # type: ignore
