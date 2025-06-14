@@ -230,13 +230,20 @@ def evaluate_window_set(model: FlowModule, data_module: FusionShotDataModule, sh
     C = get_current_config()
     test_dataset = data_module.test_dataset
     for shot, t in shot_t:
-        batch = test_dataset.quick_window(shot, t, repeat=4)
-        if batch is None:
-            continue
-        output = model.evaluate(batch, data_module=data_module, n_steps=40)
-        fig = multi_sample_single_window_lines_plotly(**output)
-        dump_figure_to_pdfs(fig, C.run_name, 'volledig', measure=f'{t}s', channel_name=shot, plot_name="qualitativesamples")
-        fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=10, b=10))
-        dump_figure_to_pdfs(
-            fig, C.run_name, 'nolegend', measure=f'{t}s', channel_name=shot, plot_name="qualitative_samples"
-        )
+        try:
+            batch = test_dataset.quick_window(shot, t, repeat=4)
+            if batch is None:
+                continue
+            output = model.evaluate(batch, data_module=data_module, n_steps=40)
+            fig = multi_sample_single_window_lines_plotly(**output)
+            dump_figure_to_pdfs(fig, C.run_name, 'volledig', measure=f'{t}s', channel_name=shot, plot_name="qualitativesamples")
+            fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=10, b=10))
+            dump_figure_to_pdfs(
+                fig, C.run_name, 'nolegend', measure=f'{t}s', channel_name=shot, plot_name="qualitative_samples"
+            )
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as e:
+            logger.exception(e)
+        else:
+            print('Success')

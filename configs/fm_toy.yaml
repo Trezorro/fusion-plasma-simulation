@@ -25,16 +25,26 @@ test_cache_mode: create # create or use
 
 
 window_set:
+  - [57013, 0.94]
   - [57013, 1.08]
+  - [73368, 0.38] # All low and boring
+  - [77604, 0.72]
   - [77604, 0.77]
+  - [77409,1.32]
   - [73631, 1.03]
   - [69514, 0.51]
   - [69514, 0.51]
+  - [64770, 0.17] # L Mode boringness
+  - [64770, 1.09] # H Mode boringness, middenhoog NBI
+  - [61028, 0.98] # 75%
+  - [61028, 1.12] # 78%
+  - [77595, 0.94] # High NBI
+  - [76702, 1.14] # high NBI
 
 
 
 evaluation:
-  n_steps: 32 # enough for rk4
+  n_steps: 40 # enough for rk4
   solve_method: rk4 # dopri5, euler, midpoint
   max_n: 64
   val_every_n_epochs: 5
@@ -51,6 +61,135 @@ evaluation:
     - key: multi_channel_lines
       n: 16
       buttons: true
+    - key: histogram  # see histograms.py
+      log_key: peak_histogram/PD_count
+      channel_name: PD
+      measure: count
+      n: 64
+    - key: entropy_plot
+      method: app_entropy
+      log_key: approximate_entropy_plot
+      n: 64
+    - key: entropy_plot
+      method: spectral_entropy
+      log_key: spectral_entropy_plot
+      n: 64
+    # - key: entropy_plot
+    #   method: perm_entropy
+    #   log_key: permutation_entropy_plot
+    #   n: 64
+
+
+# model: model.yaml # To be replaced by respective yaml file content
+# model: configs/unflow.yaml
+
+model: 
+  Class: UnFlowModule
+  params:
+    prior: 'normal'  # normal, copy, brownian, levy, resample, constant
+    prior_sigma: 0.3 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
+    ot_method: null  # null to disable
+    ot_replace: true  # Default false
+    batch_rematch_factor: 5  # Default 1
+    step_every_nth_match: 1  # Default 1 # TODO
+    gradient_clip_val: ${ gradient_clip_val }
+    solve_method: ${ evaluation.solve_method }
+    flow_steps: ${ evaluation.n_steps }
+    model: ConditionalUNet  # Must accept x, t inputs
+    model_params:
+      conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
+      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
+      spatial_dim: 1
+      input_channels: 5 # Default 3
+      c_channels: 0  # Default 0 disables conditioning on C
+      apex_hidden_channels: 64  # Default 128
+      # activation: GELU  # Default GELU # TODO implement configurable activation
+      time_embedding: sinusoidal+mlp  # default: sinusoidal, with optional +mlp, other: dummy
+      time_embedding_d: 32  # Default 32 
+      positional_encoding: sinusoidal+mlp  # Default sinusoidal, other: sinusoidal+mlp, dummy
+      positional_encoding_d: 32
+      positional_encoding_c: 8  # Only used if using +mlp
+      ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
+      is_attn: [true, false, false, false] # Default [false, false, false, false]
+      mid_attn: true # Default false
+      attn_heads: 2  # Default 1
+      n_blocks: 2 # Default 2. Number of residual blocks
+      norm_groups: 4 # Default false
+      use1x1: false # Default false
+    loss: MSELoss
+    optimizer_params:
+      lr: 0.00005
+      weight_decay: 0  # Default 0
+      amsgrad: false  # Default false
+
+
+data:
+  Class: FusionShotDataModule
+  dir: ./data/
+  file: 2024_05_01-NaNsFiltered.parquet
+  batch_size: ${ batch_size }
+  seq_length: 256
+  history_length: ${ data.seq_length } # default null / 0, if positive int, will include x_history in the conditioning_inputs
+  crop_margin: 1024  # Determines the unused period at start and end of each shot for preprocessing
+  overfit_on_shots: null  # list of ints or null
+  allowed_start_indices: null  # list of ints or null
+  sample_rate: 10000
+  pre_shuffle: true
+  cols:
+    meta:
+    - ShotNum
+    - time
+    x: [
+            # "FIR",  # density lijn Interferometer (not in my dataset)
+            "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
+            "PD",  # photodiode lijn op de divertor
+            "DML",  # Magnetische respons  correleert met de energie in het plasma
+            # "DML-r",
+            "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
+            "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
+        ]
+    c:
+      - NBI-median
+      - ECRH-median
+      # - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
+      # - gas_fringes  # Ingepompte gas
+      # - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
+      # - ECRH  # magnetron.
+      # - a_minor  # reel gemeten plasma shape a k d (horizontale radius
+      # - KAPPA
+      # - DELTA  # linkerbovenhoek naar links vanuit hetmidden
+    label: LHD_label
+  val_shots: [53623, 57732, 64393, 73631, 57094, 63878, 64686, 77089, 75264, 64678, 77598, 64386] # 103608 viable samples
+  test_shots: [57013, 76702, 77196, 73935, 61028, 64857, 73368, 0.38, 60814, 77599, 61237, 77409, 76304, 77595, 65481, 77193, 68697, 69514, 68631, 67112, 63306, 64770, 60813, 64365, 77604, 77602] # 217308 viable samples
+  train_shots: [26386, 29511, 30043, 30197, 30225, 30262, 30268, 30290, 30310, 31211, 31554, 31650, 31718, 31807, 31839, 32191, 32195, 32592, 32716, 32911, 33188, 33271, 33281, 33459, 33567, 33942, 34010, 34309, 42197, 42514, 43454, 45103, 45105, 46853, 47962, 48580, 52302, 53601, 53625, 53627, 53629, 56662, 57000, 57009, 57010, 57011, 57024, 57026, 57077, 57081, 57093, 57095, 57103, 57218, 57622, 57623, 57624, 57706, 57715, 57751, 58182, 58460, 59061, 59064, 59065, 59066, 59073, 59076, 59825, 60097, 60275, 60812, 60830, 60992, 60995, 61000, 61005, 61009, 61010, 61021, 61038, 61039, 61042, 61043, 61044, 61055, 61057, 61058, 61060, 61242, 61246, 61254, 61260, 61274, 61275, 61277, 61279, 61281, 61608, 61609, 61630, 61631, 61702, 61703, 61711, 61712, 61713, 61714, 61716, 61719, 62744, 63229, 63230, 63232, 63234, 63236, 63238, 63240, 63242, 63244, 63246, 63250, 63298, 63300, 63302, 63308, 63310, 63843, 63847, 63849, 63853, 63877, 63879, 63880, 63882, 63887, 63888, 63920, 63923, 63943, 63944, 63945, 64060, 64067, 64327, 64335, 64336, 64338, 64340, 64342, 64363, 64364, 64366, 64367, 64368, 64369, 64370, 64371, 64372, 64373, 64374, 64376, 64378, 64389, 64392, 64647, 64648, 64658, 64659, 64662, 64666, 64670, 64675, 64680, 64774, 64820, 64855, 64858, 64859, 64911, 64912, 64913, 64914, 64915, 64916, 64917, 64918, 64919, 64923, 64924, 65253, 65280, 65281, 65282, 65283, 65285, 65288, 65317, 65318, 65319, 65320, 65321, 65322, 65336, 65482, 65487, 65557, 65561, 65564, 65566, 66494, 67182, 67186, 68268, 68628, 69127, 69129, 69133, 69512, 69515, 70777, 71208, 73330, 73367, 73632, 73927, 73929, 73931, 73934, 73936, 74498, 74916, 75263, 75265, 76322, 77092, 77411, 77426] # 1963980 viable samples
+
+
+
+# Shorthands for important parameters for wandb
+Prior: ${ model.params.prior }
+Ot_method: ${ model.params.ot_method }
+Cond_dim: ${ model.params.model_params.conditioning_method }
+Channels: ${ model.params.model_params.input_channels }
+Apex_channels: ${ model.params.model_params.apex_hidden_channels }
+T_embedding: ${ model.params.model_params.time_embedding }
+T_emb_d: ${ model.params.model_params.time_embedding_d }
+Pos_encoding: ${ model.params.model_params.positional_encoding }
+Pos_enc_d: ${ model.params.model_params.positional_encoding_d }
+Pos_enc_c: ${ model.params.model_params.positional_encoding_c }
+Attn: ${ model.params.model_params.is_attn }
+Mid_attn: ${ model.params.model_params.mid_attn }
+Attn_heads: ${ model.params.model_params.attn_heads }
+Norm_groups: ${ model.params.model_params.norm_groups }
+Seq_L: ${ data.seq_length }
+Crop: ${ data.crop_margin }
+Cols: ${ data.cols.x }
+Learning_rate: ${ model.params.optimizer_params.lr }
+Rematches: ${ model.params.batch_rematch_factor }
+
+
+
+
+
     # Prominence histograms
     # - key: histogram  # see histograms.py
     #   log_key: peak_histogram/dml_energy_delta
@@ -72,11 +211,6 @@ evaluation:
     #   channel_name: FIR_core
     #   measure: count
     #   n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/PD_count
-      channel_name: PD
-      measure: count
-      n: 64
     # - key: histogram  # see histograms.py
     #   log_key: peak_histogram/DML_count
     #   channel_name: DML
@@ -191,122 +325,3 @@ evaluation:
     #   channel_name: Z_axis
     #   measure: base
     #   n: 64
-    - key: entropy_plot
-      method: app_entropy
-      log_key: approximate_entropy_plot
-      n: 64
-    - key: entropy_plot
-      method: spectral_entropy
-      log_key: spectral_entropy_plot
-      n: 64
-    # - key: entropy_plot
-    #   method: perm_entropy
-    #   log_key: permutation_entropy_plot
-    #   n: 64
-
-
-# model: model.yaml # To be replaced by respective yaml file content
-# model: configs/unflow.yaml
-
-model: 
-  Class: FlowModule
-  params:
-    prior: 'normal'  # normal, copy, brownian, levy, resample, constant
-    prior_sigma: 0.3 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
-    ot_method: null  # null to disable
-    ot_replace: true  # Default false
-    batch_rematch_factor: 5  # Default 1
-    step_every_nth_match: 1  # Default 1 # TODO
-    gradient_clip_val: ${ gradient_clip_val }
-    solve_method: ${ evaluation.solve_method }
-    flow_steps: ${ evaluation.n_steps }
-    model: ConditionalUNet  # Must accept x, t inputs
-    model_params:
-      conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
-      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
-      spatial_dim: 1
-      input_channels: 5 # Default 3
-      c_channels: 0  # Default 0 disables conditioning on C
-      apex_hidden_channels: 64  # Default 128
-      # activation: GELU  # Default GELU # TODO implement configurable activation
-      time_embedding: sinusoidal+mlp  # default: sinusoidal, with optional +mlp, other: dummy
-      time_embedding_d: 32  # Default 32 
-      positional_encoding: sinusoidal+mlp  # Default sinusoidal, other: sinusoidal+mlp, dummy
-      positional_encoding_d: 32
-      positional_encoding_c: 8  # Only used if using +mlp
-      ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
-      is_attn: [true, false, false, false] # Default [false, false, false, false]
-      mid_attn: true # Default false
-      attn_heads: 2  # Default 1
-      n_blocks: 2 # Default 2. Number of residual blocks
-      norm_groups: 4 # Default false
-      use1x1: false # Default false
-    loss: MSELoss
-    optimizer_params:
-      lr: 0.00005
-      weight_decay: 0  # Default 0
-      amsgrad: false  # Default false
-
-
-data:
-  Class: FusionShotDataModule
-  dir: ./data/
-  file: 2024_05_01-NaNsFiltered.parquet
-  batch_size: ${ batch_size }
-  seq_length: 256
-  history_length: ${ data.seq_length } # default null / 0, if positive int, will include x_history in the conditioning_inputs
-  crop_margin: 1024  # Determines the unused period at start and end of each shot for preprocessing
-  overfit_on_shots: null  # list of ints or null
-  allowed_start_indices: null  # list of ints or null
-  sample_rate: 10000
-  pre_shuffle: true
-  cols:
-    meta:
-    - ShotNum
-    - time
-    x: [
-            # "FIR",  # density lijn Interferometer (not in my dataset)
-            "FIR_core",  # For the March dataset of 260 shots, the FIR_core signal is the same as FIR.
-            "PD",  # photodiode lijn op de divertor
-            "DML",  # Magnetische respons  correleert met de energie in het plasma
-            # "DML-r",
-            "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
-            "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
-        ]
-    c:
-      - NBI-median
-      - ECRH-median
-      # - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
-      # - gas_fringes  # Ingepompte gas
-      # - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
-      # - ECRH  # magnetron.
-      # - a_minor  # reel gemeten plasma shape a k d (horizontale radius
-      # - KAPPA
-      # - DELTA  # linkerbovenhoek naar links vanuit hetmidden
-    label: LHD_label
-  val_shots: [53623, 57732, 64393, 73631, 57094, 63878, 64686, 77089, 75264, 64678, 77598, 64386] # 103608 viable samples
-  test_shots: [57013, 76702, 77196, 73935, 61028, 64857, 73368, 60814, 77599, 61237, 77409, 76304, 77595, 65481, 77193, 68697, 69514, 68631, 67112, 63306, 64770, 60813, 64365, 77604, 77602] # 217308 viable samples
-  train_shots: [26386, 29511, 30043, 30197, 30225, 30262, 30268, 30290, 30310, 31211, 31554, 31650, 31718, 31807, 31839, 32191, 32195, 32592, 32716, 32911, 33188, 33271, 33281, 33459, 33567, 33942, 34010, 34309, 42197, 42514, 43454, 45103, 45105, 46853, 47962, 48580, 52302, 53601, 53625, 53627, 53629, 56662, 57000, 57009, 57010, 57011, 57024, 57026, 57077, 57081, 57093, 57095, 57103, 57218, 57622, 57623, 57624, 57706, 57715, 57751, 58182, 58460, 59061, 59064, 59065, 59066, 59073, 59076, 59825, 60097, 60275, 60812, 60830, 60992, 60995, 61000, 61005, 61009, 61010, 61021, 61038, 61039, 61042, 61043, 61044, 61055, 61057, 61058, 61060, 61242, 61246, 61254, 61260, 61274, 61275, 61277, 61279, 61281, 61608, 61609, 61630, 61631, 61702, 61703, 61711, 61712, 61713, 61714, 61716, 61719, 62744, 63229, 63230, 63232, 63234, 63236, 63238, 63240, 63242, 63244, 63246, 63250, 63298, 63300, 63302, 63308, 63310, 63843, 63847, 63849, 63853, 63877, 63879, 63880, 63882, 63887, 63888, 63920, 63923, 63943, 63944, 63945, 64060, 64067, 64327, 64335, 64336, 64338, 64340, 64342, 64363, 64364, 64366, 64367, 64368, 64369, 64370, 64371, 64372, 64373, 64374, 64376, 64378, 64389, 64392, 64647, 64648, 64658, 64659, 64662, 64666, 64670, 64675, 64680, 64774, 64820, 64855, 64858, 64859, 64911, 64912, 64913, 64914, 64915, 64916, 64917, 64918, 64919, 64923, 64924, 65253, 65280, 65281, 65282, 65283, 65285, 65288, 65317, 65318, 65319, 65320, 65321, 65322, 65336, 65482, 65487, 65557, 65561, 65564, 65566, 66494, 67182, 67186, 68268, 68628, 69127, 69129, 69133, 69512, 69515, 70777, 71208, 73330, 73367, 73632, 73927, 73929, 73931, 73934, 73936, 74498, 74916, 75263, 75265, 76322, 77092, 77411, 77426] # 1963980 viable samples
-
-
-
-# Shorthands for important parameters for wandb
-Prior: ${ model.params.prior }
-Ot_method: ${ model.params.ot_method }
-Cond_dim: ${ model.params.model_params.conditioning_method }
-Channels: ${ model.params.model_params.input_channels }
-Apex_channels: ${ model.params.model_params.apex_hidden_channels }
-T_embedding: ${ model.params.model_params.time_embedding }
-T_emb_d: ${ model.params.model_params.time_embedding_d }
-Pos_encoding: ${ model.params.model_params.positional_encoding }
-Pos_enc_d: ${ model.params.model_params.positional_encoding_d }
-Pos_enc_c: ${ model.params.model_params.positional_encoding_c }
-Attn: ${ model.params.model_params.is_attn }
-Mid_attn: ${ model.params.model_params.mid_attn }
-Attn_heads: ${ model.params.model_params.attn_heads }
-Norm_groups: ${ model.params.model_params.norm_groups }
-Seq_L: ${ data.seq_length }
-Crop: ${ data.crop_margin }
-Cols: ${ data.cols.x }
-Learning_rate: ${ model.params.optimizer_params.lr }
-Rematches: ${ model.params.batch_rematch_factor }
