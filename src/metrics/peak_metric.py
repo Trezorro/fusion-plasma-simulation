@@ -416,7 +416,7 @@ class PeakMetric(torchmetrics.Metric):
 
         fig.add_trace(
             go.Heatmap(
-                z=agg_target_matrix,#np.log10(agg_target_matrix, where=agg_target_matrix > 0),
+                z=np.log1p(agg_target_matrix),  #np.log10(agg_target_matrix, where=agg_target_matrix > 0),
                 x=np.linspace(0, 1, RESOLUTION),
                 y=np.linspace(0, peak_measure_max, RESOLUTION),
                 colorscale=[(0, 'rgba(0,0,255,0)'), (0.1, 'rgba(0,0,255,0.01)'),
@@ -424,12 +424,12 @@ class PeakMetric(torchmetrics.Metric):
                 opacity=1,
                 name='Real',
                 showscale=True,
-                colorbar=dict(title="Real", len=0.5, y=0.75)
+                colorbar=dict(title="Real (log)", len=0.5, y=0.75)
             )
         )
         fig.add_trace(
             go.Heatmap(
-                z=agg_pred_matrix,#np.log10(agg_pred_matrix, where=agg_target_matrix > 0),
+                z=np.log1p(agg_pred_matrix),  #np.log10(agg_pred_matrix, where=agg_target_matrix > 0),
                 colorscale=[(0, 'rgba(255,0,0,0)'), (0.1, 'rgba(255,0,0,0.01)'),
                             (1, 'rgba(255,0,0,1)')],  # transparent to red
                 x=np.linspace(0, 1, RESOLUTION),
@@ -437,7 +437,7 @@ class PeakMetric(torchmetrics.Metric):
                 opacity=0.8,
                 name='Generated',
                 showscale=True,
-                colorbar=dict(title="Generated", len=0.5, y=0.25)
+                colorbar=dict(title="Generated (log)", len=0.5, y=0.25)
             )
         )
 

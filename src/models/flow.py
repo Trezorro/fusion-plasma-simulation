@@ -1,4 +1,3 @@
-from functools import partial
 from typing import Any, Literal, Optional
 import lightning as L
 from lightning.pytorch.core.optimizer import LightningOptimizer
