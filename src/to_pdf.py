@@ -11,7 +11,7 @@ def dump_figure_to_pdfs(fig, run_name, subgroup, measure, channel_name, plot_nam
     ]
     out_folder = Path(f"output/pdfplots/{run_name}") / plot_name / subgroup
     out_folder.mkdir(parents=True, exist_ok=True)
-    fig.write_image(out_folder / "throwaway.pdf", format="pdf", width=100, height=100)  # prevents an ugly mathjax overlay being included
+    fig.write_image(out_folder / "throwaway.pdf", format="pdf", width=200, height=300)  # prevents an ugly mathjax overlay being included
     time.sleep(1)
     for w, h in SIZES:
         size_folder = out_folder / f"{w}x{h}"
