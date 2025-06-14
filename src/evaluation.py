@@ -236,7 +236,9 @@ def evaluate_window_set(model: FlowModule, data_module: FusionShotDataModule, sh
                 continue
             output = model.evaluate(batch, data_module=data_module, n_steps=40)
             fig = multi_sample_single_window_lines_plotly(**output)
-            dump_figure_to_pdfs(fig, C.run_name, 'volledig', measure=f'{t}s', channel_name=shot, plot_name="qualitativesamples")
+            dump_figure_to_pdfs(
+                fig, C.run_name, 'volledig', measure=f'{t}s', channel_name=shot, plot_name="qualitative_samples"
+            )
             fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=10, b=10))
             dump_figure_to_pdfs(
                 fig, C.run_name, 'nolegend', measure=f'{t}s', channel_name=shot, plot_name="qualitative_samples"
