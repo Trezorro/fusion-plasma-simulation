@@ -3,6 +3,11 @@ import torch
 import src.metrics.metrics as metrics
 from src.metrics.evaluate_modes import generate_surrogate_labels_batched
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 
 class UnFlowModule(FlowModule):
     """
@@ -70,8 +75,17 @@ class UnFlowModule(FlowModule):
     def evaluate(self, batch, n_steps=1, data_module=None, **kwargs):
         self.model.eval()
         meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch, device=self.device)
+        logger.debug(
+            "Evaluating batch shape %s at target_samples.device %s", target_samples.shape, target_samples.device
+        )
+        logger.debug(
+            "UnFlowModule on device %s", self.device
+        )
+        for k, v in (meta | conditioning_input).items():
+            logger.debug("Meta/conditioning input %s on device %s", k, v.device if isinstance(v, torch.Tensor) else "Not tensor!")
         prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
         t = torch.ones(target_samples.size(0), device=self.device)
+        logger.debug("prior.device %s", prior_samples.device)
         generated_samples = self.model(prior_samples, t, conditioning_input=conditioning_input)
         metrics_out = metrics.get_moments_errors_per_channel(generated_samples, target_samples)
 
