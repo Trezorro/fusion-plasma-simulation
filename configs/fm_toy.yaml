@@ -84,9 +84,9 @@ evaluation:
 # model: configs/unflow.yaml
 
 model: 
-  Class: UnFlowModule
+  Class: FlowModule
   params:
-    prior: 'brownian'  # normal, copy, brownian, levy, resample, constant
+    prior: 'levy'  # normal, copy, brownian, levy, resample, constant
     prior_sigma: 0.3 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
     ot_method: null  # null to disable
     ot_replace: true  # Default false
@@ -98,7 +98,7 @@ model:
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
-      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
+      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 5 # Default 3
       c_channels: 0  # Default 0 disables conditioning on C
@@ -149,15 +149,15 @@ data:
             "Z_axis",  # center Plasma positie in de verticale lijn. deviation van reference is betekenis.
         ]
     c:
-      # - NBI-median
-      # - ECRH-median
-      - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
-      - gas_fringes  # Ingepompte gas
-      - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
-      - ECRH  # magnetron.
-      - a_minor  # reel gemeten plasma shape a k d (horizontale radius
-      - KAPPA
-      - DELTA  # linkerbovenhoek naar links vanuit hetmidden
+      - NBI-median
+      - ECRH-median
+      # - IP  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
+      # - gas_fringes  # Ingepompte gas
+      # - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
+      # - ECRH  # magnetron.
+      # - a_minor  # reel gemeten plasma shape a k d (horizontale radius
+      # - KAPPA
+      # - DELTA  # linkerbovenhoek naar links vanuit hetmidden
     label: LHD_label
   val_shots: [53623, 57732, 64393, 73631, 57094, 63878, 64686, 77089, 75264, 64678, 77598, 64386] # 103608 viable samples
   test_shots: [57013, 76702, 77196, 73935, 61028, 64857, 73368, 0.38, 60814, 77599, 61237, 77409, 76304, 77595, 65481, 77193, 68697, 69514, 68631, 67112, 63306, 64770, 60813, 64365, 77604, 77602] # 217308 viable samples
