@@ -345,6 +345,8 @@ class FusionShotDataset(data.Dataset):
     def quick_window(self, shot_number, time, limit_to_idx: Optional[Sequence] = None, repeat=1):
         """Convenience function for plotting a specific window Wh and Wf around time t. """
         shot_data_index = self.data[self.data['ShotNum'] == shot_number].index
+        if len(shot_data_index) == 0:
+            return None
         start_idx = shot_data_index.get_indexer([time], method='nearest')[0]
         logger.info("Shot %s at t=%s is at start index %s", shot_number, time, start_idx)
         if limit_to_idx is not None:

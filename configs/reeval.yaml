@@ -30,3 +30,11 @@ evaluation:
   #   channel_name: DML
   #   measure: energy_delta
   #   n: 64
+
+
+window_set:
+  - [57013, 1.08]
+  - [77604, 0.77]
+  - [73631, 1.03]
+  - [69514, 0.51]
+  - [69514, 0.51]

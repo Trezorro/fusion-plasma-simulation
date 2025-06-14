@@ -454,11 +454,9 @@ class FlowModule(L.LightningModule):
         )
         self.model.train()  # Reset model to training mode
         # Metrics
-
         metrics_out = self.update_metrics(
             generated_samples, target_samples, conditioning_input, surr_labels_pred, surr_labels_target, data_module
         )
-        metrics_out = metrics.get_moments_errors_per_channel(generated_samples, target_samples)
         meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories = self._apply_batch_transfer_handler(
             (meta, conditioning_input, target_samples, prior_samples, generated_samples, trajectories),
             device='cpu'  # type: ignore

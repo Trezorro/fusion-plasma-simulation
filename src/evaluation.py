@@ -7,15 +7,21 @@ from venv import logger
 
 import lightning as L
 import plotly.graph_objects as go
-from matplotlib import pyplot as plt
 import torch
+from matplotlib import pyplot as plt
 from torch.utils import data
 
+import src.plotters.flow_plots as fp
 import src.plotters.plot_animations
 import src.plotters.plot_entropy as entropy
-import src.plotters.flow_plots as fp
 import wandb
+
+from src.data_loaders import FusionShotDataModule, FusionShotDataset
+from src.plotters.printing_plots import multi_sample_single_window_lines_plotly
+from src.config import get_current_config
+from src.to_pdf import dump_figure_to_pdfs
 from src.metrics.metrics import prefix_metrics
+from src.models.flow import FlowModule
 from src.plotters.histograms import plot_peak_prominences_histogram
 
 PlotFunction = Callable[[Any], plt.Figure | go.Figure | wandb.Image]
@@ -99,7 +105,7 @@ class PlotsCallback(L.Callback):
                 logger.debug("Plot function parameters: %s", params)
                 logger.exception(e)
                 logger.info("Continuing like nothing happened... (☞ﾟヮﾟ)☞")
-                
+
 
     def on_validation_epoch_end(self, trainer: L.Trainer, pl_module: L.LightningModule):
         logger.debug(f"on_validation_epoch_end called at epoch {trainer.current_epoch}")
@@ -217,3 +223,20 @@ def output_variance_per_input_variance(output_batch, input_batch, mean_adjusted=
     output_var = batch_variance(output_batch, mean_adjusted=mean_adjusted)
     input_var = batch_variance(input_batch, mean_adjusted=mean_adjusted)
     return output_var / input_var
+
+
+
+def evaluate_window_set(model: FlowModule, data_module: FusionShotDataModule, shot_t: list[tuple]):
+    C = get_current_config()
+    test_dataset = data_module.test_dataset
+    for shot, t in shot_t:
+        batch = test_dataset.quick_window(shot, t, repeat=4)
+        if batch is None:
+            continue
+        output = model.evaluate(batch, data_module=data_module, n_steps=40)
+        fig = multi_sample_single_window_lines_plotly(**output)
+        dump_figure_to_pdfs(fig, C.run_name, 'volledig', measure=f'{t}s', channel_name=shot, plot_name="qualitativesamples")
+        fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=10, b=10))
+        dump_figure_to_pdfs(
+            fig, C.run_name, 'nolegend', measure=f'{t}s', channel_name=shot, plot_name="qualitative_samples"
+        )

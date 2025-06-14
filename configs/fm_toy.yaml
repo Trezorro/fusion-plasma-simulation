@@ -24,6 +24,15 @@ test_cache_name: ${ run_name }
 test_cache_mode: create # create or use
 
 
+window_set:
+  - [57013, 1.08]
+  - [77604, 0.77]
+  - [73631, 1.03]
+  - [69514, 0.51]
+  - [69514, 0.51]
+
+
+
 evaluation:
   n_steps: 32 # enough for rk4
   solve_method: rk4 # dopri5, euler, midpoint

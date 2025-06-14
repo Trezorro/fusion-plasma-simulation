@@ -382,7 +382,6 @@ def multi_sample_single_window_lines_plotly(
     surr_labels_pred: Optional[np.ndarray] = None,
     title: str = "",
     show_c: bool = True,
-    legend_loc: str = "top right",
     **kwargs
 ):
     """

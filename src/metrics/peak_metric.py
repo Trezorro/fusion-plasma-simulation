@@ -6,6 +6,7 @@ from sklearn import metrics
 import torch
 import torchmetrics
 from src.config import get_current_config
+from src.to_pdf import dump_figure_to_pdfs
 from src.metrics.metrics import batch_get_peakprops, prefix_metrics
 from scipy.stats import wasserstein_distance
 import pandas as pd
@@ -452,10 +453,11 @@ class PeakMetric(torchmetrics.Metric):
         )
 
         number_peaks = len(pred_distr)
-        self.dump_figure_to_pdfs(
+        dump_figure_to_pdfs(
             fig,
-            self.condition,
-            subgroup,
+            self.C.run_name,
+            subgroup=subgroup,
+            measure=self.condition,
             channel_name=f'PD_large-Npred_{number_peaks}',
             plot_name='2D_hist',
             limit_size=600
@@ -529,35 +531,8 @@ class PeakMetric(torchmetrics.Metric):
         fig.update_yaxes(title_font_size=12, title_standoff=6, title_text="")
         fig.update_yaxes(title_font_size=12, title_standoff=6, title_text="$p(n)$", row=3 if facet_mode else 1, col=1)
         # Update Subplot titles:
-        self.dump_figure_to_pdfs(fig, subgroup, measure, channel_name, "histograms")
+        dump_figure_to_pdfs(fig, subgroup, measure, channel_name, "histograms")
 
-    def dump_figure_to_pdfs(self, fig, subgroup, measure, channel_name, plot_name='histogram', limit_size=None):
-        SIZES = [
-            (w, h)
-            for w, h in
-            [(300, 250), (400, 450), (600, 500), (800, 500), (1200, 600), (1300, 910), (800, 1200), (600, 1000)]
-            if limit_size is None or (w <= limit_size and h <= limit_size)
-        ]
-        out_folder = Path(f"output/pdfplots/{self.C.run_name}") / plot_name / subgroup
-        out_folder.mkdir(parents=True, exist_ok=True)
-        fig.write_image(out_folder / "throwaway.pdf", format="pdf")  # prevents an ugly mathjax overlay being included
-        time.sleep(1)
-        for w, h in SIZES:
-            size_folder = out_folder / f"{w}x{h}"
-            size_folder.mkdir(parents=False, exist_ok=True)
-            out_file_pdf = size_folder / f"{channel_name}_{measure}.pdf"
-            fig.write_image(out_file_pdf, format='pdf', width=w, height=h)
-            print(f"Saved plot to {out_file_pdf}")
-        out_file_pdf = out_folder / f"atom_{subgroup}_{channel_name}_{measure}.pdf"
-        fig.update_layout(
-            showlegend=False,
-            title_text='',
-            margin=dict(l=0, r=0, t=15, b=0),
-            font=dict(family="serif", size=10),
-        )
-        # fig.update_xaxes(title_text='Heights')
-        fig.write_image(out_file_pdf, format='pdf', width=500, height=400)
-        print(f"Saved plot to {out_file_pdf}")
 
 
 def test_pdf():
