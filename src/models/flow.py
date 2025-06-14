@@ -436,8 +436,8 @@ class FlowModule(L.LightningModule):
         """
         self.model.eval()
         # Use lightnings manner of moving to correct current device:
-        meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch, device=self.device)
-        logger.debug("Evaluating batch shape %s", target_samples.shape)
+        meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch, device='cuda' if torch.cuda.is_available() else 'cpu')
+        logger.debug("Evaluating batch shape %s at device target_samples %s", target_samples.shape, target_samples.device)
         prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
         generated_samples, trajectories = self.integrate_path(
             prior_samples,
@@ -449,6 +449,9 @@ class FlowModule(L.LightningModule):
         # surrogate labels
         if data_module is None:
             data_module = self.trainer.datamodule
+        logger.debug("data_module.device %s", data_module.device)
+        logger.debug("prior_samples.device %s", prior_samples.device)
+        logger.debug("generated_samples.device %s", generated_samples.device)
         surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
             meta, generated_samples, target_samples, data_module=data_module
         )
