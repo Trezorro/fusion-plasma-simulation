@@ -5,13 +5,15 @@ patience: 20
 model: 
   Class: UnFlowModule
   params:
-    prior: 'brownian'  # normal, copy, brownian, levy, resample, constant
-    prior_sigma: 0.01  # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
+    prior: 'normal'  # normal, copy, brownian, levy, resample, constant
+    prior_sigma: 0.3 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
     ot_method: null  # null to disable
     ot_replace: true  # Default false
-    batch_rematch_factor: 10  # Default 1
+    batch_rematch_factor: 5  # Default 1
     step_every_nth_match: 1  # Default 1 # TODO
     gradient_clip_val: ${ gradient_clip_val }
+    solve_method: ${ evaluation.solve_method }
+    flow_steps: ${ evaluation.n_steps }
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
@@ -38,6 +40,8 @@ model:
       lr: 0.00005
       weight_decay: 0  # Default 0
       amsgrad: false  # Default false
+
+
 
 # disable c:
 # data:
