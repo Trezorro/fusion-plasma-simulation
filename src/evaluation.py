@@ -228,17 +228,18 @@ def output_variance_per_input_variance(output_batch, input_batch, mean_adjusted=
 
 def evaluate_window_set(model: FlowModule, data_module: FusionShotDataModule, shot_t: list[tuple]):
     test_dataset = data_module.test_dataset
+    logger.info("Running evaluate_window_set for %s shot windows", len(shot_t))
     for shot, t in shot_t:
         try:
             batch = test_dataset.quick_window(shot, t, repeat=4)
             if batch is None:
                 continue
             output = model.evaluate(batch, data_module=data_module, n_steps=40)
-            fig = multi_sample_single_window_lines_plotly(**output)
+            fig = multi_sample_single_window_lines_plotly(**output, title=f"Shot #{shot}")
             dump_figure_to_pdfs(
                 fig, plot_name="qualitative_samples", subgroup='volledig', measure=f'{t}s', channel_name=shot
             )
-            fig.update_layout(showlegend=False, margin=dict(l=10, r=10, t=10, b=10))
+            fig.update_layout(showlegend=False, margin=dict(l=10, r=0, t=0, b=10), title=None)
             dump_figure_to_pdfs(
                 fig, plot_name="qualitative_samples", subgroup='nolegend', measure=f'{t}s', channel_name=shot
             )
@@ -247,4 +248,4 @@ def evaluate_window_set(model: FlowModule, data_module: FusionShotDataModule, sh
         except Exception as e:
             logger.exception(e)
         else:
-            print('Success')
+            logger.info("Created pdfs for shot window %s : %s", shot, t)

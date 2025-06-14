@@ -186,7 +186,7 @@ def single_window_lines_plotly(
     fig.update_layout(
         title=title,
         template='ggplot2',
-        font=dict(family="serif", size=14),
+        font=dict(family="serif", size=12),
         hovermode='closest',
         margin=dict(l=10, r=20, t=10, b=20),
         height=500,
@@ -198,7 +198,7 @@ def single_window_lines_plotly(
             yref='paper',
             # xanchor="left",
             # x=1,
-            font=dict(size=10),
+            font=dict(size=12),
             bgcolor="rgba(0,0,0,0)",
             # valign="middle",  # Use vertical space
             itemsizing="constant",
@@ -411,7 +411,7 @@ def multi_sample_single_window_lines_plotly(
         cols=1,
         shared_xaxes=True,
         vertical_spacing=0.01,
-        row_heights=[0.5] * xrows + [0.2, 0.2],
+        row_heights=[0.5] * xrows + [0.25, 0.25],
         specs=[[{
             "secondary_y": False
         }] for _ in range(nrows)],
@@ -442,7 +442,7 @@ def multi_sample_single_window_lines_plotly(
         xref=f"x1",
         yref="paper",
         showarrow=False,
-        font=dict(size=18, color="black"),
+        font=dict(size=17, color="black"),
         align="center",
         bgcolor="rgba(255,255,255,0.0)",
         borderpad=2,
@@ -456,7 +456,7 @@ def multi_sample_single_window_lines_plotly(
         xref=f"x1",
         yref="paper",
         showarrow=False,
-        font=dict(size=18, color="black"),
+        font=dict(size=17, color="black"),
         align="center",
         bgcolor="rgba(255,255,255,0.0)",
         borderpad=2,
@@ -510,8 +510,8 @@ def multi_sample_single_window_lines_plotly(
                     x=np.arange(-history_length, 0),
                     y=x_history[channel_i, :],
                     mode='lines',
-                    line=dict(color='black', width=1),
-                    opacity=0.8,
+                    line=dict(color=darker_ch_color, width=2),
+                    opacity=1,
                     name=f'{channel_name} (history)',
                     showlegend=False,
                     legendgroup=f'x',
@@ -553,11 +553,18 @@ def multi_sample_single_window_lines_plotly(
 
     # Layout
     fig.update_layout(
-        title=title,
+        title=dict(
+            text=title,
+            x=.99,
+            y=.99,
+            xanchor='right',
+            yanchor='top',
+            font=dict(family="serif", size=14),
+        ),
         template='ggplot2',
-        font=dict(family="serif", size=14),
+        font=dict(family="serif", size=12),
         hovermode='closest',
-        margin=dict(l=10, r=20, t=30, b=20),
+        margin=dict(l=10, r=20, t=0, b=20),
         height=1500,
         width=1000,
         legend=dict(
