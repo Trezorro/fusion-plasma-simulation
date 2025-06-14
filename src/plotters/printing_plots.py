@@ -508,7 +508,7 @@ def multi_sample_single_window_lines_plotly(
                     row=channel_i + 1,
                     col=1
                 )
-                hsv_base[0] = (hsv_base[0] +.1) % 1
+                hsv_base[0] = (hsv_base[0] +.05) % 1
         show_history = conditioning_input is not None and "x_history" in conditioning_input
         if show_history:
             x_history = conditioning_input['x_history'][0]  # type: ignore
