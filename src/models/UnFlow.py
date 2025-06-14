@@ -60,13 +60,13 @@ class UnFlowModule(FlowModule):
         else:
             noise_sample = self.get_prior_samples(conditioning_input, target_samples.size())
             t_dummy = torch.ones(target_samples.size(0), device=self.device)
-            x_pred = self.model(noise_sample, t_dummy, conditioning_input=conditioning_input)
+            generated_samples = self.model(noise_sample, t_dummy, conditioning_input=conditioning_input)
             surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
-                meta, x_pred, target_samples, data_module=data_module
+                meta, generated_samples, target_samples, data_module=data_module
             )  # both pred and target have shape B, Wh+Wf, and
             if self.test_cache is not None and self.test_cache_mode == 'create':
                 self.test_cache.set_from_batch(
-                    meta['shot_number'].cpu(), meta['start_i'].cpu(), x_pred.cpu(), surr_labels_pred, surr_labels_target
+                    meta['shot_number'].cpu(), meta['start_i'].cpu(), generated_samples.cpu(), surr_labels_pred, surr_labels_target
                 )
 
         return generated_samples, surr_labels_pred, surr_labels_target
