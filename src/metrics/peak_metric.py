@@ -54,7 +54,12 @@ class PeakMetric(torchmetrics.Metric):
         ]  # NOTE: hack together with batch_get_peakprops for type 1 ELMS
         self.dml_channel_index = self.CHANNEL_NAMES.index("DML") if "DML" in self.CHANNEL_NAMES else None
         self.pd_channel_index = self.CHANNEL_NAMES.index("PD") if "PD" in self.CHANNEL_NAMES else None
-        self.nbi_channel_index = self.C.data.cols.c.index("NBI-median") if "NBI-median" in self.C.data.cols.c else None
+        if "NBI-median" in self.C.data.cols.c:
+            self.nbi_channel_index = self.C.data.cols.c.index("NBI-median")
+        elif "NBI" in self.C.data.cols.c:
+            self.nbi_channel_index = self.C.data.cols.c.index("NBI")
+        else:
+            self.nbi_channel_index = None
         self.history_length = self.C.data.history_length
         self.future_length = self.C.data.seq_length
         for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
@@ -197,9 +202,7 @@ class PeakMetric(torchmetrics.Metric):
                             self.cat_with_state(f"prop_list_target:{channel_name}/{measure}", target_peaks.widths)
                         case "energy_delta":
                             self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_peaks.energy_delta)
-                            self.cat_with_state(
-                                f"prop_list_target:{channel_name}/{measure}", target_peaks.energy_delta
-                            )
+                            self.cat_with_state(f"prop_list_target:{channel_name}/{measure}", target_peaks.energy_delta)
                         case "pd_prominence":
                             self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_peaks.pd_prominence)
                             self.cat_with_state(
@@ -207,9 +210,7 @@ class PeakMetric(torchmetrics.Metric):
                             )
                         case "energy_ratio":
                             self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_peaks.energy_ratio)
-                            self.cat_with_state(
-                                f"prop_list_target:{channel_name}/{measure}", target_peaks.energy_ratio
-                            )
+                            self.cat_with_state(f"prop_list_target:{channel_name}/{measure}", target_peaks.energy_ratio)
                         case _:
                             raise ValueError(f"Unknown measure: {measure}")
         logger.debug("State updated.")
@@ -263,22 +264,25 @@ class PeakMetric(torchmetrics.Metric):
                 )
 
         # Per window count vs NBI level
-        pred_joint_nbi_pd_window, target_joint_nbi_pd_window = self.get_nbi_pd_count_per_window_sample()
-        metrics_out["peak_NBI_distr/2d_wasserstein/NBIwindow_PD_large_count"] = ot.sliced.sliced_wasserstein_distance(
-            pred_joint_nbi_pd_window, target_joint_nbi_pd_window
-        )
-        # Per peak prominence vs NBI level, if there is any peaks not filtered out:
-        if len(getattr(self, "prop_list_pred:PD large peaks/NBI")) > 0:
-            pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence = self.get_nbi_pd_per_peak_distr("prominence")
-            metrics_out["peak_NBI_distr/2d_wasserstein/NBI_PD_large_prominence"
-                       ] = ot.sliced.sliced_wasserstein_distance(
-            pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence,
-                       )  # Reference: https://stats.stackexchange.com/a/404915
-            pred_joint_nbi_pd_width, target_joint_nbi_pd_width = self.get_nbi_pd_per_peak_distr("width")
-            metrics_out["peak_NBI_distr/2d_wasserstein/NBI_PD_large_width"
-                                ] = ot.sliced.sliced_wasserstein_distance(
-                                    pred_joint_nbi_pd_width, target_joint_nbi_pd_width,
-                                )
+        if self.nbi_channel_index is not None:
+            pred_joint_nbi_pd_window, target_joint_nbi_pd_window = self.get_nbi_pd_count_per_window_sample()
+            metrics_out["peak_NBI_distr/2d_wasserstein/NBIwindow_PD_large_count"
+                       ] = ot.sliced.sliced_wasserstein_distance(pred_joint_nbi_pd_window, target_joint_nbi_pd_window)
+            # Per peak prominence vs NBI level, if there is any peaks not filtered out:
+            if len(getattr(self, "prop_list_pred:PD large peaks/NBI")) > 0:
+                pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence = self.get_nbi_pd_per_peak_distr(
+                    "prominence"
+                )
+                metrics_out["peak_NBI_distr/2d_wasserstein/NBI_PD_large_prominence"
+                           ] = ot.sliced.sliced_wasserstein_distance(
+                               pred_joint_nbi_pd_prominence,
+                               target_joint_nbi_pd_prominence,
+                           )  # Reference: https://stats.stackexchange.com/a/404915
+                pred_joint_nbi_pd_width, target_joint_nbi_pd_width = self.get_nbi_pd_per_peak_distr("width")
+                metrics_out["peak_NBI_distr/2d_wasserstein/NBI_PD_large_width"] = ot.sliced.sliced_wasserstein_distance(
+                    pred_joint_nbi_pd_width,
+                    target_joint_nbi_pd_width,
+                )
 
         metrics_out['total_hits'] = self.total_hits.item()
         logger.debug("Done %d hits for condition %s", self.total_hits.item(), self.condition)
@@ -385,18 +389,27 @@ class PeakMetric(torchmetrics.Metric):
             logger.warning("No hits for condition '%s', skipping 2D NBI distributions export.", self.condition)
             return
         pred_joint_nbi_pd_window, target_joint_nbi_pd_window = self.get_nbi_pd_count_per_window_sample()
-        logger.debug("Exporting 2d histograms for %s pred peaks and %s target peaks.", pred_joint_nbi_pd_window[:,1].sum(), target_joint_nbi_pd_window[:,1].sum())
-        self.save_nbi_joint_histogram(pred_joint_nbi_pd_window, target_joint_nbi_pd_window, "NBI_PD_Count_per_window",
-                                      yaxis_title="Window $N(\\textbf{PD} Peaks \mid \\text{Prominence} > 0.15)$")
+        logger.debug(
+            "Exporting 2d histograms for %s pred peaks and %s target peaks.", pred_joint_nbi_pd_window[:, 1].sum(),
+            target_joint_nbi_pd_window[:, 1].sum()
+        )
+        self.save_nbi_joint_histogram(
+            pred_joint_nbi_pd_window,
+            target_joint_nbi_pd_window,
+            "NBI_PD_Count_per_window",
+            yaxis_title="Window $N(\\textbf{PD} Peaks \mid \\text{Prominence} > 0.15)$"
+        )
         pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence = self.get_nbi_pd_per_peak_distr('prominence')
         self.save_nbi_joint_histogram(
-            pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence, "NBI_PD_prominence_per_peak",
+            pred_joint_nbi_pd_prominence,
+            target_joint_nbi_pd_prominence,
+            "NBI_PD_prominence_per_peak",
             yaxis_title="PD Peak Prominence"
         )
         pred_joint_nbi_pd_width, target_joint_nbi_pd_width = self.get_nbi_pd_per_peak_distr('width')
-        self.save_nbi_joint_histogram(pred_joint_nbi_pd_width, target_joint_nbi_pd_width, "NBI_PD_width_per_peak",
-            yaxis_title="PD Peak Width"
-                                      )
+        self.save_nbi_joint_histogram(
+            pred_joint_nbi_pd_width, target_joint_nbi_pd_width, "NBI_PD_width_per_peak", yaxis_title="PD Peak Width"
+        )
 
     def save_nbi_joint_histogram(
         self, pred_distr, target_distr, subgroup='NBI_PD_Count', yaxis_title="Window N(PD Peaks) | Prominence > 0.15"
@@ -531,7 +544,6 @@ class PeakMetric(torchmetrics.Metric):
         fig.update_yaxes(title_font_size=12, title_standoff=6, title_text="$p(n)$", row=3 if facet_mode else 1, col=1)
         # Update Subplot titles:
         dump_figure_to_pdfs(fig, "peakprop_histograms", subgroup, measure, channel_name)
-
 
 
 def test_pdf():
