@@ -86,8 +86,8 @@ evaluation:
 model: 
   Class: FlowModule
   params:
-    prior: 'constant'  # normal, copy, brownian, levy, resample, constant
-    prior_sigma: 0.6 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
+    prior: 'normal'  # normal, copy, brownian, levy, resample, constant
+    prior_sigma: 0.3 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
     ot_method: null  # null to disable
     ot_replace: true  # Default false
     batch_rematch_factor: 5  # Default 1
@@ -98,7 +98,7 @@ model:
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
       conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
-      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
+      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 5 # Default 3
       c_channels: 0  # Default 0 disables conditioning on C
