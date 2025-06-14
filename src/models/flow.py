@@ -436,7 +436,7 @@ class FlowModule(L.LightningModule):
         """
         self.model.eval()
         # Use lightnings manner of moving to correct current device:
-        meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch, device='cuda' if torch.cuda.is_available() else 'cpu')
+        meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch, device=self.device)
         logger.debug(
             "Evaluating batch shape %s at target_samples.device %s", target_samples.shape, target_samples.device
         )

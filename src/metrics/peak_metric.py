@@ -163,19 +163,19 @@ class PeakMetric(torchmetrics.Metric):
             # marginal_dist_pred = {measure: [] for measure in measures}
             # marginal_dist_target = {measure: [] for measure in measures}
             for sample_i in range(num_selected_samples):
-                pred_sample = pred_peaks_batch[sample_i][channel_i]
-                target_sample = target_peaks_batch[sample_i][channel_i]
-                pair_wasserstein = pred_sample - target_sample  # Subtraction operator is overloaded with wasserstein distance
-                pred_sample_num_peaks = pred_sample.num_peaks()
-                target_sample_num_peaks = target_sample.num_peaks()
+                pred_peaks = pred_peaks_batch[sample_i][channel_i]
+                target_peaks = target_peaks_batch[sample_i][channel_i]
+                pair_wasserstein = pred_peaks - target_peaks  # Subtraction operator is overloaded with wasserstein distance
+                pred_sample_num_peaks = pred_peaks.num_peaks()
+                target_sample_num_peaks = target_peaks.num_peaks()
                 self.cat_with_state(f"list:{channel_name}/counts_pred", pred_sample_num_peaks)
                 self.cat_with_state(f"list:{channel_name}/counts_target", target_sample_num_peaks)
                 self.add_to_state(
                     f"sum:{channel_name}/counts_sq_error", np.square(pred_sample_num_peaks - target_sample_num_peaks)
                 )
                 if self.nbi_channel_index is not None and channel_name == 'PD large peaks':
-                    pred_NBI_matches = nbi_traces[sample_i, pred_sample.X]
-                    target_NBI_matches = nbi_traces[sample_i, target_sample.X]
+                    pred_NBI_matches = nbi_traces[sample_i, pred_peaks.X]
+                    target_NBI_matches = nbi_traces[sample_i, target_peaks.X]
                     self.cat_with_state(f"prop_list_pred:PD large peaks/NBI", pred_NBI_matches)
                     self.cat_with_state(f"prop_list_target:PD large peaks/NBI", target_NBI_matches)
 
@@ -184,31 +184,31 @@ class PeakMetric(torchmetrics.Metric):
                     # map measure to which property to access in the window of peaks
                     match measure:
                         case "height":
-                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_sample.Y)
-                            self.cat_with_state(f"prop_list_target:{channel_name}/{measure}", target_sample.Y)
+                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_peaks.Y)
+                            self.cat_with_state(f"prop_list_target:{channel_name}/{measure}", target_peaks.Y)
                         case "prominence":
-                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_sample.prominences)
-                            self.cat_with_state(f"prop_list_target:{channel_name}/{measure}", target_sample.prominences)
+                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_peaks.prominences)
+                            self.cat_with_state(f"prop_list_target:{channel_name}/{measure}", target_peaks.prominences)
                         case "base":
-                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_sample.bases)
-                            self.cat_with_state(f"prop_list_target:{channel_name}/{measure}", target_sample.bases)
+                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_peaks.bases)
+                            self.cat_with_state(f"prop_list_target:{channel_name}/{measure}", target_peaks.bases)
                         case "width":
-                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_sample.widths)
-                            self.cat_with_state(f"prop_list_target:{channel_name}/{measure}", target_sample.widths)
+                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_peaks.widths)
+                            self.cat_with_state(f"prop_list_target:{channel_name}/{measure}", target_peaks.widths)
                         case "energy_delta":
-                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_sample.energy_delta)
+                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_peaks.energy_delta)
                             self.cat_with_state(
-                                f"prop_list_target:{channel_name}/{measure}", target_sample.energy_delta
+                                f"prop_list_target:{channel_name}/{measure}", target_peaks.energy_delta
                             )
                         case "pd_prominence":
-                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_sample.pd_prominence)
+                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_peaks.pd_prominence)
                             self.cat_with_state(
-                                f"prop_list_target:{channel_name}/{measure}", target_sample.pd_prominence
+                                f"prop_list_target:{channel_name}/{measure}", target_peaks.pd_prominence
                             )
                         case "energy_ratio":
-                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_sample.energy_ratio)
+                            self.cat_with_state(f"prop_list_pred:{channel_name}/{measure}", pred_peaks.energy_ratio)
                             self.cat_with_state(
-                                f"prop_list_target:{channel_name}/{measure}", target_sample.energy_ratio
+                                f"prop_list_target:{channel_name}/{measure}", target_peaks.energy_ratio
                             )
                         case _:
                             raise ValueError(f"Unknown measure: {measure}")
