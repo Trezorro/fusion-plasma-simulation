@@ -437,8 +437,17 @@ class FlowModule(L.LightningModule):
         self.model.eval()
         # Use lightnings manner of moving to correct current device:
         meta, conditioning_input, target_samples = self._apply_batch_transfer_handler(batch, device='cuda' if torch.cuda.is_available() else 'cpu')
-        logger.debug("Evaluating batch shape %s at device target_samples %s", target_samples.shape, target_samples.device)
+        logger.debug(
+            "Evaluating batch shape %s at target_samples.device %s", target_samples.shape, target_samples.device
+        )
+        logger.debug(
+            "FlowModule on device %s", self.device
+        )
+        for k, v in (meta | conditioning_input).items():
+            logger.debug("Meta/conditioning input %s on device %s", k, v.device if isinstance(v, torch.Tensor) else "Not tensor!")
         prior_samples = self.get_prior_samples(conditioning_input, target_samples.size())
+        logger.debug("prior.device %s", prior_samples.device)
+        logger.debug("Integrating samples...")
         generated_samples, trajectories = self.integrate_path(
             prior_samples,
             conditioning_input=conditioning_input,
@@ -449,7 +458,6 @@ class FlowModule(L.LightningModule):
         # surrogate labels
         if data_module is None:
             data_module = self.trainer.datamodule
-        logger.debug("data_module.device %s", data_module.device)
         logger.debug("prior_samples.device %s", prior_samples.device)
         logger.debug("generated_samples.device %s", generated_samples.device)
         surr_labels_pred, surr_labels_target = generate_surrogate_labels_batched(
@@ -523,7 +531,7 @@ class FlowModule(L.LightningModule):
         """
         current_points = initial_points.clone()
         if conditioning_input is not None and self.model.conditioning:
-
+            device='cuda' if torch.cuda.is_available() else 'cpu'
             def ode_func(t, x):
                 return self.model(x=x.to(torch.float32), t=t.to(torch.float32), conditioning_input=conditioning_input)
         else:
