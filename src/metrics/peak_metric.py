@@ -318,15 +318,16 @@ class PeakMetric(torchmetrics.Metric):
         return pred_joint_nbi_pd_prominence, target_joint_nbi_pd_prominence
 
     def extract_df_all(self, cache_obj=None):
-        base_df = pd.DataFrame(columns=['condition', 'channel_name', 'measure', 'distribution', 'value'])
         if self.total_hits == 0:
-            return base_df
+            return pd.DataFrame(columns=['condition', 'channel_name', 'measure', 'distribution', 'value'])
+        dfs = []
         for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
             measures = ['count'] + self.BASE_MEASURES
             if channel_name == "DML":
                 measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
             for measure in measures:
-                base_df = pd.concat((base_df, self.extract_df(channel_name, measure)))
+                dfs.append(self.extract_df(channel_name, measure))
+        base_df = pd.concat(dfs, ignore_index=True)
         if cache_obj is not None:
             base_df.to_hdf(cache_obj.h5_path, key=f'peaks/{self.condition}', mode='a')
         return base_df

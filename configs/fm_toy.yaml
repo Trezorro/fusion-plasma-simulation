@@ -43,145 +43,145 @@ evaluation:
       n: 16
       buttons: true
     # Prominence histograms
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/dml_energy_delta
-      channel_name: DML
-      measure: energy_delta
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/dml_pd_prominence
-      channel_name: DML
-      measure: pd_prominence
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/dml_pd_ratio
-      channel_name: DML
-      measure: energy_ratio
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/FIR_core_count
-      channel_name: FIR_core
-      measure: count
-      n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/dml_energy_delta
+    #   channel_name: DML
+    #   measure: energy_delta
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/dml_pd_prominence
+    #   channel_name: DML
+    #   measure: pd_prominence
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/dml_pd_ratio
+    #   channel_name: DML
+    #   measure: energy_ratio
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/FIR_core_count
+    #   channel_name: FIR_core
+    #   measure: count
+    #   n: 64
     - key: histogram  # see histograms.py
       log_key: peak_histogram/PD_count
       channel_name: PD
       measure: count
       n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/DML_count
-      channel_name: DML
-      measure: count
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/POHM_count
-      channel_name: POHM
-      measure: count
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/Z_axis_count
-      channel_name: Z_axis
-      measure: count
-      n: 64
-    # Peak Prominence histograms
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/PD_prominence
-      channel_name: PD
-      measure: prominence
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/DML_prominence
-      channel_name: DML
-      measure: prominence
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/POHM_prominence
-      channel_name: POHM
-      measure: prominence
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/Z_axis_prominence
-      channel_name: Z_axis
-      measure: prominence
-      n: 64
-    # Peak Width histograms
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/FIR_core_width
-      channel_name: FIR_core
-      measure: width
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/PD_width
-      channel_name: PD
-      measure: width
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/DML_width
-      channel_name: DML
-      measure: width
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/POHM_width
-      channel_name: POHM
-      measure: width
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/Z_axis_width
-      channel_name: Z_axis
-      measure: width
-      n: 64
-    # Peak Height histograms
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/FIR_core_height
-      channel_name: FIR_core
-      measure: height
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/PD_height
-      channel_name: PD
-      measure: height
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/DML_height
-      channel_name: DML
-      measure: height
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/POHM_height
-      channel_name: POHM
-      measure: height
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/Z_axis_height
-      channel_name: Z_axis
-      measure: height
-      n: 64
-    # Peak Base histograms
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/FIR_core_base
-      channel_name: FIR_core
-      measure: base
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/PD_base
-      channel_name: PD
-      measure: base
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/DML_base
-      channel_name: DML
-      measure: base
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/POHM_base
-      channel_name: POHM
-      measure: base
-      n: 64
-    - key: histogram  # see histograms.py
-      log_key: peak_histogram/Z_axis_base
-      channel_name: Z_axis
-      measure: base
-      n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/DML_count
+    #   channel_name: DML
+    #   measure: count
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/POHM_count
+    #   channel_name: POHM
+    #   measure: count
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/Z_axis_count
+    #   channel_name: Z_axis
+    #   measure: count
+    #   n: 64
+    # # Peak Prominence histograms
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/PD_prominence
+    #   channel_name: PD
+    #   measure: prominence
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/DML_prominence
+    #   channel_name: DML
+    #   measure: prominence
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/POHM_prominence
+    #   channel_name: POHM
+    #   measure: prominence
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/Z_axis_prominence
+    #   channel_name: Z_axis
+    #   measure: prominence
+    #   n: 64
+    # # Peak Width histograms
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/FIR_core_width
+    #   channel_name: FIR_core
+    #   measure: width
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/PD_width
+    #   channel_name: PD
+    #   measure: width
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/DML_width
+    #   channel_name: DML
+    #   measure: width
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/POHM_width
+    #   channel_name: POHM
+    #   measure: width
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/Z_axis_width
+    #   channel_name: Z_axis
+    #   measure: width
+    #   n: 64
+    # # Peak Height histograms
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/FIR_core_height
+    #   channel_name: FIR_core
+    #   measure: height
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/PD_height
+    #   channel_name: PD
+    #   measure: height
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/DML_height
+    #   channel_name: DML
+    #   measure: height
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/POHM_height
+    #   channel_name: POHM
+    #   measure: height
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/Z_axis_height
+    #   channel_name: Z_axis
+    #   measure: height
+    #   n: 64
+    # # Peak Base histograms
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/FIR_core_base
+    #   channel_name: FIR_core
+    #   measure: base
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/PD_base
+    #   channel_name: PD
+    #   measure: base
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/DML_base
+    #   channel_name: DML
+    #   measure: base
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/POHM_base
+    #   channel_name: POHM
+    #   measure: base
+    #   n: 64
+    # - key: histogram  # see histograms.py
+    #   log_key: peak_histogram/Z_axis_base
+    #   channel_name: Z_axis
+    #   measure: base
+    #   n: 64
     - key: entropy_plot
       method: app_entropy
       log_key: approximate_entropy_plot
