@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import logging
 from src.config import get_current_config
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +36,29 @@ class TestStepHDFCache:
 
     def __init__(self, cache_filename: str = "test_step_cache", mode: Literal['w', 'r', 'a'] = "w"):
         self.base_dir = get_cache_dir()
+        self.cache_filename = cache_filename
         self.h5_path = self.base_dir / (cache_filename + '.h5')
         self.mode = mode.lower()
         logger.info("Initialized HDF5 cache at %s in mode '%s'", self.h5_path, self.mode)
+
+    def save_json_friend(self, dict):
+        json_file = self.base_dir / (self.cache_filename + '.json')
+        dict = dict.copy()
+        for k,v in dict.items():
+            try:
+                if isinstance(v, torch.Tensor):
+                    dict[k] = v.item()
+                else:
+                    json.dumps(v)
+            except Exception:
+                dict[k] = str(v)
+        try:
+            with open(json_file, "w") as f:
+                json.dump(dict, f, indent=2)
+            logger.info("Saved JSON-friendly cache metadata to %s", json_file)
+        except Exception as e:
+            logger.error("Failed to save JSON-friendly cache metadata: %s", e)
+
 
     def set_from_batch(self, shot_nums, start_idxs, generated_x, surr_labels_gen, surr_labels_target):
         """

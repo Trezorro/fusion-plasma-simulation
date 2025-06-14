@@ -9,6 +9,7 @@ import wandb
 from omegaconf import DictConfig
 from torchdiffeq import odeint
 
+from src.hdf_cache import get_cache_dir
 from src.models.unet_conditional import ConditionalUNet
 from src.optimal_transport import OTPlanSampler
 import src.metrics.metrics as metrics
@@ -382,7 +383,8 @@ class FlowModule(L.LightningModule):
         test_metrics['/dice'] = self.dice_metric.compute()
         epoch_metrics = metrics.prefix_metrics(test_metrics, 'test/final')
         self.log_dict(epoch_metrics, on_step=False, on_epoch=True)
-
+        if self.test_cache is not None:
+            self.test_cache.save_json_friend(epoch_metrics)
         logger.info("Test Metrics logged. Extracting mode metrics to cache...")
         for mode_sub_metric in self.mode_test_metrics.children():
             mode_sub_metric.extract_df_all(self.test_cache)

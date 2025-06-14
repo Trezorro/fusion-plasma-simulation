@@ -733,10 +733,10 @@ class MomentsErrorsMetric(torchmetrics.Metric):
     def compute(self):
         metrics = {}
         # Calculate the mean squared error for the squared error
-        metrics[f"/error/mse/mean"] = self.sq_error.mean() / self.count.float()
-        metrics[f"/error/softDTW"] = self.DTW / self.count.float()
+        metrics[f"/error/mse/mean"] = (self.sq_error.mean() / self.count.float()).item()
+        metrics[f"/error/softDTW"] = (self.DTW / self.count.float()).item()
         for i, channel_name in enumerate(self.channel_names):
-            metrics[f"/error/mse/{channel_name}"] = self.sq_error[i].item() / self.count.float()
+            metrics[f"/error/mse/{channel_name}"] = (self.sq_error[i].item() / self.count.float()).item()
         for moment in MOMENT_NAMES:
             magnitude_mean = getattr(self, f"magnitude_{moment}") / self.count.float()
             diff_mean = getattr(self, f"diff_{moment}") / self.count.float()
