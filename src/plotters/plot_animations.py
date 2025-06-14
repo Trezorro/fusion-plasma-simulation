@@ -113,7 +113,6 @@ def animated_trajectory_plotly(
         title=title_base + (f"<br><sub>{subtitle}</sub>" if subtitle else ""),
         xaxis=dict(title="Timepoints", range=[0, num_timepoints - 1]),
         yaxis=dict(title="Value", range=[-1.1, 1.1]),
-        template='plotly_dark',
         updatemenus=updatemenus,
         sliders=sliders,
     )
