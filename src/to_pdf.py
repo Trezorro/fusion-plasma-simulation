@@ -1,8 +1,13 @@
+import json
 import time
 from pathlib import Path
-from src.config import get_current_config
 
-def dump_figure_to_pdfs(fig, plot_name, subgroup, measure, channel_name, limit_size=None):
+import torch
+from src.config import get_current_config
+import logging
+logger = logging.getLogger(__name__)
+
+def dump_figure_to_pdfs(fig, plot_name, subgroup, measure, channel_name, limit_size=None, metadata: dict =None):
     run_name = get_current_config().run_name
     SIZES = [
         (w, h)
@@ -20,6 +25,8 @@ def dump_figure_to_pdfs(fig, plot_name, subgroup, measure, channel_name, limit_s
         out_file_pdf = size_folder / f"{channel_name}_{measure}.pdf"
         fig.write_image(out_file_pdf, format='pdf', width=w, height=h)
         print(f"Saved plot to {out_file_pdf}")
+    if metadata is not None:
+        save_json_friend(out_folder / f"batch_metrics_{subgroup}_{channel_name}_{measure}.json", metadata)
     out_file_pdf = out_folder / f"atom_{subgroup}_{channel_name}_{measure}.pdf"
     fig.update_layout(
         showlegend=False,
@@ -30,3 +37,21 @@ def dump_figure_to_pdfs(fig, plot_name, subgroup, measure, channel_name, limit_s
     # fig.update_xaxes(title_text='Heights')
     fig.write_image(out_file_pdf, format='pdf', width=500, height=400)
     print(f"Saved plot to {out_file_pdf}")
+
+def save_json_friend(file_path, dict):
+    json_file = file_path
+    dict = dict.copy()
+    for k,v in dict.items():
+        try:
+            if isinstance(v, torch.Tensor):
+                dict[k] = v.item()
+            else:
+                json.dumps(v)
+        except Exception:
+            dict[k] = str(v)
+    try:
+        with open(json_file, "w") as f:
+            json.dump(dict, f, indent=2)
+        logger.info("Saved PDF plot friend JSON-friendly cache metadata to %s", json_file)
+    except Exception as e:
+        logger.error("Failed to save PDF plot friend JSON-friendly cache metadata: %s", e)
