@@ -214,6 +214,27 @@ runs
 #%% map the cache name to the rows in runs
 final_df = combined_df.join(runs, on='name')
 
+#%%
+MODEL_ORDER =  [
+    'FM-Sequence-Tiny-Gaussian',
+    'FM-Sequence-Gaussian',
+    'FM-Sequence-2x-Gaussian',
+    'FM-Sequence-Brownian',
+    'FM-Sequence-Constant',
+    'FM-Sequence-CP',
+    'FM-Sequence-Resampled',
+    'FM-Channel-Gaussian',
+    'FM-Channel-Brownian',
+    'FM-Channel-CP',
+    'FM-Channel-Resampled',
+    'FM-Channel-AllCov-Brownian',
+    'FM-Sequence-AllCov-Brownian',
+    # 'Unet-Sequence-AllCov-Brownian',
+    'Unet-Sequence-Brownian',
+    'Unet-Channel-Brownian',
+    'Ground Truth'
+]
+
 #%% Pivot to Latex format
 CONDITION = 'any_Wh'
 pivoted = final_df.query(f"condition=='{CONDITION}'"
@@ -311,40 +332,93 @@ print(f"LaTeX table saved to {output_path}")
 
 
 # %%
+
+
+# %%
+# %%
+pivoted_T = final_df.query(f"condition=='{CONDITION}'"
+                          ).pivot_table(index=['to', 'human_name'], columns=['from', 'measure'], values='value')
+
+# Sort by Model, History Length, Full Covariates, WH concat dim, Prior
+sort_cols = ['Model', 'History Length', 'Full Covariates', 'WH concat dim', 'Prior']
+if all(col in final_df.columns for col in sort_cols):
+    # Get the sort order for human_name based on those columns
+    sort_order = (
+        final_df.drop_duplicates('human_name').set_index('human_name')[sort_cols].sort_values(sort_cols).index
+    )
+    sort_order = [
+        'FM-Sequence-Tiny-Gaussian',
+        'FM-Sequence-Gaussian',
+        'FM-Sequence-2x-Gaussian',
+        'FM-Sequence-Brownian',
+        'FM-Sequence-Constant',
+        'FM-Sequence-CP',
+        'FM-Sequence-Resampled',
+        'FM-Channel-Gaussian',
+        'FM-Channel-Brownian',
+        'FM-Channel-CP',
+        'FM-Channel-Resampled',
+        'FM-Channel-AllCov-Brownian',
+        'FM-Sequence-AllCov-Brownian',
+        # 'Unet-Sequence-AllCov-Brownian',
+        'Unet-Sequence-Brownian',
+        'Unet-Channel-Brownian',
+        'Ground Truth'
+    ]
+    sort_order_trans = ['L', 'D', 'H', 'any']
+    sort_order_cols_inner = [
+        'transition_counts',
+        'transition_counts_sq_error',
+        'transition_gt0',
+        'delta',
+        # 'SE',
+        # 'CI_lower',
+        # 'CI_upper',
+    ]
+
+    # Reindex pivoted_T to match the sorted human_name order
+    pivoted_T = pivoted_T.reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order], names=['To', ''])).reindex(
+        pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']), axis='columns'
+    ).dropna(how='all')
+pivoted_T
+
+# %%
+
+
+# %%
 def plot_multifacet_bar(pivoted, measure='transition_counts'):
     """
-    Plots a multifacet horizontal bar plot for each transition pair (facet),
+    Plots a multifacet horizontal bar plot for each FROM state (facet),
     with models as bars. Only one measure per transition is shown.
     Args:
-        pivoted: MultiIndex DataFrame (from, model) x (to, measure)
+        pivoted: MultiIndex DataFrame (to, model) x (from, measure)
         measure: str, which measure to plot (must match column level 1)
     """
     # Define colors for each from_state
     color_map = {'L': '#1f77b4', 'D': '#ff7f0e', 'H': '#d62728', 'any': '#444444'}
-    transition_pairs = list("LDH")  # or: pivoted.columns.get_level_values(0).unique()
-    models = pivoted.index.get_level_values(1).unique()
-    from_states = transition_pairs  # or: pivoted.index.get_level_values(0).unique()
+    from_states = list("LDH")  # columns in pivoted (level 0)
+    to_states = from_states
+    models = MODEL_ORDER
 
-    n_facets = len(transition_pairs)
-    fig, axes = plt.subplots(1, n_facets, figsize=(5*n_facets, 8), sharey=True)
+    n_facets = len(from_states)
+    fig, axes = plt.subplots(1, n_facets, figsize=(5 * n_facets, 6), sharey=True)
     if n_facets == 1:
         axes = [axes]
 
     # Find global max for xlim
     global_max = pivoted.xs(measure, level=1, axis=1).max().max()
 
-    for i, to_state in enumerate(transition_pairs):
+    for i, from_state in enumerate(from_states):
         ax = axes[i]
-        # Build data for this facet: all (from, model) rows, this 'to' col, this measure
-        data = pivoted[to_state][measure].unstack(0)  # index: model, columns: from_state
-        bar_height = 0.8 / len(from_states)
-        for j, from_state in enumerate(from_states):
-            vals = data[from_state].reindex(models)
-            y_pos = [y + j*bar_height for y in range(len(models))]
-            color = color_map.get(from_state, '#888888')
-            ax.barh(y_pos, vals, left=0, height=bar_height, label=f"{from_state}", color=color)
-        ax.set_title(f"To: {to_state}")
-        ax.set_xlim(0, global_max*1.05)
+        # For this facet, plot all TO states (rows) for this FROM (col)
+        data = pivoted[(from_state, measure)]  # index: to_state, columns: model
+        for j, to_state in enumerate(to_states):
+            vals = data.loc[to_state].reindex(models)
+            y_pos = [y + j * 0.8 / len(to_states) for y in range(len(models))]
+            color = color_map.get(to_state, '#888888')
+            ax.barh(y_pos, vals, left=0, height=0.8 / len(to_states), label=f"{to_state}", color=color)
+        ax.set_title(f"From: {from_state}")
+        ax.set_xlim(0, global_max * 1.05)
         ax.set_yticks([y + 0.4 for y in range(len(models))])
         ax.set_yticklabels(models)
         if i == 0:
@@ -352,11 +426,12 @@ def plot_multifacet_bar(pivoted, measure='transition_counts'):
         else:
             ax.set_ylabel("")
         ax.set_xlabel(measure)
-        ax.legend(title="From state")
+        ax.legend(title="To state")
     plt.tight_layout()
     plt.show()
 
+
 # Example usage (uncomment to use):
-plot_multifacet_bar(pivoted, measure='transition_counts')
+plot_multifacet_bar(pivoted_T, measure='transition_counts')
 
 # %%
