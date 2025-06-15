@@ -1,18 +1,18 @@
 # This will be merged into the inherited config from the base run
 
-base_run: UnFlow_seq_brown_smC # ID or unique name
+base_run: seq_brown_smC_BIG # ID or unique name
 prefer_model_alias: best # null just takes the one with latest, can be best or latest.
 
-test_cache_name: UnFlow_seq_brown_smC #test_tinyhistory # test_cache_unflow #  # tinyhistory_seq_normal_smC_BIG #${ run_name }
+test_cache_name: ${ run_name } #test_tinyhistory # test_cache_unflow #  # tinyhistory_seq_normal_smC_BIG #
 test_cache_mode: create # create or use
 
-batch_size: 256
+batch_size: 512
 data:
-  batch_size: 256
+  batch_size: 512
 
 evaluation:
-  n_steps: 40 # enough for rk4
-  solve_method: rk4 # dopri5, euler, midpoint
+  n_steps: 100 # enough for rk4
+  solve_method: simple # dopri5, euler, midpoint
   plot_functions:
   # every item has to have a 'key' key.
   # n are optional through defaults in PlotsCallback

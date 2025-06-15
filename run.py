@@ -37,7 +37,7 @@ run = wandb.init(
     id=conf.get("resume_id", None),
     resume='allow',
     config=conf,
-    tags=['final_reeval'] if is_reeval_run() else None
+    tags=['2final_reeval'] if is_reeval_run() else None
     # mode="offline",
 )
 RUN_ID = wandb.run.id

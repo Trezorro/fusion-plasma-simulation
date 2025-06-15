@@ -44,8 +44,8 @@ window_set:
 
 
 evaluation:
-  n_steps: 40 # enough for rk4
-  solve_method: rk4 # dopri5, euler, midpoint
+  n_steps: 100 # enough for rk4
+  solve_method: simple # dopri5, euler, midpoint
   max_n: 64
   val_every_n_epochs: 5
   train_every_n_epochs: 20

@@ -19,7 +19,7 @@ echo "-------------------------------"
 echo $1
 echo "==============================="
 echo
-echo "Running Job script $0 $1 $2"
+echo "Running Job script $0 $1 $2 \"${@:3}\""
 echo "Current working directory:"
 pwd
 echo
@@ -66,12 +66,12 @@ export WANDB_ARTIFACT_DIR="/scratch-shared/mtresoor/artifacts"
 
 # export WANDB_DATA_DIR="~/fusion-plasma-simulation/output/wandb/data"
 # export WANDB_ARTIFACT_DIR="~/fusion-plasma-simulation/output/wandb/artifacts"
-export TEST_CACHE_DIR="/scratch-shared/mtresoor/test_cache"
+export TEST_CACHE_DIR="/scratch-shared/mtresoor/final_cache"
 
 # Run the Python script
 echo "---------------- JOB START ----------------"
-echo "Running: srun python run.py run_name=$1 reeval=$2"
-srun python run.py run_name=$1 reeval=$2
+echo "Running: srun python run.py run_name=$1 reeval=$2 \"${@:3}\""
+srun python run.py run_name=$1 reeval=$2 "${@:3}"
 
 # srun wandb agent deep-learning-course-team/plasma/96sckgvi
 # Deactivate the conda environment

@@ -56,7 +56,7 @@ class FlowModule(L.LightningModule):
         batch_rematch_factor: int = 1,
         step_every_nth_match: Optional[int] = None,  # if None, step only after all matches.
         gradient_clip_val: float = 1.0,
-        flow_steps=150,
+        flow_steps=100,
         solve_method='simple',
         **kwargs: Any
     ):
@@ -406,7 +406,7 @@ class FlowModule(L.LightningModule):
         self,
         batch: tuple[dict, dict, torch.Tensor],
         n_steps=50,
-        solve_method="rk4",
+        solve_method="simple",
         data_module: Optional[L.LightningDataModule] = None,
     ):
         """Evaluates the model on a given batch of data. Batch will be moved to the correct device.
@@ -548,7 +548,7 @@ class FlowModule(L.LightningModule):
         #         k: v.device for k, v in conditioning_input.items()
         #     } if conditioning_input is not None else None
         # )
-        if method == "simple":
+        if True:
             # Integrate and use progress bar if running on CPU
             if save_trajectories:
                 trajectories = [current_points]
@@ -566,21 +566,21 @@ class FlowModule(L.LightningModule):
             if save_trajectories:
                 return current_points, torch.stack(trajectories)
             return current_points
-        else:  # use torchdiffeq
-            sol = odeint(
-                ode_func,
-                current_points,
-                time_grid,
-                method=method,
-                options={'max_num_steps': 2000} if method == 'dopri5' else {},
-                # atol=atol,
-                # rtol=rtol,
-            )
-            logger.debug("Solved with %s steps.", len(sol))
-            if save_trajectories:
-                return sol[-1], sol
-            else:
-                return sol[-1]
+        # else:  # use torchdiffeq
+        #     sol = odeint(
+        #         ode_func,
+        #         current_points,
+        #         time_grid,
+        #         method=method,
+        #         options={'max_num_steps': 2000} if method == 'dopri5' else {},
+        #         # atol=atol,
+        #         # rtol=rtol,
+        #     )
+        #     logger.debug("Solved with %s steps.", len(sol))
+        #     if save_trajectories:
+        #         return sol[-1], sol
+        #     else:
+        #         return sol[-1]
 
     # def integrate_path_advanced(self, )
 
