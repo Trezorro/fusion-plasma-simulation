@@ -2,6 +2,7 @@
 import pandas as pd
 import os
 import argparse
+import subprocess
 
 CSV = "output/wand_overview.csv"
 CACHE_DIR = 'ouptut/test_cache'
@@ -107,4 +108,72 @@ def summarize_caches(group):
 pivot = df.groupby(group_cols).apply(summarize_caches).reset_index(name='Available Caches')
 
 pivot
+# %%
+CSV = "output/XR-overview.csv"
+def get_cache_overview(csvpath):
+    df = pd.read_csv(csvpath)
+    group_cols = ['model.Class',
+            'data.history_length',
+            'model.params.model_params.c_channels',
+            'Cond_dim',
+            'model.params.prior']
+
+    # Add checkmark column
+    # df['cache_exists'] = df['test_cache_name'].apply(lambda v: (v + '.h5') in caches)
+    # Drop columns starting with 'test/'
+    df = df.loc[:, ~df.columns.str.startswith('test/')]
+    # Reorder columns: group_cols + [cache_col] + rest
+    important_cols = ['cache_exists'
+                     ] + group_cols + ["Name", 'test_cache_name', 'base_run', 'run_name', 'Created', 'test_cache_mode']
+    other_cols = [col for col in df.columns if col not in important_cols]
+    df = df[important_cols + other_cols]
+    return df
+
+df = get_cache_overview(CSV, group_cols, cache_col, caches)
+df
+
+#%%
+group_cols = ['model.Class',
+              'data.history_length',
+              'model.params.model_params.c_channels',
+              'Cond_dim',
+              'model.params.prior']
+rename_map = {
+    'model.Class': 'Model',
+    'model.params.model_params.c_channels': 'Full Covariates',
+    'data.history_length': 'History Length',
+    'Cond_dim': 'WH concat dim',
+    'model.params.prior': 'Prior'
+}
+# Rename 'model.Class' values for display
+df['model.Class'] = df['model.Class'].replace({
+    'FlowModule': 'Flow Matching',
+    'UnFlowModule': 'Base Unet'
+})
+# Show possible unique group combinations
+possible_groups = df[group_cols].drop_duplicates().sort_values(group_cols)
+print("Possible groups:")
+print(possible_groups.rename(columns=rename_map).to_string(index=False))
+
+# %% TRANSFER
+print(list(df.test_cache_name))
+# %%
+REMOTE_PATH = "snellius:/scratch-shared/mtresoor/test_cache/"
+LOCAL_PATH = "output/test_cache/"
+
+# Get list of cache names (non-null, unique)
+cache_names = df['test_cache_name'].dropna().unique()
+
+# Build rsync include patterns
+include_patterns = [f'--include=*{name}*' for name in cache_names]
+# Always include directories, exclude everything else
+rsync_args = [
+    'rsync', '-avz', *include_patterns, '--include=*/', '--exclude=*', REMOTE_PATH, LOCAL_PATH,  '--dry-run'
+]
+print("Dont forget to uncomment 'dry run'")
+print("Running rsync command:")
+print(' '.join(rsync_args))
+
+subprocess.run(rsync_args)
+
 # %%

@@ -30,6 +30,7 @@ torchdiffeq = "*"
 pysdtw = "*"
 tables = "*"
 datashader = "*"
+openpyxl = "*"
 
 [dev-packages]
 jupyter = "*"
@@ -64,9 +65,7 @@ python_version = "3.11.3"
 # first make venv: python -m venv fusion
 # source ~/fusion/bin/activate
 # pip install pyarrow torchinfo omegaconf lightning wandb pytest pot antropy "plotly<6.0.0"
-
-pip install pyarrow torchinfo omegaconf lightning wandb pytest pot antropy "plotly<6.0.0" kaleido torchdiffeq pysdtw tables datashader h5py scipy
-
+# pip install pyarrow torchinfo omegaconf lightning wandb pytest pot antropy "plotly<6.0.0" kaleido torchdiffeq pysdtw tables datashader h5py scipy
 ## CHANGES
 ## 7 jun 2025
 # aiohttp: 3.12.6 -> 3.12.9
