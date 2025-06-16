@@ -313,7 +313,7 @@ def rename_cols(df):
 
 
 latex_df = rename_cols(pivoted_T)
-pivoted_T_g = rename_cols(pivoted_T_g)
+# pivoted_T_g = rename_cols(pivoted_T_g)
 latex_str = latex_df.replace(0.0, '').fillna('').round(2).to_latex(
     index=True,
     escape=False,
@@ -372,13 +372,13 @@ def plot_multifacet_bar(pivoted, measure='transition_counts', outline=False):
         data = pivoted[(from_state, measure)]  # index: to_state, columns: model
         for j, to_state in enumerate(to_states):
             vals = data.loc[to_state].reindex(models)
-            y_pos = [y + j * 1 / len(to_states) for y in range(len(models))]
+            y_pos = [y + j * .9 / len(to_states) for y in range(len(models))]
             color = color_map.get(to_state, '#888888')
             ax.barh(
                 y_pos,
                 vals,
                 left=0,
-                height=.9 / len(to_states),
+                height=.89 / len(to_states),
                 label=f"{to_state}",
                 color=color,
                 edgecolor='black',
@@ -403,7 +403,6 @@ def plot_multifacet_bar(pivoted, measure='transition_counts', outline=False):
 plot_multifacet_bar(latex_df, measure=MEASURES_TEX_SYMBOLS['transition_counts_sq_error'])
 
 # %%
-plt.rcParams['text.usetex'] = False
 
 
 def plot_multifacet_stacked_bar(pivoted, measure='transition_counts', outlines=False):

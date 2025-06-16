@@ -4,7 +4,7 @@ import os
 import argparse
 import subprocess
 
-CSV = "output/wand_overview.csv"
+CSV = "output/X2.csv"
 CACHE_DIR = 'ouptut/test_cache'
 # Read CSV
 #%%
@@ -72,7 +72,7 @@ df['cache_exists'] = df['test_cache_name'].apply(lambda v: (v+'.h5') in caches)
 # Drop columns starting with 'test/'
 df = df.loc[:, ~df.columns.str.startswith('test/')]
 # Reorder columns: group_cols + [cache_col] + rest
-important_cols = ['cache_exists'] +group_cols + ["Name",  cache_col, 'base_run', 'run_name', 'Created','test_cache_mode', "epoch"]
+important_cols = ['cache_exists'] +group_cols + ["Name",  cache_col, 'base_run', 'run_name', 'Created','test_cache_mode', ]
 other_cols = [col for col in df.columns if col not in important_cols]
 df = df[important_cols + other_cols]
 df
@@ -158,7 +158,7 @@ print(possible_groups.rename(columns=rename_map).to_string(index=False))
 # %% TRANSFER
 print(list(df.test_cache_name))
 # %%
-REMOTE_PATH = "snellius:/scratch-shared/mtresoor/test_cache/"
+REMOTE_PATH = "snellius:/scratch-shared/mtresoor/final_cache/"
 LOCAL_PATH = "output/test_cache/"
 
 # Get list of cache names (non-null, unique)
