@@ -234,7 +234,7 @@ def evaluate_window_set(model: FlowModule, data_module: FusionShotDataModule, sh
             batch = test_dataset.quick_window(shot, t, repeat=4)
             if batch is None:
                 continue
-            output = model.evaluate(batch, data_module=data_module, n_steps=40 if torch.cuda.is_available() else 5)
+            output = model.evaluate(batch, data_module=data_module, n_steps=120 if torch.cuda.is_available() else 5)
             fig = multi_sample_single_window_lines_plotly(**output, title=f"Shot #{shot}")
             dump_figure_to_pdfs(
                 fig,
