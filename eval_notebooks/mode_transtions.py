@@ -4,6 +4,7 @@ from pathlib import Path
 import h5py
 from sympy import Id
 from tqdm import tqdm
+import os
 import matplotlib.pyplot as plt
 
 CACHE_DIR = Path('output/test_cache')  # contains .h5 and .jsons
@@ -157,6 +158,7 @@ combined_df = combine_caches(CACHED_H5_LIST)
 
 CSV = "output/XR-overview.csv"
 
+MODEL_GROUP_COLS = ['Model', 'History Length', 'Full Covariates', 'Conditioning', 'Prior']
 
 def get_cache_overview(csvpath):
     df = pd.read_csv(csvpath)
@@ -176,17 +178,17 @@ def get_cache_overview(csvpath):
         'model.Class': 'Model',
         'data.history_length': 'History Length',
         'model.params.model_params.c_channels': 'Full Covariates',
-        'Cond_dim': 'WH concat dim',
+        'Cond_dim': 'Conditioning',
         'model.params.prior': 'Prior'
     }
     # Rename 'model.Class' values for display
     df['model.Class'] = df['model.Class'].replace({'FlowModule': 'Flow Matching', 'UnFlowModule': 'Base Unet'})
     group_cols = list(rename_map.values())
     df = df.rename(columns=rename_map)
+    print(df)
     # Show possible unique group combinations
-    possible_groups = df.set_index('test_cache_name')[group_cols].drop_duplicates().sort_values(group_cols)
+    possible_groups = df.set_index('test_cache_name')[group_cols + ['run_name']].drop_duplicates().sort_values(group_cols)
     print("Possible groups:")
-    print(possible_groups.to_string(index=True))
     possible_groups['human_name'] = """
             Unet-Channel-Brownian  
             Unet-Sequence-Brownian  
@@ -204,18 +206,20 @@ def get_cache_overview(csvpath):
             FM-Channel-AllCov-Brownian  
             FM-Sequence-AllCov-Brownian  
             FM-Sequence-2x-Gaussian  """.split()
+    print(possible_groups.to_string(index=True))
     return possible_groups
 
 
 runs = get_cache_overview(CSV)
-runs.loc['Ground Truth'] = ['-', '-', '-', '-', '-', 'Ground Truth']
-runs
+cache_experiment_map = runs[MODEL_GROUP_COLS +['human_name']]
+cache_experiment_map.loc['Ground Truth'] = ['-', '-', '-', '-', '-', 'Ground Truth']
+cache_experiment_map
 
 #%% map the cache name to the rows in runs
-final_df = combined_df.join(runs, on='name')
+final_df = combined_df.join(cache_experiment_map, on='name')
 
 #%%
-MODEL_ORDER =  [
+MODEL_ORDER = [
     'FM-Sequence-Tiny-Gaussian',
     'FM-Sequence-Gaussian',
     'FM-Sequence-2x-Gaussian',
@@ -234,70 +238,65 @@ MODEL_ORDER =  [
     'Unet-Channel-Brownian',
     'Ground Truth'
 ]
-
+CONCAT_SORT = [
+    '-',
+    'sequence',
+    'channels',
+]
+published_names_groups = cache_experiment_map.set_index('human_name')
 #%% Pivot to Latex format
 CONDITION = 'any_Wh'
-pivoted = final_df.query(f"condition=='{CONDITION}'"
-                        ).pivot_table(index=['from', 'human_name'], columns=['to', 'measure'], values='value')
 
 # Sort by Model, History Length, Full Covariates, WH concat dim, Prior
-sort_cols = ['Model', 'History Length', 'Full Covariates', 'WH concat dim', 'Prior']
-if all(col in final_df.columns for col in sort_cols):
-    # Get the sort order for human_name based on those columns
-    sort_order = (
-        final_df.drop_duplicates('human_name').set_index('human_name')[sort_cols].sort_values(sort_cols).index
-    )
-    sort_order = [
-        'FM-Sequence-Tiny-Gaussian',
-        'FM-Sequence-Gaussian',
-        'FM-Sequence-2x-Gaussian',
-        'FM-Sequence-Brownian',
-        'FM-Sequence-Constant',
-        'FM-Sequence-CP',
-        'FM-Sequence-Resampled',
-        'FM-Channel-Gaussian',
-        'FM-Channel-Brownian',
-        'FM-Channel-CP',
-        'FM-Channel-Resampled',
-        'FM-Channel-AllCov-Brownian',
-        'FM-Sequence-AllCov-Brownian',
-        # 'Unet-Sequence-AllCov-Brownian',
-        'Unet-Sequence-Brownian',
-        'Unet-Channel-Brownian',
-        'Ground Truth'
-    ]
-    sort_order_trans = ['L', 'D', 'H', 'any']
-    sort_order_cols_inner = [
-        'transition_counts',
-        'transition_counts_sq_error',
-        'transition_gt0',
-        'delta',
-        # 'SE',
-        # 'CI_lower',
-        # 'CI_upper',
-    ]
+MODEL_GROUP_COLS = ['Model', 'History Length', 'Full Covariates', 'Conditioning', 'Prior']
 
-    # Reindex pivoted to match the sorted human_name order
-    pivoted = pivoted.reindex(
-        pd.MultiIndex.from_product([sort_order_trans, sort_order], names=['From', ''])
-    ).reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['To', '']),
-              axis='columns').dropna(how='all')
-pivoted
+# Get the sort order for human_name based on those columns
+
+sort_order_trans = ['L', 'D', 'H', 'any']
+sort_order_cols_inner = [
+    'transition_counts',
+    'transition_counts_sq_error',
+    'transition_gt0',
+    'delta',
+    # 'SE',
+    # 'CI_lower',
+    # 'CI_upper',
+]
+
+pivoted_T = final_df.query(f"condition=='{CONDITION}'").pivot_table(
+    index=['to', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
+)
+# Reindex pivoted_T to match the sorted human_name order
+pivoted_T = pivoted_T.reindex(
+    pd.MultiIndex.from_product([sort_order_trans, MODEL_ORDER], names=['To', ''])
+).reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']),
+          axis='columns').dropna(how='all')
+
+#%% GROUPED
+pivoted_T_g = final_df.query(f"condition=='{CONDITION}'").pivot_table(
+    index=['to', 'Conditioning', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
+).reindex(
+    pd.MultiIndex.from_product([sort_order_trans, CONCAT_SORT, MODEL_ORDER], names=['To', 'Conditioning', ''])
+).reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']),
+          axis='columns').dropna(how='all')
+pivoted_T_g
 #%%
-pivoted.to_excel(f"output/tables/mode_transitions{CONDITION}.xlsx", index=True, float_format="%.3f")
+
+#%%
+pivoted_T_g.to_excel(f"output/tables/mode_transitions{CONDITION}.xlsx", index=True, float_format="%.3f")
 # %%
 # df_latex = pivoted.round(3)
 # df_latex.replace(0, '', inplace=True)
 
-
 # Map measure names to LaTeX symbols
-measure_latex = {
-    'transition_counts': r'\mathbb{E}',
-    'transition_counts_sq_error': r'\mathrm{SE}^2',
-    'transition_gt0': r'P(T>0)',
+MEASURES_TEX_SYMBOLS = {
+    'transition_counts': r'\mathbb{E}(N^\mathbb{T}_{W_F})',
+    'transition_counts_sq_error': r'\mathrm{MSE(\ywf^\text{gen},\ywf^\text{real})}',
+    'transition_gt0': r'\mathbb{P}(N^\mathbb{T}_{W_F}>0)',
     'delta': r'\Delta',
     'SE': r'\pm',
 }
+
 
 # Rename columns in df_latex and pivoted
 def rename_cols(df):
@@ -305,14 +304,16 @@ def rename_cols(df):
     for col in df.columns:
         if isinstance(col, tuple):
             to, measure = col
-            measure_sym = measure_latex.get(measure, measure)
+            measure_sym = MEASURES_TEX_SYMBOLS.get(measure, measure)
             new_cols.append((to, measure_sym))
         else:
-            new_cols.append(measure_latex.get(col, col))
+            new_cols.append(MEASURES_TEX_SYMBOLS.get(col, col))
     df.columns = pd.MultiIndex.from_tuples(new_cols, names=df.columns.names)
     return df
 
-latex_df = rename_cols(pivoted)
+
+latex_df = rename_cols(pivoted_T)
+pivoted_T_g = rename_cols(pivoted_T_g)
 latex_str = latex_df.replace(0.0, '').fillna('').round(2).to_latex(
     index=True,
     escape=False,
@@ -330,63 +331,14 @@ with open(output_path, "w") as f:
     f.write(latex_str)
 print(f"LaTeX table saved to {output_path}")
 
-
 # %%
 
-
 # %%
-# %%
-pivoted_T = final_df.query(f"condition=='{CONDITION}'"
-                          ).pivot_table(index=['to', 'human_name'], columns=['from', 'measure'], values='value')
-
-# Sort by Model, History Length, Full Covariates, WH concat dim, Prior
-sort_cols = ['Model', 'History Length', 'Full Covariates', 'WH concat dim', 'Prior']
-if all(col in final_df.columns for col in sort_cols):
-    # Get the sort order for human_name based on those columns
-    sort_order = (
-        final_df.drop_duplicates('human_name').set_index('human_name')[sort_cols].sort_values(sort_cols).index
-    )
-    sort_order = [
-        'FM-Sequence-Tiny-Gaussian',
-        'FM-Sequence-Gaussian',
-        'FM-Sequence-2x-Gaussian',
-        'FM-Sequence-Brownian',
-        'FM-Sequence-Constant',
-        'FM-Sequence-CP',
-        'FM-Sequence-Resampled',
-        'FM-Channel-Gaussian',
-        'FM-Channel-Brownian',
-        'FM-Channel-CP',
-        'FM-Channel-Resampled',
-        'FM-Channel-AllCov-Brownian',
-        'FM-Sequence-AllCov-Brownian',
-        # 'Unet-Sequence-AllCov-Brownian',
-        'Unet-Sequence-Brownian',
-        'Unet-Channel-Brownian',
-        'Ground Truth'
-    ]
-    sort_order_trans = ['L', 'D', 'H', 'any']
-    sort_order_cols_inner = [
-        'transition_counts',
-        'transition_counts_sq_error',
-        'transition_gt0',
-        'delta',
-        # 'SE',
-        # 'CI_lower',
-        # 'CI_upper',
-    ]
-
-    # Reindex pivoted_T to match the sorted human_name order
-    pivoted_T = pivoted_T.reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order], names=['To', ''])).reindex(
-        pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']), axis='columns'
-    ).dropna(how='all')
-pivoted_T
-
 # %%
 
 
 # %%
-def plot_multifacet_bar(pivoted, measure='transition_counts'):
+def plot_multifacet_bar(pivoted, measure='transition_counts', outline=False):
     """
     Plots a multifacet horizontal bar plot for each FROM state (facet),
     with models as bars. Only one measure per transition is shown.
@@ -396,17 +348,23 @@ def plot_multifacet_bar(pivoted, measure='transition_counts'):
     """
     # Define colors for each from_state
     color_map = {'L': '#1f77b4', 'D': '#ff7f0e', 'H': '#d62728', 'any': '#444444'}
-    from_states = list("LDH")  # columns in pivoted (level 0)
-    to_states = from_states
-    models = MODEL_ORDER
-
+    from_states = list("LDH") + ['any']  # columns in pivoted (level 0)
+    to_states = list("LDH")
+    if len(pivoted.index.names) > 2:
+        extra_groups = pivoted.index.names[1:-1]
+        models = published_names_groups.loc[MODEL_ORDER, extra_groups].reset_index().values.tolist()
+    else:
+        models = MODEL_ORDER
     n_facets = len(from_states)
-    fig, axes = plt.subplots(1, n_facets, figsize=(5 * n_facets, 6), sharey=True)
+    fig, axes = plt.subplots(1, n_facets, figsize=(5 * n_facets, 6), sharey=True, sharex=True)
     if n_facets == 1:
         axes = [axes]
-
+    for i, ax in enumerate(axes):
+        from_state = from_states[i]
+        facet_color = color_map.get(from_state, '#cccccc')
+        ax.set_facecolor((plt.matplotlib.colors.to_rgba(facet_color, alpha=0.2)))
     # Find global max for xlim
-    global_max = pivoted.xs(measure, level=1, axis=1).max().max()
+    # global_max = pivoted.xs(measure, level=1, axis=1).max().max()
 
     for i, from_state in enumerate(from_states):
         ax = axes[i]
@@ -414,24 +372,272 @@ def plot_multifacet_bar(pivoted, measure='transition_counts'):
         data = pivoted[(from_state, measure)]  # index: to_state, columns: model
         for j, to_state in enumerate(to_states):
             vals = data.loc[to_state].reindex(models)
-            y_pos = [y + j * 0.8 / len(to_states) for y in range(len(models))]
+            y_pos = [y + j * 1 / len(to_states) for y in range(len(models))]
             color = color_map.get(to_state, '#888888')
-            ax.barh(y_pos, vals, left=0, height=0.8 / len(to_states), label=f"{to_state}", color=color)
+            ax.barh(
+                y_pos,
+                vals,
+                left=0,
+                height=.9 / len(to_states),
+                label=f"{to_state}",
+                color=color,
+                edgecolor='black',
+                linewidth=1 * outline
+            )
+
         ax.set_title(f"From: {from_state}")
-        ax.set_xlim(0, global_max * 1.05)
+        # ax.set_xlim(0, global_max * 1.05)
         ax.set_yticks([y + 0.4 for y in range(len(models))])
         ax.set_yticklabels(models)
         if i == 0:
             ax.set_ylabel("Model")
         else:
             ax.set_ylabel("")
-        ax.set_xlabel(measure)
+        ax.set_xlabel("$" + measure + "$")
         ax.legend(title="To state")
     plt.tight_layout()
-    plt.show()
+    # plt.show()
 
 
 # Example usage (uncomment to use):
-plot_multifacet_bar(pivoted_T, measure='transition_counts')
+plot_multifacet_bar(latex_df, measure=MEASURES_TEX_SYMBOLS['transition_counts_sq_error'])
 
+# %%
+plt.rcParams['text.usetex'] = False
+
+
+def plot_multifacet_stacked_bar(pivoted, measure='transition_counts', outlines=False):
+    """
+    Plots a multifacet stacked horizontal bar plot for each FROM state (facet),
+    with models as bars and each segment representing a TO state (stacked, colored).
+    Args:
+        pivoted: MultiIndex DataFrame (to, model) x (from, measure)
+        measure: str, which measure to plot (must match column level 1)
+    """
+    color_map = {'L': '#1f77b4', 'D': '#ff7f0e', 'H': '#d62728', 'any': '#444444'}
+    from_states = list("LDH") + ['any']  # columns in pivoted (level 0)
+    to_states = list("LDH")  #+ ['any'] #list(pivoted.index.get_level_values(0).unique())
+    models = MODEL_ORDER
+
+    n_facets = len(from_states)
+    fig, axes = plt.subplots(1, n_facets, figsize=(5 * n_facets, 6), sharey=True, sharex=True)
+    if n_facets == 1:
+        axes = [axes]
+    for i, ax in enumerate(axes):
+        from_state = from_states[i]
+        facet_color = color_map.get(from_state, '#cccccc')
+        ax.set_facecolor((plt.matplotlib.colors.to_rgba(facet_color, alpha=0.2)))
+    global_max = 0
+    # Precompute global max for xlim
+    for from_state in from_states:
+        data = pivoted[(from_state, measure)]  # index: to_state, columns: model
+        sums = data.loc[to_states].reindex(models, axis=1).sum(axis=0)
+        global_max = max(global_max, sums.max())
+
+    for i, from_state in enumerate(from_states):
+        ax = axes[i]
+        data = pivoted[(from_state, measure)]  # index: to_state, columns: model
+        bottoms = [0] * len(models)
+        for to_state in to_states:
+            vals = data.loc[to_state].reindex(models)
+            color = color_map.get(to_state, '#888888')
+            if outlines:
+                ax.barh(
+                    range(len(models)),
+                    vals,
+                    left=bottoms,
+                    height=0.8,
+                    label=f"{to_state}",
+                    color=color,
+                    edgecolor='black',
+                    linewidth=1
+                )
+            else:
+                ax.barh(range(len(models)), vals, left=bottoms, height=0.8, label=f"{to_state}", color=color)
+            bottoms = [b + v if pd.notnull(v) else b for b, v in zip(bottoms, vals)]
+        ax.set_title(f"From: {from_state}")
+        # ax.set_xlim(0, global_max * 1.05)
+        ax.set_yticks(range(len(models)))
+        ax.set_yticklabels(models)
+        if i == 0:
+            ax.set_ylabel("Model")
+        else:
+            ax.set_ylabel("")
+        ax.set_xlabel("$" + measure + "$")
+        ax.legend(title="To state")
+    plt.tight_layout()
+    # plt.show()
+
+
+# Example usage (uncomment to use):
+plot_multifacet_stacked_bar(latex_df, measure=MEASURES_TEX_SYMBOLS['transition_counts'], outlines=True)
+
+# %%
+plot_multifacet_stacked_bar(latex_df, measure=MEASURES_TEX_SYMBOLS['transition_gt0'])
+
+#%%
+CONDITION = "L_only_Wh"
+
+pivoted_T = final_df.query(f"condition=='{CONDITION}'").pivot_table(
+    index=['to', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
+).reindex(
+    pd.MultiIndex.from_product([sort_order_trans, MODEL_ORDER], names=['To', ''])
+).reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']),
+          axis='columns').dropna(how='all')
+latex_df = rename_cols(pivoted_T)
+
+# %%
+measure = 'transition_counts'
+pdf_name = f'{CONDITION}_{measure}.pdf'
+plt.figure()
+plot_multifacet_stacked_bar(latex_df, measure=MEASURES_TEX_SYMBOLS[measure])
+plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+plt.close()
+print(f"Saved plot to output/figures/{pdf_name}")
+# %%
+measure = 'transition_gt0'
+pdf_name = f'{CONDITION}_{measure}.pdf'
+plt.figure()
+plot_multifacet_bar(latex_df, measure=MEASURES_TEX_SYMBOLS[measure])
+plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+plt.close()
+print(f"Saved plot to output/figures/{pdf_name}")
+
+# %%
+measure = 'transition_counts_sq_error'
+pdf_name = f'{CONDITION}_{measure}.pdf'
+plt.figure()
+plot_multifacet_bar(latex_df, MEASURES_TEX_SYMBOLS[measure], 1.3)
+plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+plt.close()
+print(f"Saved plot to output/figures/{pdf_name}")
+
+# %%
+measure = 'delta'
+pdf_name = f'{CONDITION}_{measure}.pdf'
+plt.figure()
+plot_multifacet_bar(latex_df, MEASURES_TEX_SYMBOLS[measure], 1.4)
+plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+plt.close()
+print(f"Saved plot to output/figures/{pdf_name}")
+
+
+# %%
+def subfig(pdf_name, measure, human_condition):
+    return r"""\begin{subfigure}{\textwidth}
+        \centering
+        \includegraphics[width=1.0\linewidth]{media/%s}
+        \caption{$%s$ for $W_H$ with %s modes.}
+        \label{fig:sub:modes_%s}
+    \end{subfigure}
+    """ % (pdf_name, MEASURES_TEX_SYMBOLS[measure], human_condition, pdf_name)
+
+
+HUMAN_CONDITIONS = ["any", 'mixed', 'only $L$', 'only $D$', 'only $H$']
+CONDITIONS = ["any_Wh", 'mixed', 'L_only_Wh', 'D_only_Wh', 'H_only_Wh']
+for CONDITION, human_cond in zip(CONDITIONS, HUMAN_CONDITIONS):
+    print(f"Processing condition: {CONDITION}")
+
+    pivoted_T = final_df.query(f"condition=='{CONDITION}'").pivot_table(
+        index=['to', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
+    ).reindex(pd.MultiIndex.from_product([sort_order_trans, MODEL_ORDER], names=['To', ''])).reindex(
+        pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']), axis='columns'
+    ).dropna(how='all')
+    latex_df = rename_cols(pivoted_T)
+
+    texstr = r"""
+
+\begin{figure}[htbp]
+    \centering"""
+
+    measure = 'transition_counts'
+    pdf_name = f'{CONDITION}_{measure}.pdf'
+    plt.figure()
+    plot_multifacet_stacked_bar(latex_df, measure=MEASURES_TEX_SYMBOLS[measure])
+    plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+    plt.close()
+    print(f"Saved plot to output/figures/{pdf_name}")
+    texstr += subfig(pdf_name, measure, human_cond)
+
+    measure = 'transition_counts_sq_error'
+    pdf_name = f'{CONDITION}_{measure}.pdf'
+    plt.figure()
+    plot_multifacet_bar(latex_df, MEASURES_TEX_SYMBOLS[measure], 1.3)
+    plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+    plt.close()
+    print(f"Saved plot to output/figures/{pdf_name}")
+    texstr += subfig(pdf_name, measure, human_cond)
+
+    measure = 'transition_gt0'
+    pdf_name = f'{CONDITION}_{measure}.pdf'
+    plt.figure()
+    plot_multifacet_bar(latex_df, measure=MEASURES_TEX_SYMBOLS[measure])
+    plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+    plt.close()
+    print(f"Saved plot to output/figures/{pdf_name}")
+    texstr += subfig(pdf_name, measure, human_cond)
+
+    measure = 'delta'
+    pdf_name = f'{CONDITION}_{measure}.pdf'
+    plt.figure()
+    plot_multifacet_bar(latex_df, MEASURES_TEX_SYMBOLS[measure], 1.4)
+    plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+    plt.close()
+    print(f"Saved plot to output/figures/{pdf_name}")
+    texstr += subfig(pdf_name, measure, human_cond)
+    texstr += r"""\caption{\small Visualized transition matrix for window samples with \textbf{%s} modes in $W_H$, in the test set. Each subplot corresponds to a specific starting mode (L, D, or H), and shows, for the ground truth and our models, the probability or expected value of transitions based on the modes encountered, with respect to the destination mode ("To"), represented as colored bars.}
+    \label{fig:modes_for_%s}
+\end{figure}""" % (human_cond, CONDITION)
+    with open('output/figures/modes all.tex', "a") as f:
+        f.write(texstr)
+    print(texstr)
+
+# %%
+
+# %%
+cache_experiment_map['Full Covariates'] = cache_experiment_map['Full Covariates'].replace({2: 'NBI + ECRH', 7: 'Full C'})
+cache_experiment_map.reset_index().pivot_table(
+    index=[
+        'Model',
+        'Conditioning',
+        'History Length',
+        'Full Covariates',
+        'Prior',
+    ],
+    values='human_name',
+    aggfunc='first'
+)
+# Map 'Full Covariates' values for display
+cache_experiment_map['Full Covariates'] = cache_experiment_map['Full Covariates'].replace({'NBI + ECRH': r'NBI~+~ECRH', 'Full C': r'Full~C'})
+latex_table = cache_experiment_map.reset_index().pivot_table(
+    index=[
+        'Model',
+        'Conditioning',
+        'History Length',
+        'Full Covariates',
+        'Prior',
+    ],
+    values='human_name',
+    aggfunc='first'
+).to_latex(escape=False, index=True)
+with open("output/tables/model_overview.tex", "w") as f:
+    f.write(latex_table)
+print("LaTeX table saved to output/tables/model_overview.tex")
+# %%
+run_map = runs.set_index('run_name')['human_name'] + ' (' + runs.index + ')'
+run_map.to_dict()
+# %%
+pdfplots_dir = Path("output/pdfplots")
+run_map_dict = run_map.to_dict()
+
+for old_name, new_name in run_map_dict.items():
+    old_dir = pdfplots_dir / old_name
+    new_dir = pdfplots_dir / new_name
+    if old_dir.exists() and not new_dir.exists():
+        print(f"Renaming {old_dir} -> {new_dir}")
+        os.rename(old_dir, new_dir)
+    elif old_dir.exists() and new_dir.exists():
+        print(f"Target directory {new_dir} already exists, skipping {old_dir}")
+    else:
+        print(f"Directory {old_dir} does not exist, skipping.")
 # %%

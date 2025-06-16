@@ -168,7 +168,7 @@ cache_names = df['test_cache_name'].dropna().unique()
 include_patterns = [f'--include=*{name}*' for name in cache_names]
 # Always include directories, exclude everything else
 rsync_args = [
-    'rsync', '-avz', *include_patterns, '--include=*/', '--exclude=*', REMOTE_PATH, LOCAL_PATH,  '--dry-run'
+    'rsync', '-avz', *include_patterns, '--include=*/', '--exclude=*', REMOTE_PATH, LOCAL_PATH,  #'--dry-run'
 ]
 print("Dont forget to uncomment 'dry run'")
 print("Running rsync command:")
