@@ -1,3 +1,4 @@
+
 #%% Imports
 import pandas as pd
 from pathlib import Path
@@ -8,6 +9,7 @@ import os
 import matplotlib.pyplot as plt
 
 CACHE_DIR = Path('output/test_cache')  # contains .h5 and .jsons
+
 # List all .h5 files in the CACHE_DIR
 CACHED_H5_LIST = list(CACHE_DIR.glob('*.h5'))
 CACHED_H5_LIST
@@ -64,26 +66,26 @@ def get_mode_keys(h5path):
         full_keys = get_h5_tree(f['modes'], level=3)
 
 
-list_mode_keys('output/test_cache/seq_CONST_smC.h5', 1)
-get_mode_keys('output/test_cache/seq_CONST_smC.h5')
+# list_mode_keys('output/test_cache/seq_CONST_smC.h5', 1)
+# get_mode_keys('output/test_cache/seq_CONST_smC.h5')
 #%% Load a subkey into a df
-EXAMPLE_CACHE = CACHED_H5_LIST[0]
-EXAMPLE_KEY = 'modes/H_only_Wh/transition_gt0_pred'
+# EXAMPLE_CACHE = CACHED_H5_LIST[0]
+# EXAMPLE_KEY = 'modes/H_only_Wh/transition_gt0_pred'
 
-df = pd.read_hdf(EXAMPLE_CACHE, key=EXAMPLE_KEY)
-"""
-	L	D	H	any
-L	0.000000	0.035862	0.043863	0.079726
-D	0.022003	0.000000	0.053722	0.075725
-H	0.061009	0.060294	0.000000	0.121303
-any	0.083012	0.096157	0.097585	0.276754
+# df = pd.read_hdf(EXAMPLE_CACHE, key=EXAMPLE_KEY)
+# """
+# 	L	D	H	any
+# L	0.000000	0.035862	0.043863	0.079726
+# D	0.022003	0.000000	0.053722	0.075725
+# H	0.061009	0.060294	0.000000	0.121303
+# any	0.083012	0.096157	0.097585	0.276754
 
-"""
-df
+# """
+# df
 
-#%% Change to long format.
-long = df.reset_index(names='from').melt(id_vars='from', var_name='to', value_name='value')
-long.assign(cache=EXAMPLE_CACHE.stem)
+# #%% Change to long format.
+# long = df.reset_index(names='from').melt(id_vars='from', var_name='to', value_name='value')
+# long.assign(cache=EXAMPLE_CACHE.stem)
 #%% For input, Add cols for the meta dimensions: cache_name, measure quantity, etc
 
 MEASURES = [
@@ -120,7 +122,7 @@ def df_from_cache(h5_path):
                 df = pd.read_hdf(h5_path, key=f'/modes/{cond}/{measure}')
                 long = df.reset_index(names='from').melt(id_vars='from', var_name='to', value_name='value')
                 if '_target' in measure:
-                    if h5_path.stem != 'seq_normal_smC_BIG4_reeval_rk440':
+                    if h5_path.stem != 'FM-Sequence-Gaussian':
                         continue  # only take ground truth values from one of the models. They match.
                     else:
                         details = long.assign(
@@ -135,8 +137,7 @@ def df_from_cache(h5_path):
     return pd.concat(dfs, ignore_index=True)
 
 
-df_from_cache(EXAMPLE_CACHE).sort_values('name')
-df_from_cache(Path('output/test_cache') / 'seq_normal_smC_BIG4_reeval_rk440.h5').sort_values('name')
+# df_from_cache(Path('output/test_cache') / 'seq_normal_smC_BIG4_reeval_rk440.h5').sort_values('name')
 
 
 #%% loop through all caches and concatenate
@@ -156,7 +157,7 @@ combined_df = combine_caches(CACHED_H5_LIST)
 
 #%% Map cache name to the pretty thesis name and Conditioning Dim, Prior, C Variation,
 
-CSV = "output/XR-overview.csv"
+CSV = "output/X2.csv"
 
 MODEL_GROUP_COLS = ['Model', 'History Length', 'Full Covariates', 'Conditioning', 'Prior']
 
@@ -231,9 +232,9 @@ MODEL_ORDER = [
     'FM-Channel-Brownian',
     'FM-Channel-CP',
     'FM-Channel-Resampled',
-    'FM-Channel-AllCov-Brownian',
+    # 'FM-Channel-AllCov-Brownian',
     'FM-Sequence-AllCov-Brownian',
-    # 'Unet-Sequence-AllCov-Brownian',
+    'Unet-Sequence-AllCov-Brownian',
     'Unet-Sequence-Brownian',
     'Unet-Channel-Brownian',
     'Ground Truth'
@@ -263,6 +264,16 @@ sort_order_cols_inner = [
     # 'CI_upper',
 ]
 
+# Map measure names to LaTeX symbols
+MEASURES_TEX_SYMBOLS = {
+    'transition_counts': r'$\mathbb{E}(N^\mathbb{T}_{W_F})$',
+    'transition_counts_sq_error': r'$\|{\mathbb{y}_{W_H}^\text{gen},\mathbb{y}_{W_H}^\text{real}}\|^2$',
+    'transition_gt0': r'$\mathbb{P}(N^\mathbb{T}_{W_F}>0)$',
+    'delta': r'$\Delta$',
+    'SE': r'$\pm$',
+}
+
+
 pivoted_T = final_df.query(f"condition=='{CONDITION}'").pivot_table(
     index=['to', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
 )
@@ -273,29 +284,20 @@ pivoted_T = pivoted_T.reindex(
           axis='columns').dropna(how='all')
 
 #%% GROUPED
-pivoted_T_g = final_df.query(f"condition=='{CONDITION}'").pivot_table(
-    index=['to', 'Conditioning', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
-).reindex(
-    pd.MultiIndex.from_product([sort_order_trans, CONCAT_SORT, MODEL_ORDER], names=['To', 'Conditioning', ''])
-).reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']),
-          axis='columns').dropna(how='all')
-pivoted_T_g
+# pivoted_T_g = final_df.query(f"condition=='{CONDITION}'").pivot_table(
+#     index=['to', 'Conditioning', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
+# ).reindex(
+#     pd.MultiIndex.from_product([sort_order_trans, CONCAT_SORT, MODEL_ORDER], names=['To', 'Conditioning', ''])
+# ).reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']),
+#           axis='columns').dropna(how='all')
+# pivoted_T_g
 #%%
 
 #%%
-pivoted_T_g.to_excel(f"output/tables/mode_transitions{CONDITION}.xlsx", index=True, float_format="%.3f")
+# pivoted_T_g.to_excel(f"output/tables/mode_transitions{CONDITION}.xlsx", index=True, float_format="%.3f")
 # %%
 # df_latex = pivoted.round(3)
 # df_latex.replace(0, '', inplace=True)
-
-# Map measure names to LaTeX symbols
-MEASURES_TEX_SYMBOLS = {
-    'transition_counts': r'\mathbb{E}(N^\mathbb{T}_{W_F})',
-    'transition_counts_sq_error': r'\mathrm{MSE(\ywf^\text{gen},\ywf^\text{real})}',
-    'transition_gt0': r'\mathbb{P}(N^\mathbb{T}_{W_F}>0)',
-    'delta': r'\Delta',
-    'SE': r'\pm',
-}
 
 
 # Rename columns in df_latex and pivoted
@@ -468,57 +470,57 @@ def plot_multifacet_stacked_bar(pivoted, measure='transition_counts', outlines=F
     # plt.show()
 
 
-# Example usage (uncomment to use):
+# # Example usage (uncomment to use):
 plot_multifacet_stacked_bar(latex_df, measure=MEASURES_TEX_SYMBOLS['transition_counts'], outlines=True)
 
-# %%
+# # %%
 plot_multifacet_stacked_bar(latex_df, measure=MEASURES_TEX_SYMBOLS['transition_gt0'])
 
 #%%
-CONDITION = "L_only_Wh"
+# # CONDITION = "L_only_Wh"
 
-pivoted_T = final_df.query(f"condition=='{CONDITION}'").pivot_table(
-    index=['to', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
-).reindex(
-    pd.MultiIndex.from_product([sort_order_trans, MODEL_ORDER], names=['To', ''])
-).reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']),
-          axis='columns').dropna(how='all')
-latex_df = rename_cols(pivoted_T)
+# # pivoted_T = final_df.query(f"condition=='{CONDITION}'").pivot_table(
+# #     index=['to', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
+# # ).reindex(
+# #     pd.MultiIndex.from_product([sort_order_trans, MODEL_ORDER], names=['To', ''])
+# # ).reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']),
+# #           axis='columns').dropna(how='all')
+# # latex_df = rename_cols(pivoted_T)
 
-# %%
-measure = 'transition_counts'
-pdf_name = f'{CONDITION}_{measure}.pdf'
-plt.figure()
-plot_multifacet_stacked_bar(latex_df, measure=MEASURES_TEX_SYMBOLS[measure])
-plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
-plt.close()
-print(f"Saved plot to output/figures/{pdf_name}")
-# %%
-measure = 'transition_gt0'
-pdf_name = f'{CONDITION}_{measure}.pdf'
-plt.figure()
-plot_multifacet_bar(latex_df, measure=MEASURES_TEX_SYMBOLS[measure])
-plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
-plt.close()
-print(f"Saved plot to output/figures/{pdf_name}")
+# # %%
+# measure = 'transition_counts'
+# pdf_name = f'{CONDITION}_{measure}.pdf'
+# plt.figure()
+# plot_multifacet_stacked_bar(latex_df, measure=MEASURES_TEX_SYMBOLS[measure])
+# plt.savefig(f"output/pdfplots/{pdf_name}", bbox_inches='tight')
+# plt.close()
+# print(f"Saved plot to output/pdfplots/{pdf_name}")
+# # %%
+# measure = 'transition_gt0'
+# pdf_name = f'{CONDITION}_{measure}.pdf'
+# plt.figure()
+# plot_multifacet_bar(latex_df, measure=MEASURES_TEX_SYMBOLS[measure])
+# plt.savefig(f"output/pdfplots/{pdf_name}", bbox_inches='tight')
+# plt.close()
+# print(f"Saved plot to output/pdfplots/{pdf_name}")
 
-# %%
-measure = 'transition_counts_sq_error'
-pdf_name = f'{CONDITION}_{measure}.pdf'
-plt.figure()
-plot_multifacet_bar(latex_df, MEASURES_TEX_SYMBOLS[measure], 1.3)
-plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
-plt.close()
-print(f"Saved plot to output/figures/{pdf_name}")
+# # %%
+# measure = 'transition_counts_sq_error'
+# pdf_name = f'{CONDITION}_{measure}.pdf'
+# plt.figure()
+# plot_multifacet_bar(latex_df, MEASURES_TEX_SYMBOLS[measure], 1.3)
+# plt.savefig(f"output/pdfplots/{pdf_name}", bbox_inches='tight')
+# plt.close()
+# print(f"Saved plot to output/pdfplots/{pdf_name}")
 
-# %%
-measure = 'delta'
-pdf_name = f'{CONDITION}_{measure}.pdf'
-plt.figure()
-plot_multifacet_bar(latex_df, MEASURES_TEX_SYMBOLS[measure], 1.4)
-plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
-plt.close()
-print(f"Saved plot to output/figures/{pdf_name}")
+# # %%
+# measure = 'delta'
+# pdf_name = f'{CONDITION}_{measure}.pdf'
+# plt.figure()
+# plot_multifacet_bar(latex_df, MEASURES_TEX_SYMBOLS[measure], 1.4)
+# plt.savefig(f"output/pdfplots/{pdf_name}", bbox_inches='tight')
+# plt.close()
+# print(f"Saved plot to output/pdfplots/{pdf_name}")
 
 
 # %%
@@ -553,41 +555,41 @@ for CONDITION, human_cond in zip(CONDITIONS, HUMAN_CONDITIONS):
     pdf_name = f'{CONDITION}_{measure}.pdf'
     plt.figure()
     plot_multifacet_stacked_bar(latex_df, measure=MEASURES_TEX_SYMBOLS[measure])
-    plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+    plt.savefig(f"output/pdfplots/{pdf_name}", bbox_inches='tight')
     plt.close()
-    print(f"Saved plot to output/figures/{pdf_name}")
+    print(f"Saved plot to output/pdfplots/{pdf_name}")
     texstr += subfig(pdf_name, measure, human_cond)
 
     measure = 'transition_counts_sq_error'
     pdf_name = f'{CONDITION}_{measure}.pdf'
     plt.figure()
     plot_multifacet_bar(latex_df, MEASURES_TEX_SYMBOLS[measure], 1.3)
-    plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+    plt.savefig(f"output/pdfplots/{pdf_name}", bbox_inches='tight')
     plt.close()
-    print(f"Saved plot to output/figures/{pdf_name}")
+    print(f"Saved plot to output/pdfplots/{pdf_name}")
     texstr += subfig(pdf_name, measure, human_cond)
 
     measure = 'transition_gt0'
     pdf_name = f'{CONDITION}_{measure}.pdf'
     plt.figure()
     plot_multifacet_bar(latex_df, measure=MEASURES_TEX_SYMBOLS[measure])
-    plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+    plt.savefig(f"output/pdfplots/{pdf_name}", bbox_inches='tight')
     plt.close()
-    print(f"Saved plot to output/figures/{pdf_name}")
+    print(f"Saved plot to output/pdfplots/{pdf_name}")
     texstr += subfig(pdf_name, measure, human_cond)
 
     measure = 'delta'
     pdf_name = f'{CONDITION}_{measure}.pdf'
     plt.figure()
     plot_multifacet_bar(latex_df, MEASURES_TEX_SYMBOLS[measure], 1.4)
-    plt.savefig(f"output/figures/{pdf_name}", bbox_inches='tight')
+    plt.savefig(f"output/pdfplots/{pdf_name}", bbox_inches='tight')
     plt.close()
-    print(f"Saved plot to output/figures/{pdf_name}")
+    print(f"Saved plot to output/pdfplots/{pdf_name}")
     texstr += subfig(pdf_name, measure, human_cond)
     texstr += r"""\caption{\small Visualized transition matrix for window samples with \textbf{%s} modes in $W_H$, in the test set. Each subplot corresponds to a specific starting mode (L, D, or H), and shows, for the ground truth and our models, the probability or expected value of transitions based on the modes encountered, with respect to the destination mode ("To"), represented as colored bars.}
     \label{fig:modes_for_%s}
 \end{figure}""" % (human_cond, CONDITION)
-    with open('output/figures/modes all.tex', "a") as f:
+    with open('output/pdfplots/modes all.tex', "a") as f:
         f.write(texstr)
     print(texstr)
 
