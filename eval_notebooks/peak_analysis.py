@@ -61,25 +61,36 @@ The combined DataFrame includes:
 import matplotlib.pyplot as plt
 import seaborn as sns
 #%%
-df = combined_df.sample(frac=0.011).sort_values(['human_name'])
+df = combined_df.sample(frac=0.001).sort_values(['human_name'])
 #%%
 # def plot_facet_boxplots(df):
 # Define color palette for conditions
-condition_order = ["L_only_Wh", "D_only_Wh", "H_only_Wh", "mixed", "any_Wh"]
-condition_labels = {"L_only_Wh": "L", "D_only_Wh": "D", "H_only_Wh": "H", "mixed": "mixed", "any_Wh": "any"}
-condition_palette = {'L': '#1f77b4', 'D': '#ff7f0e', 'H': '#d62728', 'mixed': 'purple', 'any': '#444444'}
-df = df[df['condition'].isin(condition_order)].copy()
+ANY_NAME = r"$\forall\mathbf{y}_{W_H}$"
+condition_order = ["L", "D", "H", "mixed", ANY_NAME]
+condition_labels = {"L_only_Wh": "L", "D_only_Wh": "D", "H_only_Wh": "H", "mixed": "mixed", "any_Wh": ANY_NAME}
+condition_palette = {'L': '#1f77b4', 'D': '#ff7f0e', 'H': '#d62728', 'mixed': 'purple', ANY_NAME: '#444444'}
+# df = df[df['condition'].isin(condition_order)].copy()
 df['cond_label'] = df['condition'].map(condition_labels)
-cond_label_order = [condition_labels[c] for c in condition_order]
+# cond_label_order = [condition_labels[c] for c in condition_order]
 
-models = df['human_name'].unique()
+models = list(df['human_name'].unique())*4
 measures = ['count', 'prominence', 'width']
 if 'energy_delta' in df['measure'].unique():
     measures.append('energy_delta')
-
 n_rows = len(models)
 n_cols = len(measures)
-fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 2.5 * n_rows), sharey='col')
+
+
+def get_model_group(model_name):
+    if "sequence" in model_name:
+        return "Sequence"
+    elif "channel" in model_name:
+        return "Channel"
+    else:
+        return model_name.split()[-1]  # last word as group
+
+
+fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 2 * n_rows), sharey='col')
 
 if n_rows == 1:
     axes = [axes]
@@ -91,29 +102,35 @@ for i, model in enumerate(models):
         ax = axes[i][j]
         data = df[(df['human_name'] == model) & (df['measure'] == measure)]
         if not data.empty:
-
             sns.boxplot(
                 data=data,
                 x='value',
                 y='cond_label',
                 hue='cond_label',
-                order=cond_label_order,
+                order=condition_order,
                 palette=condition_palette,
                 boxprops=dict(edgecolor='black', linewidth=1),
-                # autorange=True,
-                notch=True,
                 ax=ax,
                 showfliers=False,
                 orient='h'
             )
-        ax.set_title(f"{model} - {measure}", fontsize=10)
+        # ax.set_title(f"{model} - {measure}", fontsize=10)
         if j == 0:
-            ax.set_ylabel(model, rotation=0, labelpad=30)
+            ax.set_ylabel(model, rotation=90)#, labelpad=40)
         else:
             ax.set_ylabel('')
-        ax.set_xlabel(model)
+        if i == 0:
+            ax.set_title(measure)
+        else:
+            ax.set_title('')
+        ax.set_xlabel('')
+        # Hide y-tick labels (conditions)
+        ax.set_yticklabels([])
         sns.despine(ax=ax)
-plt.tight_layout()
+# Add custom legend for conditions to the right of the plot
+handles = [Patch(facecolor=condition_palette[label], edgecolor='black', label=label) for label in condition_order]
+fig.legend(handles=handles, title='Modes in $W_H$', loc='upper left', bbox_to_anchor=(.99, .99))
+plt.tight_layout(rect=[0, 0, 1, 1])
 plt.show()
 
 #%%## Getting Precalculated distances from config
