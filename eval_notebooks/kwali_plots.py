@@ -5,6 +5,7 @@ from pathlib import Path
 import os
 import matplotlib.pyplot as plt
 import plotly
+import seaborn as sns
 from src.config import load_config_from_file
 import src.hdf_cache
 import src.data_loaders
@@ -29,8 +30,8 @@ data_module = DataSetClass(**C.data)
 
 data_module.prepare_data()
 data_module.setup()
-test_df = data_module.data[data_module.data['ShotNum'].isin(data_module.test_shots)]
-test_df
+TEST_DF = data_module.data[data_module.data['ShotNum'].isin(data_module.test_shots)]
+TEST_DF
 # %%
 from importlib import reload
 reload(src.hdf_cache)
@@ -44,32 +45,42 @@ C_COLOR_SCALE = plotly.colors.qualitative.Pastel
 #%%
 # Organize the samples into a grid with 2 columns and as many rows as needed
 
-def plot_one_window_many_samples(samples, caches):
-    num_samples = len(samples)
+def plot_one_window_many_samples(cache_list, shot, t):
+    num_samples = len(cache_list)
     print(f"Plotting {num_samples} samples.")
     num_cols = 2
     num_rows = (num_samples // num_cols)
-    fig, axes = plt.subplots(num_rows, num_cols, figsize=(10, 4 * num_rows), sharex=True, sharey=True,layout="constrained")
+    sns.set_theme(style="whitegrid")
 
-    # Flatten axes for easy indexing if only one row
-    if num_rows == 1:
-        axes = axes.reshape(1, -1)
+    fig, axes = plt.subplots(
+        num_rows,
+        num_cols,
+        figsize=(10, 4 * num_rows),
+        sharex=True,
+        sharey=True,
+        layout="constrained",
+        gridspec_kw={
+            'hspace': 0.05,
+            'wspace': -0.05
+        }
+    )
+    for idx, cache_path in enumerate(cache_list):
+        model_name = cache_path.stem
+        print(f"Processing window {window} with cache {cache_path.stem} for shot {shot} at time {t}")
+        cache = src.hdf_cache.TestStepHDFCache(cache_path.stem)
+        sample, l_pred, _l_real = cache.quick_window(shot, t, TEST_DF)
+        # Flatten axes for easy indexing if only one row
+        if num_rows == 1:
+            axes = axes.reshape(1, -1)
 
-    for idx, sample in enumerate(samples):
-        wf = data.shape[1]
-        wh = len(l_real) - wf
-        data.shape, l_real.shape
         row = idx // num_cols
         col = idx % num_cols
         ax = axes[row, col]
-        for label in (ax.get_xticklabels() + ax.get_yticklabels()):
-            label.set_fontname('serif')
-        # ax.set_ylabel("Amplitude")
-        ax.grid(True)
         for ch in range(sample.shape[0]):
-            ax.plot(sample[ch, :], label=CHANNEL_NAMES[ch])
-        ax.set_title(f"{caches[idx].stem}")
-        if idx == num_samples-1:
+            sns.lineplot(x=range(sample[ch, :].shape[0]), y=sample[ch, :], ax=ax, label=CHANNEL_NAMES[ch])
+        ax.set_title(f"{model_name}", fontsize=12)
+        fig.legends.clear()
+        if idx == num_samples - 1:
             ax.legend(
                 loc='upper left',
                 bbox_to_anchor=(1.01, 0.4),
@@ -79,13 +90,16 @@ def plot_one_window_many_samples(samples, caches):
                 title_fontsize='small',
                 frameon=False
             )
-            # ax.legend(fontsize="small", loc="lower left", bbox_to_anchor=(1,0))
+        else:
+            ax.legend_.remove() if ax.get_legend() else None
+        sns.despine(ax=ax)
+        ax.set_ylim(bottom=0)
+        ax.set_xlim(left=0)
 
     for idx in range(num_samples, num_rows * num_cols):
         row = idx // num_cols
         col = idx % num_cols
         axes[row, col].axis('off')
-
     # plt.tight_layout()
     plt.suptitle("5-Channel Time Series", fontsize=16)
     plt.show()
@@ -97,13 +111,17 @@ for window in windows:
         print(f"Processing window {window} with cache {cache_path.stem}")
         cache = src.hdf_cache.TestStepHDFCache(cache_path.stem)
         try:
-            data, l_pred, l_real = cache.quick_window(*window, test_df)
+            data, l_pred, l_real = cache.quick_window(*window, TEST_DF)
             samples.append(data)
 
         except KeyError:
             print(f"Window {window} not found in cache {cache_path.stem}")
             continue
-    plot_one_window_many_samples(samples, CACHED_H5_LIST[:4])
+
     break
+
+# %%
+shot, t = windows[3]
+plot_one_window_many_samples(CACHED_H5_LIST[:4], shot, t)
 
 # %%
