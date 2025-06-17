@@ -163,4 +163,4 @@ class TestStepHDFCache:
             sample = shot_t_group["generated_x"][:]
             labels_gen = shot_t_group["surr_labels_gen"][:]
             labels_real = shot_t_group["surr_labels_target"][:]
-        return sample, labels_gen, labels_real
+        return sample, labels_gen, labels_real, start_idx
