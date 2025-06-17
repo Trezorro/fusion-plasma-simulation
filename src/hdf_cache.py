@@ -147,7 +147,7 @@ class TestStepHDFCache:
         """Convenience function for plotting a specific window Wh and Wf around time t. """
         shot_data_index = dataset[dataset['ShotNum'] == shot_number].index
         if len(shot_data_index) == 0:
-            return None
+            raise ValueError(f"Shot {shot_number} not found in dataset.")
         start_idx = shot_data_index.get_indexer([time], method='nearest')[0]
         logger.info("Shot %s at t=%s is at start index %s", shot_number, time, start_idx)
         limit_to_idx = self.find_cached_idxs(shot_number)

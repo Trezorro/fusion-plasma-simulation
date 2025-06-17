@@ -31,13 +31,16 @@ window_set:
   - [77604, 0.72]
   - [77604, 0.77]
   - [77409,1.32]
-  - [73631, 1.03]
   - [69514, 0.51]
   - [69514, 0.51]
   - [64770, 0.17] # L Mode boringness
   - [64770, 1.09] # H Mode boringness, middenhoog NBI
+  - [64770, 1.52] # H mode shit gets loose
+  - [61237, 0.89] # 75% BIG peaks
   - [61028, 0.98] # 75%
   - [61028, 1.12] # 78%
+  - [60813,1.00] # NBI ramping up
+  - [60813,1.42] # ramped up to 75%
   - [77595, 0.94] # High NBI
   - [76702, 1.14] # high NBI
 
