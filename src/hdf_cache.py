@@ -3,6 +3,7 @@ from typing import Literal
 import h5py
 from pathlib import Path
 import numpy as np
+import pandas as pd
 import torch
 import logging
 from src.config import get_current_config
@@ -141,3 +142,25 @@ class TestStepHDFCache:
                 return []
             shot_group = f[str(shot_number)]
             return sorted(int(k) for k in shot_group.keys() if k.isdigit())
+
+    def quick_window(self, shot_number, time, dataset, repeat=1):
+        """Convenience function for plotting a specific window Wh and Wf around time t. """
+        shot_data_index = dataset[dataset['ShotNum'] == shot_number].index
+        if len(shot_data_index) == 0:
+            return None
+        start_idx = shot_data_index.get_indexer([time], method='nearest')[0]
+        logger.info("Shot %s at t=%s is at start index %s", shot_number, time, start_idx)
+        limit_to_idx = self.find_cached_idxs(shot_number)
+        start_idx = limit_to_idx[pd.Index(limit_to_idx).get_indexer([start_idx], method='nearest')[0]]
+        logger.info(
+            "Adjusted to available indeces, we get idx %s with time %.4f", start_idx, shot_data_index[start_idx]
+        )
+        with h5py.File(self.h5_path, "r") as f:
+            group_path = f"{shot_number}/{start_idx}"
+            if group_path not in f:
+                raise KeyError(f"No cache for {group_path}")
+            shot_t_group = f[group_path]
+            sample = shot_t_group["generated_x"][:]
+            labels_gen = shot_t_group["surr_labels_gen"][:]
+            labels_real = shot_t_group["surr_labels_target"][:]
+        return sample, labels_gen, labels_real

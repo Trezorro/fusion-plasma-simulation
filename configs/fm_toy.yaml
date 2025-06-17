@@ -20,7 +20,7 @@ patience: 20
 gradient_clip_val: 10  # in testing, lower values did not help prevent loss explosions. This is just a safeguard
 skip_log_summary: false
 
-test_cache_name: ${ run_name }
+# test_cache_name: ${ run_name }
 test_cache_mode: create # create or use
 
 
