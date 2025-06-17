@@ -1,4 +1,3 @@
-
 #%% Imports
 import pandas as pd
 from pathlib import Path
@@ -219,25 +218,24 @@ cache_experiment_map
 #%% map the cache name to the rows in runs
 final_df = combined_df.join(cache_experiment_map, on='name')
 
-#%%
 MODEL_ORDER = [
-    'FM-Sequence-Tiny-Gaussian',
-    'FM-Sequence-Gaussian',
-    'FM-Sequence-2x-Gaussian',
-    'FM-Sequence-Brownian',
-    'FM-Sequence-Constant',
-    'FM-Sequence-CP',
-    'FM-Sequence-Resampled',
-    'FM-Channel-Gaussian',
-    'FM-Channel-Brownian',
-    'FM-Channel-CP',
-    'FM-Channel-Resampled',
-    # 'FM-Channel-AllCov-Brownian',
-    'FM-Sequence-AllCov-Brownian',
-    'Unet-Sequence-AllCov-Brownian',
-    'Unet-Sequence-Brownian',
     'Unet-Channel-Brownian',
-    'Ground Truth'
+    'Unet-Sequence-Brownian',
+    'Unet-Sequence-AllCov-Brownian',
+    'FM-Sequence-AllCov-Brownian',
+    # 'FM-Channel-AllCov-Brownian',
+    'FM-Sequence-Constant',
+    'FM-Channel-CP',
+    'FM-Sequence-CP',
+    'FM-Channel-Resampled',
+    'FM-Sequence-Resampled',
+    'FM-Channel-Brownian',
+    'FM-Sequence-Brownian',
+    'FM-Sequence-Tiny-Gaussian',
+    'FM-Sequence-2x-Gaussian',
+    'FM-Sequence-Gaussian',
+    'FM-Channel-Gaussian',
+    'Ground Truth'  # sourced from 'FM-Sequence-Gaussian' -> distribution == Real
 ]
 CONCAT_SORT = [
     '-',
@@ -245,7 +243,6 @@ CONCAT_SORT = [
     'channels',
 ]
 published_names_groups = cache_experiment_map.set_index('human_name')
-#%% Pivot to Latex format
 CONDITION = 'any_Wh'
 
 # Sort by Model, History Length, Full Covariates, WH concat dim, Prior
@@ -267,71 +264,83 @@ sort_order_cols_inner = [
 # Map measure names to LaTeX symbols
 MEASURES_TEX_SYMBOLS = {
     'transition_counts': r'$\mathbb{E}(N^\mathbb{T}_{W_F})$',
-    'transition_counts_sq_error': r'$\|{\mathbb{y}_{W_H}^\text{gen},\mathbb{y}_{W_H}^\text{real}}\|^2$',
+    'transition_counts_sq_error': r'$\text{MSE}(N,\hat{N})$',
     'transition_gt0': r'$\mathbb{P}(N^\mathbb{T}_{W_F}>0)$',
     'delta': r'$\Delta$',
     'SE': r'$\pm$',
 }
 
-
-pivoted_T = final_df.query(f"condition=='{CONDITION}'").pivot_table(
-    index=['to', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
-)
-# Reindex pivoted_T to match the sorted human_name order
-pivoted_T = pivoted_T.reindex(
-    pd.MultiIndex.from_product([sort_order_trans, MODEL_ORDER], names=['To', ''])
-).reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']),
-          axis='columns').dropna(how='all')
-
-#%% GROUPED
-# pivoted_T_g = final_df.query(f"condition=='{CONDITION}'").pivot_table(
-#     index=['to', 'Conditioning', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
-# ).reindex(
-#     pd.MultiIndex.from_product([sort_order_trans, CONCAT_SORT, MODEL_ORDER], names=['To', 'Conditioning', ''])
-# ).reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']),
-#           axis='columns').dropna(how='all')
-# pivoted_T_g
+HUMAN_CONDITIONS = ["any", 'mixed', 'only $L$', 'only $D$', 'only $H$']
+CONDITIONS = ["any_Wh", 'mixed', 'L_only_Wh', 'D_only_Wh', 'H_only_Wh']
 #%%
-
-#%%
-# pivoted_T_g.to_excel(f"output/tables/mode_transitions{CONDITION}.xlsx", index=True, float_format="%.3f")
-# %%
-# df_latex = pivoted.round(3)
-# df_latex.replace(0, '', inplace=True)
-
-
-# Rename columns in df_latex and pivoted
-def rename_cols(df):
-    new_cols = []
-    for col in df.columns:
-        if isinstance(col, tuple):
-            to, measure = col
-            measure_sym = MEASURES_TEX_SYMBOLS.get(measure, measure)
-            new_cols.append((to, measure_sym))
-        else:
-            new_cols.append(MEASURES_TEX_SYMBOLS.get(col, col))
-    df.columns = pd.MultiIndex.from_tuples(new_cols, names=df.columns.names)
-    return df
+for cond, hcondition in zip(CONDITIONS, HUMAN_CONDITIONS):
+    pivoted_T = final_df.query(f"condition=='{cond}'").pivot_table(
+        index=['to', 'human_name'], columns=['from', 'measure'], values='value', fill_value=0
+    )
+    # Reindex pivoted_T to match the sorted human_name order
+    pivoted_T = pivoted_T.reindex(
+        pd.MultiIndex.from_product([sort_order_trans, MODEL_ORDER], names=['To', ''])
+    ).reindex(pd.MultiIndex.from_product([sort_order_trans, sort_order_cols_inner], names=['From', '']),
+            axis='columns').dropna(how='all')
 
 
-latex_df = rename_cols(pivoted_T)
-# pivoted_T_g = rename_cols(pivoted_T_g)
-latex_str = latex_df.replace(0.0, '').fillna('').round(2).to_latex(
-    index=True,
-    escape=False,
-    float_format="%.3f",
-    longtable=True,
-    # formatters={'transition_counts': lambda num: f"\mathbb{{E}}"},
-    position='h',
-    multicolumn_format='c',
-)
-# print(latex_str)
-# Save the LaTeX string to a file
-output_path = Path(f"output/tables/{CONDITION}.tex")
-output_path.parent.mkdir(parents=True, exist_ok=True)
-with open(output_path, "w") as f:
-    f.write(latex_str)
-print(f"LaTeX table saved to {output_path}")
+    # Rename columns in df_latex and pivoted
+    def rename_cols(df):
+        new_cols = []
+        for col in df.columns:
+            if isinstance(col, tuple):
+                to, measure = col
+                measure_sym = MEASURES_TEX_SYMBOLS.get(measure, measure)
+                new_cols.append((to, measure_sym))
+            else:
+                new_cols.append(MEASURES_TEX_SYMBOLS.get(col, col))
+        df.columns = pd.MultiIndex.from_tuples(new_cols, names=df.columns.names)
+        return df
+
+    # Find the minimum value per index (level 0), over every second column (level 1 index is even)
+    def highlight_min(s, row, col):
+        # s: value in the Series (float)
+        # row is the first level of the index (str)
+        # col: tuple (from_state, measure)
+        # Only highlight for every second column (level 1 index is even)
+        # highlight the min per level 0 index and for the column
+        col_idx = list(pivoted_T.columns).index(col)
+        if s == 0.0:
+            return s
+        if col_idx % 2 == 0:
+            # Find min for this index (level 0) over all columns with same level 0, every second col
+            min_val = pivoted_T.loc[row, col].min(skipna=True)
+            return f"\\textbf{{{s:.4f}}}" if s == min_val else s
+        return s
+    formatted_pivot = pivoted_T.copy()
+
+    # Apply formatting to each column
+    for row in formatted_pivot.index.get_level_values(0):
+        for col in formatted_pivot.columns:
+            formatted_pivot[col] = formatted_pivot[col].apply(lambda s: highlight_min(s, row, col))
+
+                # print(f"\\textbf{{{float(s):.3f}}}" if s == min_val else f"{s:.3f}")
+
+    latex_df = rename_cols(formatted_pivot)
+    # pivoted_T_g = rename_cols(pivoted_T_g)
+    latex_str = latex_df.replace(0.0, '').fillna('').to_latex(
+        index=True,
+        escape=False,
+        float_format="%.4f",
+        longtable=True,
+        # formatters={'transition_counts': lambda num: f"\mathbb{{E}}"},
+        position='h',
+        multicolumn_format='c',
+        caption=f"Overview of transition counts, probabilities, and respective errors for the {hcondition} mode sample subset.",
+        label=f"tab:modes_{cond}",
+    )
+    # print(latex_str)
+    # Save the LaTeX string to a file
+    output_path = Path(f"output/tables/mode/{cond}.tex")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        f.write(latex_str)
+    print(f"LaTeX table saved to {output_path}")
 
 # %%
 
@@ -391,11 +400,23 @@ def plot_multifacet_bar(pivoted, measure='transition_counts', outline=False):
         # ax.set_xlim(0, global_max * 1.05)
         ax.set_yticks([y + 0.4 for y in range(len(models))])
         ax.set_yticklabels(models)
+        # Set color for tick labels
+        for tick, label in zip(ax.get_yticklabels(), models):
+            if "sequence" in label.lower():
+                tick.set_color('darkblue')
+            if 'unet' in label.lower():
+                tick.set_style('italic')
+            if 'brown' in label.lower():
+                tick.set_fontweight('bold')
+            if 'cp' in label.lower():
+                tick.set_fontweight('bold')
+            if 'truth' in label.lower():
+                tick.set_fontweight('bold')
         if i == 0:
             ax.set_ylabel("Model")
         else:
             ax.set_ylabel("")
-        ax.set_xlabel("$" + measure + "$")
+        ax.set_xlabel(measure)
         ax.legend(title="To state")
     plt.tight_layout()
     # plt.show()
@@ -459,6 +480,20 @@ def plot_multifacet_stacked_bar(pivoted, measure='transition_counts', outlines=F
         ax.set_title(f"From: {from_state}")
         # ax.set_xlim(0, global_max * 1.05)
         ax.set_yticks(range(len(models)))
+        # Color tick labels blue if "sequence" is in the model name
+        ax.set_yticklabels(models)
+        # Set color for tick labels
+        for tick, label in zip(ax.get_yticklabels(), models):
+            if "sequence" in label.lower():
+                tick.set_color('darkblue')
+            if 'unet' in label.lower():
+                tick.set_style('italic')
+            if 'brown' in label.lower():
+                tick.set_fontweight('bold')
+            if 'cp' in label.lower():
+                tick.set_fontweight('bold')
+            if 'truth' in label.lower():
+                tick.set_fontweight('bold')
         ax.set_yticklabels(models)
         if i == 0:
             ax.set_ylabel("Model")
@@ -620,10 +655,12 @@ latex_table = cache_experiment_map.reset_index().pivot_table(
     ],
     values='human_name',
     aggfunc='first'
-).to_latex(escape=False, index=True)
+).rename(columns={'human_name': 'Model'})
+
 with open("output/tables/model_overview.tex", "w") as f:
-    f.write(latex_table)
+    f.write(latex_table.to_latex(escape=False, index=True))
 print("LaTeX table saved to output/tables/model_overview.tex")
+latex_table
 # %%
 run_map = runs.set_index('run_name')['human_name'] + ' (' + runs.index + ')'
 run_map.to_dict()
