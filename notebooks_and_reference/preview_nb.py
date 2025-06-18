@@ -1,11 +1,14 @@
 """Old janky notebook"""
 # %%
+from matplotlib.colors import rgb2hex
+from narwhals import col
 import pandas as pd
 from pathlib import Path
 import glob
 import numpy as np
 import re
 import matplotlib.pyplot as plt
+import plotly
 import plotly.express as px
 from plotly.tools import mpl_to_plotly
 import datapane as dp
@@ -61,7 +64,7 @@ shot_no_list, sig_all, label_all = get_shot_index(data_dir)
 
 # %%
 # example
-shotno = 61009  # shot_no_list[21]
+shotno = 60813  # shot_no_list[21]
 
 sig = pd.read_parquet(sig_all[shotno])
 label = pd.read_csv(label_all[shotno])
@@ -182,49 +185,142 @@ sig[ALL_SIG_COLLS] = (sig[ALL_SIG_COLLS] - sig[ALL_SIG_COLLS].mean()) / sig[ALL_
 label
 
 # %%
+import seaborn as sns
+import matplotlib.colors as colors
+
 # Plot observables
-fig, ax = plt.subplots(figsize=(10, 4), dpi=200)
-plt.title(f"Shot #{shotno} - Observables")
-ax.set_ylabel("Observables (normalized)")
-ax.plot(
-    sig["time"],
-    sig[cols_data],
-)
-# ax.set_ylim([-3, 5.3])
-# ax.set_xlim([0.6, 0.8])
+def plot_shot(shotno, sig, label, cols_data):
+    signals = sig[cols_data].copy()
+    signals = (signals - signals.min()) / (signals.max() - signals.min())
+    fig, ax = plt.subplots(figsize=(10, 4), dpi=200)
+    plt.title(f"Shot #{shotno} - Observables")
+    ax.set_ylabel("Observables (normalized)")
+    # Convert COLOR_SCALE hex colors to RGB tuples
+    # def hex_to_rgb(hex_color):
+    #     hex_color = hex_color.lstrip('#')
+    #     return tuple(int(hex_color[i:i+2], 16)/255 for i in (0, 2, 4))
 
-ax2 = ax.twinx()
+    # color_tuples = [colors.hex2color(c) if isinstance(c, str) and c.startswith('#') else c for c in COLOR_SCALE]
 
-# interpolate missing labels (label==0) to previous
-labelvals = np.array(label["LHD_label"])
-mask = labelvals == 0
-labelvals[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), labelvals[~mask])
-# plot filled area:
-# ax2.fill_between(label["time"], labelvals, color='red', alpha=.2, )
-# ax2.plot(label["time"], labelvals, color='red', alpha=.3, )
-# set axis limits:
-ax2.set_ylim([0.99, 3])
-ax2.set_ylabel("Confinement Mode")
+    ax.plot(sig["time"], signals, label=cols_data, linewidth=1,
+            # color=color_tuples[:len(cols_data)]
+            )
+    # ax.set_ylim([-3, 5.3])
+    ax.set_xlim(left=0)
 
-# Change y-axis tick positions
-ax2.set_yticks([1, 2, 3])
-# Change y-axis tick labels
-ax2.set_yticklabels(['L', 'D', 'H'])
-legend = ax.legend(cols_data, loc='upper left')
-plt.show()
-p_fig = mpl_to_plotly(fig)
-# p_fig.write_html('plots/first_figure.html', auto_open=True)
-report = dp.Blocks(
-        # title="Plots",
-        blocks=[
+    ax.set_xlabel("Shot time (s)")
+    ax2 = ax.twinx()
+    sns.despine(ax=ax)
+    sns.despine(ax=ax2)
 
-dp.DataTable(sig[ALL_SIG_COLLS], label="Data"),
-# dp.DataTable(sig.describe(), label="Summary"),
-dp.Plot(p_fig, label="Observables"),
-dp.Plot(fig, label="Observables (mpl)")
-        ],)
+    # interpolate missing labels (label==0) to previous
+    labelvals = np.array(label["LHD_label"])
+    mask = labelvals == 0
+    labelvals[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), labelvals[~mask])
+    # plot filled area:
+    low = labelvals == 1
+    ax2.fill_between(
+    label["time"],
+    (labelvals == 3),
+    color='red',
+    alpha=.1,
+    label='H'
+    )
 
-dp.save_report(report, path=f'output/plots/report_{shotno}.html', open=True)
+    ax2.fill_between(
+    label["time"],
+    labelvals==1 ,
+    color='blue',
+    alpha=.06,
+    )
+    ax2.fill_between(
+    label["time"],
+    labelvals == 2,
+    color='yellow',
+    alpha=.1,
+    )
+    ax2.plot(label["time"], labelvals, color='red', alpha=.3, )
+    # set axis limits:
+    ax2.set_ylim([0, 1])
+    # ax2.set_ylabel("Confinement Mode")
+
+    # Change y-axis tick positions
+    ax2.set_yticks([])
+    # Change y-axis tick labels
+    # ax2.set_yticklabels(None)
+    # legend = ax.legend(loc='best')
+    ax.legend(
+                loc='lower left',
+                bbox_to_anchor=(.97, 0.4),
+                borderaxespad=0.0,
+                # fontsize='small',
+                # title=r'$\mathbf{x}_{W_F}$',
+                # title_fontsize='small',
+                frameon=False
+            )
+    plt.tight_layout()
+    export_pdf(shotno, 6, 4, factor=2)
+    export_pdf(shotno, 15, 5, factor=2)
+    export_pdf(shotno, 15, 5, factor=1.5)
+    export_pdf(shotno, 15, 4, factor=1.5)
+    export_pdf(shotno, 15, 5, factor=1)
+    # plt.show()
+    plt.close()
+
+#%%
+import plotly
+C_CHANNEL_NAMES = ["NBI", "ECRH"]
+
+COLOR_SCALE = [c for c in plotly.colors.qualitative.Plotly]
+C_COLOR_SCALE = [c for c in plotly.colors.qualitative.Alphabet]
+# C_COLOR_SCALE = plotly.colors.qualitative.Pastel
+
+PDF_DIR = Path("output/pdfplots/shotplots")
+PDF_DIR.mkdir(exist_ok=True)
+SUBNAME = "observables"
+
+
+def export_pdf(
+    shot,
+    w=10,
+    h=6,
+    factor=1,
+):
+    w, h = w * factor, h * factor
+    fig = plt.gcf()  # Get the current figure
+    fig.set_size_inches(w, h)  # Swap width and height for vertical
+    pdf_path = PDF_DIR / f"{w:.1f}x{h:.1f}__{SUBNAME}_{shot}.pdf"
+    pdf_path.parent.mkdir(parents=False, exist_ok=True)
+    fig.savefig(pdf_path, bbox_inches='tight')
+
+
+TEST_SHOTS = [
+    57013, 76702, 77196, 73935, 61028, 64857, 73368, 60814, 77599, 61237, 77409, 76304, 77595, 65481, 77193, 68697,
+    69514, 68631, 67112, 63306, 64770, 60813, 64365, 77604, 77602
+]
+
+#%%
+for i, shotno in enumerate(TEST_SHOTS):
+    try:
+        sig = pd.read_parquet(sig_all[shotno])
+        label = pd.read_csv(label_all[shotno])
+        # sig[ALL_SIG_COLLS] = (sig[ALL_SIG_COLLS] - sig[ALL_SIG_COLLS].mean()) / sig[ALL_SIG_COLLS].std()
+        plot_shot(shotno, sig, label, cols_data)
+    except KeyError as e:
+        print("Couldnt find key:", e)
+# p_fig = mpl_to_plotly(fig)
+# # p_fig.write_html('plots/first_figure.html', auto_open=True)
+# report = dp.Blocks(
+#         # title="Plots",
+#         blocks=[
+
+# dp.DataTable(sig[ALL_SIG_COLLS], label="Data"),
+# # dp.DataTable(sig.describe(), label="Summary"),
+# dp.Plot(p_fig, label="Observables"),
+# dp.Plot(fig, label="Observables (mpl)")
+#         ],)
+
+# dp.save_report(report, path=f'output/plots/report_{shotno}.html', open=True)
 
 
 # %%
