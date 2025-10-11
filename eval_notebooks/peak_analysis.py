@@ -4,6 +4,7 @@
 
 import os
 import glob
+import numpy as np
 import pandas as pd
 from sklearn import metrics
 from tqdm import tqdm
@@ -43,20 +44,24 @@ MEASURE_LABEL = dict(
     prominence='Peak Prominence',
     width='Peak Width',
     base='Peak Base',
-    energy_delta=r'$\approx\text{ELM }\mathbf{E}\Delta$'
+    energy_ratio=r'$\approx\text{ELM }\mathbf{E}\Delta$ ratio'
 )
+
+
 #%%
 #%%# Helper: List all /peaks/* keys in an HDF5 file
 def list_peak_keys(h5_path):
     with pd.HDFStore(h5_path, "r") as store:
         return [k for k in store.keys() if k.startswith("/peaks/")]
 
+
 list_peak_keys(EXAMPLE_MODEL)
 #%%# Collect all DataFrames from all HDF5 files and all /peaks/* keys
 CONDITION_KEYS = ['/peaks/D_only_Wh', '/peaks/H_only_Wh', '/peaks/L_only_Wh', '/peaks/any_Wh', '/peaks/mixed']
 
+
 def iter_peak_properties_per_model(models: list[str], channel_name, sample=False, dummy_df=None):
-    for model in (pbar:= tqdm(models, desc="Loading models peaks")):
+    for model in (pbar := tqdm(models, desc="Loading models peaks")):
         pbar.set_postfix(model=model)
         all_peak_dfs = []
         if model == "Ground Truth":
@@ -93,6 +98,7 @@ def iter_peak_properties_per_model(models: list[str], channel_name, sample=False
         else:
             yield model, None
 
+
 m, combined_df = next(iter_peak_properties_per_model(MODEL_ORDER[1:2], 'DML', 0.01))
 
 #%%## DataFrame Structure and Available Dimensions
@@ -114,8 +120,7 @@ from matplotlib.patches import Patch, Rectangle
 import os
 from matplotlib.legend import Legend
 
-
-PDF_DIR = Path("output/pdfplots/peak_boxplot_with_base")
+PDF_DIR = Path("output/pdfplots/peak_boxplot_with_base_DMLratio")
 PDF_DIR.mkdir(exist_ok=True)
 
 #%%
@@ -124,7 +129,8 @@ PDF_DIR.mkdir(exist_ok=True)
 
 models = MODEL_ORDER
 
-def box_plot_peaks(models, channel = 'DML'):
+
+def box_plot_peaks(models, channel='DML'):
     model_iterator_for_channel = iter_peak_properties_per_model(models, channel, dummy_df=None)
     ANY_NAME = r"$\forall\mathbf{y}_{W_H}$"
     condition_order = ["L", "D", "H", "mixed", ANY_NAME]
@@ -134,15 +140,20 @@ def box_plot_peaks(models, channel = 'DML'):
     # cond_label_order = [condition_labels[c] for c in condition_order]
 
     measures = ['count', 'prominence', 'width', 'base']
-    if  channel == "DML":#'energy_delta' in df['measure'].unique():
-        measures.append('energy_delta')
+    if channel == "DML":  #'energy_delta' in df['measure'].unique():
+        measures.append('energy_ratio')
     n_rows = len(models)
     n_cols = len(measures)
 
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 2 * n_rows), sharex='col',
-                             gridspec_kw={'hspace': 0.4, 'wspace': 0.05},#layout="constrained"  # Add this argument
-
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(4 * n_cols, 2 * n_rows),
+        sharex='col',
+        gridspec_kw={
+            'hspace': 0.4,
+            'wspace': 0.05
+        },  #layout="constrained"  # Add this argument
     )
     # abnded rows:
     """
@@ -155,7 +166,7 @@ def box_plot_peaks(models, channel = 'DML'):
     """
     x = fig.subplotpars.left
     width = fig.subplotpars.right - fig.subplotpars.left
-    height = (fig.subplotpars.top - fig.subplotpars.bottom) / n_rows *0.99
+    height = (fig.subplotpars.top - fig.subplotpars.bottom) / n_rows * 0.99
     if n_rows == 1:
         axes = [axes]
     if n_cols == 1:
@@ -179,25 +190,34 @@ def box_plot_peaks(models, channel = 'DML'):
                 ghost_data = ground_truth_data[ground_truth_data['measure'] == measure]
                 if not ghost_data.empty:
                     sns.boxplot(
-                    data=ghost_data,
-                    x='value',
-                    y='cond_label',
-                    hue='cond_label',
-                    order=condition_order,
-                    palette=condition_palette,
-                    width=0.7,  # Reduced width for ghost boxes
-                    ax=ax,
-                    showfliers=False,
-                    orient='h',
-                    boxprops=dict(edgecolor='none', alpha=0.2),  # No borders, semi-transparent
-                    whiskerprops=dict(color='gray', linewidth=2, alpha=0.05)  # Whiskers match fill color
+                        data=ghost_data,
+                        x='value',
+                        y='cond_label',
+                        hue='cond_label',
+                        order=condition_order,
+                        palette=condition_palette,
+                        width=0.7,  # Reduced width for ghost boxes
+                        ax=ax,
+                        showfliers=False,
+                        orient='h',
+                        boxprops=dict(edgecolor='none', alpha=0.2),  # No borders, semi-transparent
+                        whiskerprops=dict(color='gray', linewidth=2, alpha=0.05)  # Whiskers match fill color
                     )
         if "seq" in model.lower():
-            subplot_rop_adj = fig.subplotpars.top*1.015
+            subplot_rop_adj = fig.subplotpars.top * 1.015
             print(subplot_rop_adj, fig.subplotpars.bottom, fig.subplotpars.hspace)
             rowy = subplot_rop_adj - (i + 1) * (subplot_rop_adj - fig.subplotpars.bottom) / n_rows
             print(rowy)
-            rect = Rectangle((x, rowy), width, height, color='lightblue', alpha=0.3, zorder=-1, transform=fig.transFigure, label='Sequential\nConditioning')
+            rect = Rectangle(
+                (x, rowy),
+                width,
+                height,
+                color='lightblue',
+                alpha=0.3,
+                zorder=-1,
+                transform=fig.transFigure,
+                label='Sequential\nConditioning'
+            )
             fig.patches.append(rect)
 
     # Plot the actual data for the current model
@@ -214,7 +234,8 @@ def box_plot_peaks(models, channel = 'DML'):
                     width=0.9 if not is_ground_truth else 0.7,
                     order=condition_order,
                     palette=condition_palette,
-                    boxprops=dict(edgecolor='black', linewidth=0.5) if not is_ground_truth else dict(edgecolor='none', alpha=0.7),
+                    boxprops=dict(edgecolor='black', linewidth=0.5)
+                    if not is_ground_truth else dict(edgecolor='none', alpha=0.7),
                     ax=ax,
                     showfliers=False,
                     orient='h'
@@ -248,10 +269,13 @@ def box_plot_peaks(models, channel = 'DML'):
                     fontweight='bold',
                     fontstyle=fontstyle
                 )
-            if j == n_cols -1 and i == n_rows -1:
+            if j == n_cols - 1 and i == n_rows - 1:
                 # Remove any existing legend
                 # Add a new legend positioned at the top right outside the axes
-                handles = [Patch(facecolor=condition_palette[label], edgecolor='black', label=label) for label in condition_order]
+                handles = [
+                    Patch(facecolor=condition_palette[label], edgecolor='black', label=label)
+                    for label in condition_order
+                ]
                 if 'rect' in locals():
                     handles.append(rect)
                 ax.legend(
@@ -284,17 +308,17 @@ def box_plot_peaks(models, channel = 'DML'):
     pdf_path.parent.mkdir(parents=False, exist_ok=True)
     fig.savefig(pdf_path, bbox_inches='tight')
     # Save a more vertical version (portrait orientation)
-    w, h = 5.77*1.2,  9.69*1.2
+    w, h = 5.77 * 1.2, 9.69 * 1.2
     pdf_path = PDF_DIR / f"peak_boxplots_{w:.0f}x{h:.0f}_vertical" / f"boxplots_{channel}.pdf"
     pdf_path.parent.mkdir(parents=False, exist_ok=True)
     fig.set_size_inches(w, h)  # Swap width and height for vertical
     fig.savefig(pdf_path, bbox_inches='tight', dpi=300)
-    w, h = 5.77*2,  9.69*2
+    w, h = 5.77 * 2, 9.69 * 2
     pdf_path = PDF_DIR / f"peak_boxplots_{w}x{h}_vertical2" / f"boxplots_{channel}.pdf"
     pdf_path.parent.mkdir(parents=False, exist_ok=True)
     fig.set_size_inches(w, h)  # Swap width and height for vertical
     fig.savefig(pdf_path, bbox_inches='tight', dpi=300)
-    w, h = 5.77*2.5,  9.69*2.5
+    w, h = 5.77 * 2.5, 9.69 * 2.5
     fig.set_size_inches(w, h)  # Swap width and height for vertical
     pdf_path = PDF_DIR / f"peak_boxplots_{w:.0f}x{h:.0f}_vertical25" / f"boxplots_{channel}.pdf"
     pdf_path.parent.mkdir(parents=False, exist_ok=True)
@@ -321,12 +345,12 @@ def box_plot_peaks(models, channel = 'DML'):
     return fig
 
 
-box_plot_peaks(models, 'FIR_core')
-box_plot_peaks(models, 'PD')
-box_plot_peaks(models, 'PD large peaks')
+# box_plot_peaks(models, 'FIR_core')
+# box_plot_peaks(models, 'PD')
+# box_plot_peaks(models, 'PD large peaks')
 box_plot_peaks(models, 'DML')
-box_plot_peaks(models, 'POHM')
-box_plot_peaks(models, 'Z_axis')
+# box_plot_peaks(models, 'POHM')
+# box_plot_peaks(models, 'Z_axis')
 # plt.gcf()
 # fig.set_size_inches(w, h)  # Swap width and height for vertical
 # fig.savefig(vertical_pdf_path, bbox_inches='tight', dpi=300)
@@ -411,7 +435,7 @@ def parse_metrics_json(json_path):
         elif len(parts) == 4:
             condition, property, statistic, channel = parts
             if "NBI" in property:
-                property = "ELM "+  channel.split('_')[-1]
+                property = "ELM " + channel.split('_')[-1]
                 channel = "PDxNBI"
         elif len(parts) == 3:
             property, statistic, channel = parts
@@ -451,7 +475,7 @@ def parse_metrics_json(json_path):
     return df
 
 
-parse_metrics_json(json_files[0]).query("'2d_wasserstein'== statistic")
+parse_metrics_json(json_files[0])  #.query("'2d_wasserstein'== statistic")
 
 #%% Concatenate all parsed DataFrames from the JSON files
 all_json_dfs = [parse_metrics_json(jf) for jf in json_files]
@@ -477,20 +501,27 @@ metrics_df['condition'] = metrics_df['condition'].map(condition_labels)
 
 # Replace underscores with spaces and capitalize in 'property' column
 metrics_df['statistic'] = metrics_df['statistic'].str.replace('_', ' ').str.title().str.replace('Mse', 'MSE')
-metrics_df['channel'] = metrics_df['channel'].str.replace('_', ' ').str.title()
+metrics_df['channel'] = metrics_df['channel']  #.str.replace('_', ' ')#.str.title()
 for col in metrics_df.columns:
     print(f"Unique values in '{col}': {metrics_df[col].unique()}\n")
 #%%
 channel = "FIR core"
-peaks_metrics_df = metrics_df.loc[metrics_df['property'].str.contains("peak") & (metrics_df['statistic'] != 'Pairwise Rmse')]
+peaks_metrics_df = metrics_df.loc[metrics_df['property'].str.contains("peak") &
+                                  (metrics_df['statistic'] != 'Pairwise Rmse')]
 for col in peaks_metrics_df.columns:
     print(f"Unique values in '{col}': {peaks_metrics_df[col].unique()}\n")
 window_metrics_df = metrics_df.loc[~metrics_df['property'].str.contains("peak")]
-
-peaks_metrics_df.loc[:, 'property'] = peaks_metrics_df['property'].str.replace('peak_', '', regex=False, )
-property_order = ['count', 'prominence', 'width', 'base', 'energy_delta']
+#%%
+peaks_metrics_df.loc[:, 'property'] = peaks_metrics_df['property'].str.replace(
+    'peak_',
+    '',
+    regex=False,
+)
+property_order = ['count', 'prominence', 'width', 'base', 'energy_ratio']
 peaks_metrics_df = peaks_metrics_df.loc[peaks_metrics_df['property'].isin(property_order)]
-pivot = peaks_metrics_df.query(f'channel == "{channel.title()}"').pivot_table(
+pivot = peaks_metrics_df.query(
+    f'channel == "{channel.title()}"'
+).pivot_table(  # TODO FIX 
     columns=["property", "condition", "statistic"], values="value", index=['model']
 )
 # Sort columns by CONDS order for 'condition' level
@@ -527,6 +558,95 @@ if "condition" in pivot.columns.names:
             new_columns.append(tuple(col))
         pivot.columns = pd.MultiIndex.from_tuples(new_columns, names=pivot.columns.names)
 pivot
+#%%
+import numpy as np
+channel = ''
+base_metrics_df = window_metrics_df.query("property not in ['ELM count', 'ELM prominence', 'ELM width']")
+base_metrics_df_log = base_metrics_df.copy()
+base_metrics_df_log['value'] = np.log10(base_metrics_df['value'])
+pivot_window = base_metrics_df.pivot_table(
+    columns=[
+        # "condition",
+        "property",
+        "statistic",
+    ],
+    values="value",
+    index=['channel', 'model']
+)
+# Specify the desired channel order
+desired_channels = [
+    "mean",
+    # "FIR_core",
+
+    "PD",
+    "DML",
+    "POHM",
+    # "Z_axis",
+]
+all_properties = pivot_window.columns.get_level_values(0)
+disired_properties = [
+    'magnitude',
+    'magnitude',
+    'mode labels',
+    'magnitude window mean',
+    'magnitude window var',
+    'magnitude window skew',
+    'magnitude window kurtosis',
+    'diff window mean',
+    'diff window var',
+    'diff window skew',
+    'diff window kurtosis',
+]
+desired_order_mapping = {channel: i for i, channel in enumerate(desired_channels)}
+desired_order_mapping_props = {channel: i for i, channel in enumerate(disired_properties)}
+# Filter the pivot_window to include only the desired channels
+filtered_pivot_window = pivot_window.loc[pivot_window.index.get_level_values(0).isin(desired_channels)]
+# Create a mapping for the desired order
+# filtered_pivot_window = filtered_pivot_window.loc[
+#     filtered_pivot_window.columns.get_level_values(0).isin(disired_properties)]
+
+# # Create a mapping for the desired order
+
+# Sort the filtered pivot_window based on the desired order for the first level
+sorted_pivot_window = filtered_pivot_window.sort_index(key=lambda idx: idx.map(desired_order_mapping),
+                                                       level=0).sort_index(
+                                                           key=lambda idx: idx.map(desired_order_mapping_props),
+                                                           level=0,
+                                                           axis=1
+                                                       )
+
+sorted_pivot_window
+
+
+# def highlight_min(s, col):
+#     return f"\\textbf{{{s:.3f}}}" if s == pivot[col].min() else f"{s:.3f}"
+
+
+# # Apply formatting to each column
+# formatted_pivot = sorted_pivot_window.copy()
+# for col in sorted_pivot_window.columns:
+#     formatted_pivot[col] = sorted_pivot_window[col].apply(lambda s: highlight_min(s, col))
+
+latex_str = sorted_pivot_window.replace(0.0, '').fillna('').to_latex(
+    index=True,
+    escape=False,
+    float_format="%.3e",  # Use scientific notation with 2 decimal places
+    longtable=True,
+    position='h',
+    caption="Pairwise errors and magnitude mse",
+    multicolumn_format='c',
+)
+
+# Save the LaTeX string to a file
+output_path = Path(f"output/tables/base_metrics_detail.tex")
+output_path.parent.mkdir(parents=True, exist_ok=True)
+with open(output_path, "w") as f:
+    f.write(latex_str)
+sorted_pivot_window.to_excel(f"output/tables/base_metrics_detail.xlsx", index=True, 
+# float_format="%.3f",
+    float_format="%.4e",  # Use scientific notation with 2 decimal places
+                             merge_cells=True)
+#%%
 # FORMATTING
 # condition_labels = {"L_only_Wh": "L", "D_only_Wh": "D", "H_only_Wh": "H", "mixed": "mixed", "any_Wh": ANY_NAME}
 # condition_palette = {'L': '#1f77b4', 'D': '#ff7f0e', 'H': '#d62728', 'mixed': 'purple', ANY_NAME: '#444444'}
@@ -534,8 +654,8 @@ pivot
 # # cond_label_order = [condition_labels[c] for c in condition_order]
 
 # measures = ['count', 'prominence', 'width']
-# if  channel == "DML":#'energy_delta' in df['measure'].unique():
-#     measures.append('energy_delta')
+# if  channel == "DML":#'energy_ratio' in df['measure'].unique():
+#     measures.append('energy_ratio')
 # n_rows = len(models)
 # n_cols = len(measures)
 # Print unique values for each column level in the pivot table
@@ -549,16 +669,15 @@ else:
 pivot.to_excel(f"output/tables/peak_props_{channel}.xlsx", index=True, float_format="%.3f", merge_cells=True)
 # pivot.to_excel()
 pivot.columns = pivot.columns.set_levels(
-    [r'$\mathcal{W}_{\text{marg}}$', r'pair MSE', r'$\mathcal{W}_{\text{pair}}$'],
-    level='statistic'
+    [r'$\mathcal{W}_{\text{marg}}$', r'pair MSE', r'$\mathcal{W}_{\text{pair}}$'], level='statistic'
 )
 # Automatically split wide tables into two LaTeX tables if too many columns
 MAX_COLS = 10  # Adjust as needed for your document
 
-
 caption = f"Model comparison by peaks on signal {channel}. " + r"""
-The table is organized with a three-level column hierarchy: (1) Peak properties measured within each window (Count, Prominence, Width, Base, Energy delta), (2) History window conditions based on mode composition (L: L-mode only, D: D-mode only, H: H-mode only, mixed: multiple modes, $\forall\mathbf{y}_{W_H}$: all samples), and (3) Evaluation metrics. $\mathcal{W}_{\text{marg}}$ measures marginal 1-Wasserstein distance between property distributions, $\mathcal{W}_{\text{pair}}$ measures pairwise 1-Wasserstein distance between predicted and real peaks of the same window, averaged over all windows, and MSE $\frac{\|N - \hat{N}\|_2^2}{n}$ 
+The table is organized with a three-level column hierarchy: (1) Peak properties measured within each window (Count, Prominence, Width, Base, Energy Delta Ratio), (2) History window conditions based on mode composition (L: L-mode only, D: D-mode only, H: H-mode only, mixed: multiple modes, $\forall\mathbf{y}_{W_H}$: all samples), and (3) Evaluation metrics. $\mathcal{W}_{\text{marg}}$ measures marginal 1-Wasserstein distance between property distributions, $\mathcal{W}_{\text{pair}}$ measures pairwise 1-Wasserstein distance between predicted and real peaks of the same window, averaged over all windows, and MSE $\frac{\|N - \hat{N}\|_2^2}{n}$ 
 $\frac{\|N - \hat{N}\|_2^2}{n}$ represents the mean squared error between predicted and true peak counts per window across paired samples. Lower values indicate better model performance for all metrics."""
+
 
 def highlight_min(s, col):
     return f"\\textbf{{{s:.3f}}}" if s == pivot[col].min() else f"{s:.3f}"
@@ -583,9 +702,10 @@ latex_str = formatted_pivot.replace(0.0, '').fillna('').to_latex(
 # Save the LaTeX string to a file
 output_path = Path(f"output/tables/peaks_overview_{channel}.tex")
 output_path.parent.mkdir(parents=True, exist_ok=True)
-with open(output_path, "w") as f:
-    f.write(latex_str)
+# with open(output_path, "w") as f:
+#     f.write(latex_str)
 print(f"LaTeX table saved to {output_path}")
+
 
 def split_and_write_latex_table(pivot, path, max_cols=MAX_COLS):
     n_cols = pivot.shape[1]
@@ -612,7 +732,7 @@ def split_and_write_latex_table(pivot, path, max_cols=MAX_COLS):
                 f.write(latex_str)
 
 
-split_and_write_latex_table(formatted_pivot, f"output/tables/peaks_overview_split_{channel}.tex")
+# split_and_write_latex_table(formatted_pivot, f"output/tables/peaks_overview_split_{channel}.tex")
 
 # latex_str = pivot.replace(0.0, '').fillna('').round(2).to_latex(
 #     index=True,
@@ -639,7 +759,6 @@ split_and_write_latex_table(formatted_pivot, f"output/tables/peaks_overview_spli
 #     display(
 #         combined_df[combined_df["channel_name"] == channel].pivot_table(
 #             index=["condition", "measure", "distribution"], values="value", aggfunc=["mean", "std", "count"]
-#         )
-    )
+#
 #%%# %%
 #%%# %%

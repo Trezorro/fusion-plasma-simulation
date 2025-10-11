@@ -1,7 +1,5 @@
-"""Old janky notebook"""
 # %%
 from matplotlib.colors import rgb2hex
-from narwhals import col
 import pandas as pd
 from pathlib import Path
 import glob
@@ -12,6 +10,8 @@ import plotly
 import plotly.express as px
 from plotly.tools import mpl_to_plotly
 import datapane as dp
+import scipy.signal
+from scipy.signal import stft
 
 # %%
 # data_dir = 'shots/'
@@ -179,94 +179,12 @@ sig
 # %%
 # normalize data
 raw_sig = sig.copy()
-sig[ALL_SIG_COLLS] = (sig[ALL_SIG_COLLS] - sig[ALL_SIG_COLLS].mean()) / sig[ALL_SIG_COLLS].std()
+# sig[ALL_SIG_COLLS] = (sig[ALL_SIG_COLLS] - sig[ALL_SIG_COLLS].mean()) / sig[ALL_SIG_COLLS].std()
 
 # %%
 label
 
 # %%
-import seaborn as sns
-import matplotlib.colors as colors
-
-# Plot observables
-def plot_shot(shotno, sig, label, cols_data):
-    signals = sig[cols_data].copy()
-    signals = (signals - signals.min()) / (signals.max() - signals.min())
-    fig, ax = plt.subplots(figsize=(10, 4), dpi=200)
-    plt.title(f"Shot #{shotno} - Observables")
-    ax.set_ylabel("Observables (normalized)")
-    # Convert COLOR_SCALE hex colors to RGB tuples
-    # def hex_to_rgb(hex_color):
-    #     hex_color = hex_color.lstrip('#')
-    #     return tuple(int(hex_color[i:i+2], 16)/255 for i in (0, 2, 4))
-
-    # color_tuples = [colors.hex2color(c) if isinstance(c, str) and c.startswith('#') else c for c in COLOR_SCALE]
-
-    ax.plot(sig["time"], signals, label=cols_data, linewidth=1,
-            # color=color_tuples[:len(cols_data)]
-            )
-    # ax.set_ylim([-3, 5.3])
-    ax.set_xlim(left=0)
-
-    ax.set_xlabel("Shot time (s)")
-    ax2 = ax.twinx()
-    sns.despine(ax=ax)
-    sns.despine(ax=ax2)
-
-    # interpolate missing labels (label==0) to previous
-    labelvals = np.array(label["LHD_label"])
-    mask = labelvals == 0
-    labelvals[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), labelvals[~mask])
-    # plot filled area:
-    low = labelvals == 1
-    ax2.fill_between(
-    label["time"],
-    (labelvals == 3),
-    color='red',
-    alpha=.1,
-    label='H'
-    )
-
-    ax2.fill_between(
-    label["time"],
-    labelvals==1 ,
-    color='blue',
-    alpha=.06,
-    )
-    ax2.fill_between(
-    label["time"],
-    labelvals == 2,
-    color='yellow',
-    alpha=.1,
-    )
-    ax2.plot(label["time"], labelvals, color='red', alpha=.3, )
-    # set axis limits:
-    ax2.set_ylim([0, 1])
-    # ax2.set_ylabel("Confinement Mode")
-
-    # Change y-axis tick positions
-    ax2.set_yticks([])
-    # Change y-axis tick labels
-    # ax2.set_yticklabels(None)
-    # legend = ax.legend(loc='best')
-    ax.legend(
-                loc='lower left',
-                bbox_to_anchor=(.97, 0.4),
-                borderaxespad=0.0,
-                # fontsize='small',
-                # title=r'$\mathbf{x}_{W_F}$',
-                # title_fontsize='small',
-                frameon=False
-            )
-    plt.tight_layout()
-    export_pdf(shotno, 6, 4, factor=2)
-    export_pdf(shotno, 15, 5, factor=2)
-    export_pdf(shotno, 15, 5, factor=1.5)
-    export_pdf(shotno, 15, 4, factor=1.5)
-    export_pdf(shotno, 15, 5, factor=1)
-    # plt.show()
-    plt.close()
-
 #%%
 import plotly
 C_CHANNEL_NAMES = ["NBI", "ECRH"]
@@ -275,9 +193,9 @@ COLOR_SCALE = [c for c in plotly.colors.qualitative.Plotly]
 C_COLOR_SCALE = [c for c in plotly.colors.qualitative.Alphabet]
 # C_COLOR_SCALE = plotly.colors.qualitative.Pastel
 
-PDF_DIR = Path("output/pdfplots/shotplots")
+PDF_DIR = Path("output/pdfplots/shotplots/covariates_tight")
 PDF_DIR.mkdir(exist_ok=True)
-SUBNAME = "observables"
+SUBNAME = "covariates"
 
 
 def export_pdf(
@@ -298,6 +216,128 @@ TEST_SHOTS = [
     57013, 76702, 77196, 73935, 61028, 64857, 73368, 60814, 77599, 61237, 77409, 76304, 77595, 65481, 77193, 68697,
     69514, 68631, 67112, 63306, 64770, 60813, 64365, 77604, 77602
 ]
+#%%
+
+import seaborn as sns
+import matplotlib.colors as colors
+
+
+# Plot observables
+def plot_shot(shotno, sig, label, cols_data, start_s=0, stop_s=3, show=True):
+    signals = sig[cols_data].copy()
+    signals = (signals - signals.min()) / (signals.max() - signals.min())
+    signals["NBI-median"] = signals["NBI"].transform(
+        lambda x: x.rolling(100, min_periods=1, center=True).median()
+    ).astype(np.float32)
+    signals["ECRH-median"] = signals["ECRH"].transform(
+        lambda x: x.rolling(100, min_periods=1, center=True).median()
+    ).astype(np.float32)
+    # Select the time window based on start_s and stop_s
+    # time_mask = (sig["time"] >= start_s) & (sig["time"] <= stop_s)
+    # signals_window = signals[time_mask]
+    # time_window = sig["time"][time_mask]
+
+    # Find the global min/max for all signals (for consistent y-axis)
+
+
+
+
+    fig, ax = plt.subplots(figsize=(10, 4), dpi=200)
+    plt.title(f"Shot #{shotno} - Observables")
+    ax.set_ylabel("Observables (normalized)")
+    # Convert COLOR_SCALE hex colors to RGB tuples
+    # def hex_to_rgb(hex_color):
+    #     hex_color = hex_color.lstrip('#')
+    #     return tuple(int(hex_color[i:i+2], 16)/255 for i in (0, 2, 4))
+
+    # color_tuples = [colors.hex2color(c) if isinstance(c, str) and c.startswith('#') else c for c in COLOR_SCALE]
+
+    ax.plot(
+        sig["time"],
+        signals[cols_data],
+        label=cols_data,
+        linewidth=1,
+        # color=color_tuples[:len(cols_data)]
+    )
+    # ax.set_ylim([-3, 5.3])
+
+    ax.set_xlim(left=max(start_s, sig.time.min()), right=min(stop_s, sig.time.max()))
+    ax.set_xlabel("Shot time (s)")
+    ax2 = ax.twinx()
+    sns.despine(ax=ax)
+    sns.despine(ax=ax2)
+
+    # interpolate missing labels (label==0) to previous
+    labelvals = np.array(label["LHD_label"])
+    mask = labelvals == 0
+    labelvals[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), labelvals[~mask])
+    # plot filled area:
+    low = labelvals == 1
+    ax2.fill_between(label["time"], (labelvals == 3), color='red', alpha=.1, label='H')
+
+    ax2.fill_between(
+        label["time"],
+        labelvals == 1,
+        color='blue',
+        alpha=.06,
+    )
+    ax2.fill_between(
+        label["time"],
+        labelvals == 2,
+        color='yellow',
+        alpha=.1,
+    )
+    ax2.plot(
+        label["time"],
+        labelvals,
+        color='red',
+        alpha=.3,
+    )
+    # set axis limits:
+    ax2.set_ylim([0, 1])
+    # ax2.set_ylabel("Confinement Mode")
+
+    # Change y-axis tick positions
+    ax2.set_yticks([])
+    # Change y-axis tick labels
+    # ax2.set_yticklabels(None)
+    # legend = ax.legend(loc='best')
+    ax.legend(
+        loc='lower left',
+        bbox_to_anchor=(1, 0.4),
+        borderaxespad=0.0,
+        # fontsize='small',
+        # title=r'$\mathbf{x}_{W_F}$',
+        # title_fontsize='small',
+        frameon=False
+    )
+    plt.tight_layout()
+    export_pdf(shotno, 6, 4, factor=2)
+    export_pdf(shotno, 14, 8, factor=1.2)
+    # export_pdf(shotno, 15, 5, factor=2)
+    # export_pdf(shotno, 15, 5, factor=1.5)
+    export_pdf(shotno, 15, 4, factor=1.5)
+    export_pdf(shotno, 15, 5, factor=1)
+    if show:
+        plt.show()
+    plt.close()
+
+#%%
+
+shotno = shot_no_list[3]
+shotno = shot_no_list[4]
+
+
+sig = pd.read_parquet(sig_all[shotno])
+label = pd.read_csv(label_all[shotno])
+sig["NBI-median"] = sig.groupby('ShotNum')["NBI"].transform(
+    lambda x: x.rolling(100, min_periods=1, center=True).median()
+).astype(np.float32)
+sig["ECRH-median"] = sig.groupby('ShotNum')["ECRH"].transform(
+    lambda x: x.rolling(100, min_periods=1, center=True).median()
+).astype(np.float32)
+filter = (1 < sig.time ) & (sig.time < 1.5)
+plot_shot(shotno, sig, label, C_CHANNEL_NAMES + ["NBI-median", "ECRH-median", "PD"], 0.7, 1.5)
 
 #%%
 for i, shotno in enumerate(TEST_SHOTS):
@@ -305,9 +345,29 @@ for i, shotno in enumerate(TEST_SHOTS):
         sig = pd.read_parquet(sig_all[shotno])
         label = pd.read_csv(label_all[shotno])
         # sig[ALL_SIG_COLLS] = (sig[ALL_SIG_COLLS] - sig[ALL_SIG_COLLS].mean()) / sig[ALL_SIG_COLLS].std()
+
         plot_shot(shotno, sig, label, cols_data)
     except KeyError as e:
         print("Couldnt find key:", e)
+
+#%%
+for i, shotno in enumerate(TEST_SHOTS):
+    try:
+        sig = pd.read_parquet(sig_all[shotno])
+        label = pd.read_csv(label_all[shotno])
+        sig["NBI-median"] = sig.groupby('ShotNum')["NBI"].transform(
+            lambda x: x.rolling(100, min_periods=1, center=True).median()
+        ).astype(np.float32)
+        sig["ECRH-median"] = sig.groupby('ShotNum')["ECRH"].transform(
+            lambda x: x.rolling(100, min_periods=1, center=True).median()
+        ).astype(np.float32)
+        filter = (1 < sig.time ) & (sig.time < 1.5)
+        plot_shot(shotno, sig, label, ["NBI","NBI-median", "ECRH", "ECRH-median", "PD"], 0.7, 1.0, show=False)
+    except KeyError as e:
+        print("Couldnt find key:", e)
+
+
+
 # p_fig = mpl_to_plotly(fig)
 # # p_fig.write_html('plots/first_figure.html', auto_open=True)
 # report = dp.Blocks(
@@ -397,5 +457,59 @@ plt.tight_layout()
 plt.savefig('10shots.pdf')
 
 plt.show()
+
+# %%
+def plot_spectrogram(sig):
+    """
+    Generate and plot a spectrogram for the second channel (PD) of the given signal.
+
+    Parameters:
+        sig (np.ndarray): Input signal array.
+    """
+    if sig.shape[1] < 2:
+        raise ValueError("Signal does not have a second channel (PD).")
+
+    pd_channel = sig.loc[:, 'DML']  # Extract the second channel (PD)
+    f, t, Sxx = scipy.signal.spectrogram(pd_channel, fs=10000, nperseg=100, detrend='linear')#TODO
+
+    plt.figure(figsize=(10, 6))
+    plt.pcolormesh(t, f, 10 * np.log(Sxx), shading='gouraud')
+    plt.colorbar(label='Power/Frequency (dB/Hz)')
+    plt.ylabel('Frequency [Hz]')
+    plt.xlabel('Time [sec]')
+    plt.title('Spectrogram of PD Channel')
+    plt.show()
+
+plot_spectrogram(sig)
+
+# %%
+def plot_spectrogram_stft(sig, window='hann', nperseg=256, noverlap=None, scaling='density', cmap='viridis'):
+    """
+    Generate and plot a spectrogram using Short-Time Fourier Transform (STFT) for the second channel (PD).
+
+    Parameters:
+        sig (np.ndarray): Input signal array.
+        window (str): Desired window to use (e.g., 'hann', 'hamming').
+        nperseg (int): Length of each segment.
+        noverlap (int): Number of points to overlap between segments.
+        scaling (str): Scaling of the spectrogram ('density' or 'spectrum').
+        cmap (str): Colormap for the plot.
+    """
+    if sig.shape[1] < 2:
+        raise ValueError("Signal does not have a second channel (PD).")
+
+    pd_channel = sig.loc[:'PD']  # Extract the second channel (PD)
+    f, t, Zxx = stft(pd_channel, window=window, nperseg=nperseg, noverlap=noverlap)
+
+    plt.figure(figsize=(10, 6))
+    plt.pcolormesh(t, f, np.abs(Zxx), shading='gouraud', cmap=cmap)
+    plt.colorbar(label='Amplitude')
+    plt.ylabel('Frequency [Hz]')
+    plt.xlabel('Time [sec]')
+    plt.title('Spectrogram of PD Channel using STFT')
+    plt.show()
+
+# plot spectrogram using STFT
+plot_spectrogram_stft(sig)
 
 # %%

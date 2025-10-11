@@ -36,7 +36,7 @@ SOURCE_COLOR = WONG_navy
 TARGET_COLOR = WONG_red
 PRED_COLOR = WONG_green
 LINE_COLOR = WONG_yellow
-plt.style.use('dark_background')
+# plt.style.use('dark_background')
 
 
 def plot_distributions_mpl(dist1, dist2, title1="Distribution 1", title2="Distribution 2", alpha=0.8, show=True):
@@ -442,7 +442,7 @@ def plot_flow_and_lines_plotly(
     fig.update_layout(
         title=title_base + "Flow Priors and Targets",
         # height=800,
-        template='plotly_dark',
+        template='ggplot2',
     )
     if wandb.run.disabled:  # type: ignore
         fig.show()
@@ -531,7 +531,7 @@ def multi_channel_lines_plotly(
     )
     fig.update_layout(
         title=title_base + (f"<br><sub>{subtitle}</sub>" if subtitle else ""),
-        template='plotly_dark',
+        template='ggplot2',
         hovermode='closest',
         barmode='stack',
         barcornerradius=15,

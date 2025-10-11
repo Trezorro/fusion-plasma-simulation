@@ -157,7 +157,7 @@ print(possible_groups.rename(columns=rename_map).to_string(index=False))
 
 # %% TRANSFER
 print(list(df.test_cache_name))
-# %%
+# %% Download all cashes from snellius to local
 REMOTE_PATH = "snellius:/scratch-shared/mtresoor/final_cache/"
 LOCAL_PATH = "output/test_cache/"
 

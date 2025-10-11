@@ -1,8 +1,6 @@
 #%% Imports
+import math
 from typing import Type
-from matplotlib.lines import lineStyles
-from matplotlib.pylab import f
-import pandas as pd
 from pathlib import Path
 import os
 import matplotlib.pyplot as plt
@@ -60,7 +58,7 @@ def export_pdf(
     t,
     w=5.77,
     h=9.69,
-    factor=2,
+    factor=1,
 ):
     w, h = w * factor, h * factor
     fig = plt.gcf()  # Get the current figure
@@ -76,7 +74,7 @@ def plot_one_window_many_samples(models, shot, t):
     num_samples = len(models)
     print(f"Plotting {num_samples} samples.")
     num_cols = 2
-    num_rows = (num_samples // num_cols) + 2
+    num_rows = math.ceil(num_samples / num_cols) + 2
     sns.set_theme(style="whitegrid")
 
     fig = plt.figure(figsize=(12, 4 * num_rows))
@@ -175,7 +173,7 @@ def plot_one_window_many_samples(models, shot, t):
     ax_controls.set_facecolor("#F6F6F6")
     ax_controls.grid(color="white", linewidth=1.5)
     ax_controls.set_ylim(bottom=0, top =1)
-    ax_controls.text(1.02, 1.1, "Controls", transform=ax_controls.transAxes, fontsize=12, fontfamily="serif", rotation=0, va="center", ha="left")
+    # ax_controls.text(1.02, 1.1, "Controls", transform=ax_controls.transAxes, fontsize=12, fontfamily="serif", rotation=0, va="center", ha="left")
     ax_controls.legend(
         loc='center left',
         bbox_to_anchor=(1.02, 0.5),
@@ -191,6 +189,10 @@ def plot_one_window_many_samples(models, shot, t):
     # plt.show()
     w, h = fig.get_size_inches()
     # Save a more vertical version (portrait orientation)
+    export_pdf(shot, t, 15, 10, factor=1)
+    export_pdf(shot, t, 18, 10, factor=1)
+    export_pdf(shot, t, 15, 8, factor=1)
+    export_pdf(shot, t, 5.77, 9.69/2, factor=2)
     export_pdf(shot, t, w, h, factor=1)
     w, h = 5.77 * 1.2, 9.69 * 1.2
     export_pdf(shot, t, w, h, factor=1)
@@ -251,6 +253,7 @@ shot, t = WINDOWS[1]
 plot_one_window_many_samples(SEQ_VS_CHANNEL, shot, t)
 
 # %%
+SUBNAME = "new"
 
 for shot, t in windows:
     print("plotting", shot, t)
@@ -259,4 +262,46 @@ for shot, t in windows:
     except ValueError as e:
         logger.error(f"Error plotting shot {shot} at time {t}: {e}")
         continue
+# %%
+
+SUBNAME = "allC"
+
+SEQ_VS_CHANNEL = [
+    # 'FM-Sequence-Gaussian',
+    # 'FM-Channel-Gaussian',
+    'FM-Sequence-Brownian',
+    'FM-Sequence-AllCov-Brownian',
+    'FM-Channel-Brownian',
+    'FM-Channel-AllCov-Brownian',
+    # 'FM-Sequence-CP',
+    # 'FM-Channel-CP',
+    # 'FM-Sequence-Resampled',
+    # 'FM-Channel-Resampled',
+    'Unet-Sequence-Brownian',
+    'Unet-Sequence-AllCov-Brownian',
+    'Unet-Channel-Brownian',
+    'FM-Sequence-Constant',
+    # # 'FM-Sequence-Tiny-Gaussian',
+    # # 'FM-Sequence-2x-Gaussian',
+    # 'Ground Truth'  # sourced from 'FM-Sequence-Gaussian' -> distribution == Real
+]
+
+C_CHANNEL_NAMES = [
+'NBI',
+'ECRH',
+    'IP',
+'gas_fringes',
+'a_minor',
+'KAPPA',
+'DELTA',
+]
+
+for shot, t in windows:
+    print("plotting", shot, t)
+    try:
+        plot_one_window_many_samples(SEQ_VS_CHANNEL, shot, t)
+    except ValueError as e:
+        logger.error(f"Error plotting shot {shot} at time {t}: {e}")
+        continue
+
 # %%
