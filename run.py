@@ -1,3 +1,5 @@
+"""Run training and evaluation, with wandb used for run management. Options available for resuming and loading configs.
+"""
 import logging
 from src.config import consolidate_base_reeval_configs
 from src.logging_util import handler

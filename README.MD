@@ -1,18 +1,37 @@
 # Fusion Plasma Simulation
 
-## Todo
-- [x] Combine all parquets into one data set so  can normalize the values
-  - [ ] Or perhaps just use batch norm?
-- [ ] Implement data loader that normalizes the values
-- [ ] Implement model and trainer
-- [ ] Implement train evaluate loop
+This repository contains the code for the PlasmaFlow model used for the master thesis: 
+_Flow Matching for data-driven simulation of plasma confinement diagnostics with stochastic temporal dynamics_
+
+Work by Milan Tresoor, supervised by Vlado Menkovski, Simon Koop and Yoeri Poels.
+
+# Usage
+Slurm jobs can be run using the `.sh` files in root (e.g. `run_snellius_job.sh`). 
+
+Slurm submission is automated using
+tasks and the bash files in `src/HPC_setup`. E.g.: `submit_remote_job_snellius.sh`
+
+## Requirements
+Requirements are maintained in `Pipfile` using pipenv for local use. The same file describes the pip commands needed for 
+setup on a cluster.
+
+
+## Experiments
+*The most important files are listed here:*
+ - `run.py`: Main run script, for training and evaluation. Called by slurm job scripts.
+ - `src/models/flow.py`: Defines the TorchLightning module that handles training, validation and testing procedures. All
+    Flow Matching logic is contained in here as well.
+ - `src/models/unet_conditional.py`: Defines the main architecture used for the PlasmaFlow model.
+ - Evaluation functionality is spread between `src/evaluation.py`, the files in `srs/metrics/`, and the plotting code in 
+   `src/plotters/`.
+
+Training and evaluation config is done using config YAML files in `configs/`, supported by wandb and `src/cnofig.py`.
+
 
 
 # Data
-
-For the labels, 0 = no label, 1 = low confinement mode, 2 = dithering ('inbetween'), 3 = high confinement mode
-
-This is data for full shots (shot = pulse = experiment). We do not want to model the full shot, but rather an area just around a transition in the LHD_label, so zooming in on say ~100ms before/after a transition in the LHD_label
+Data can be aqcuired on request and should be stored in `data/`. Use `src/run_preprocessing.py` to prepare parquet files.
+Data is loaded using `src/data_loaders.py`.
 
 
 # Running on Cluster
@@ -24,8 +43,3 @@ This is data for full shots (shot = pulse = experiment). We do not want to model
     *NOTE: You need the full canonicalized path to the data directory on the server, starting from the home directory.*
 4. Sync output files back to local machine
     ```rsync -avz TUE_s162507@datamininghpc.win.tue.nl:/home/TUE/s162507/fusion-plasma-simulation/output output/hpc/```
-
-
-# TODO
- - [ ] Dont install torchCFM but just copy the required OT file. Then update the servers.
-   - [ ] This retains better versions of lightning, numpy, pandas and plotly. So if I run into issues with the current versions, I can just use the newer versions.
