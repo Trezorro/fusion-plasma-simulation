@@ -370,9 +370,9 @@ compare_data_sets(data_set_dirs)
 
 #%%
 import json
-with open("./LDH_demo/train.txt", 'r') as f:
+with open("./giants/LDH_demo/train.txt", 'r') as f:
     train_shots = json.load(f)
-with open('./LDH_demo/test.txt', 'r') as f:
+with open('./giants/LDH_demo/test.txt', 'r') as f:
     test_shots = json.load(f)
 
 # %%
