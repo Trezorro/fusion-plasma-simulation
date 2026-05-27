@@ -30,7 +30,7 @@ Training and evaluation config is done using config YAML files in `configs/`, su
 
 
 # Data
-Data can be aqcuired on request and should be stored in `data/`. Use `src/run_preprocessing.py` to prepare parquet files.
+Data can be acquired on request and should be stored in `data/`. Use `src/run_preprocessing.py` to prepare parquet files.
 Data is loaded using `src/data_loaders.py`.
 
 
