@@ -21,6 +21,7 @@
     "*.tex": "default",
     "*.ipynb": "jupyter-notebook",
     "file:/**/*.csv": "jupyter-data-wrangler"
-}
+},
+"python-envs.defaultEnvManager": "ms-python.python:pipenv"
 
 }

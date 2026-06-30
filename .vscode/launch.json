@@ -15,8 +15,8 @@
             },
             "args": [
                 "epochs=6",
-                "skip_log_summary=True",
-                "reeval=True",
+                // "skip_log_summary=True",
+                // "reeval=True",
                 "evaluation.plot_functions=null",
                 "evaluation.n_steps=6",
                 "evaluation.max_n=8",
@@ -27,9 +27,9 @@
                 "data.batch_size=10",
                 "model.params.batch_rematch_factor=1",
                 "model.params.step_every_nth_match=null",
-                "base_run=doublehistory_seq_normal_smC_BIG2",
-                "test_cache_name=doublehistory_seq_normal_smC_BIG2_cache2",
-                "test_cache_mode=use"
+                // "base_run=doublehistory_seq_normal_smC_BIG2",
+                // "test_cache_name=doublehistory_seq_normal_smC_BIG2_cache2",
+                // "test_cache_mode=use"
             ],
             "justMyCode": true
             
@@ -45,10 +45,11 @@
             },
             "args": [
                 "epochs=1",
+                "run_name=test_wandb_debug",
                 "evaluation.n_steps=2",
                 "evaluation.plot_functions=null",
                 "skip_log_summary=True",
-                "batch_size=16",
+                "batch_size=5",
                 "model.params.batch_rematch_factor=1",
                 "model.params.step_every_nth_match=null"
             ],

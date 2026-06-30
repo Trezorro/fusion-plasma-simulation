@@ -18,13 +18,13 @@ logger.debug(
     wandb.env.get_data_dir(), wandb.env.get_artifact_dir()
 )
 
-PROJECT = "flowtoy"
+PROJECT = "plasmaflow"
 if is_reeval_run(): # Based on cli arguments
     logger.info("Re-evaluating previous run, consolidating configs.")
     base_run, conf = consolidate_base_reeval_configs()
     base_checkpoint_path = find_and_download_model(base_run, prefer_alias=conf.get('prefer_model_alias', 'latest'))
 else:
-    conf = load_config_from_file('fm_toy')
+    conf = load_config_from_file('plasmaflow')
     if "resume_id" in conf:
         logger.info("RESUME MODE. This job %s is resuming run %s with ID: %s.", conf.get('run_name', '?'), conf.get('resume_name', '?'), conf.get('resume_id') )
         base_checkpoint_path = find_and_download_model(conf.get('resume_name'))
@@ -35,11 +35,12 @@ else:
 
 run = wandb.init(
     name=conf.get("run_name", None),  # None: Wandb picks a name for us
+    entity="deep-learning-course-team",
     project=PROJECT,
     id=conf.get("resume_id", None),
     resume='allow',
     config=conf,
-    tags=['2final_reeval'] if is_reeval_run() else None
+    tags=['reeval'] if is_reeval_run() else None
     # mode="offline",
 )
 RUN_ID = wandb.run.id

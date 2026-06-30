@@ -1,29 +1,34 @@
 """To be run on local machine. Preferably in vscode with correct cell execution."""
 # %%
-from math import ceil
-import pandas as pd
 import glob
-import numpy as np
 import re
+from math import ceil
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import rich
 import rich.progress
 import rich.traceback
 from ydata_profiling import ProfileReport
-import rich
 
 rich.traceback.install()
 
 # %%
 # data_dir = 'shots/'
-DATA_INPUT_DIR = "/Users/milan/Code/fusion/data/LHD_labeled_TCV"
-DATA_SET_NAME = "LHD_labeled_TCV"
+DATA_INPUT_DIR = Path("./data/public_data_set/data")
+DATA_SET_NAME = "TCV_shots_V2"
 DATE = pd.Timestamp.now().strftime("%Y_%m_%d")
 
 COLS_META = [
     "ShotNum",
     "time",
+    "LHD_label",
 ]
+
+##### Old data set ######
 COLS_CONTROL = [
-    "IP",  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control)
+    "IP",  # Current (niet reference lijn voor controller, maar de ware input. Dan laat je control bij control), 
     "gas_fringes",  # Ingepompte gas
     "NBI",  # manieren om te verhitten: colliding Neutral beam injection
     "ECRH",  # magnetron.
@@ -39,8 +44,31 @@ COLS_DATA = [
     "POHM",  # Gemeten power waarde meet de power die uit wrijving komt
     "Z_axis"  # center Plasma positie in de verticale lijn. deviation van reference is betekenis. 
 ]
+##### New data set ######
+COLS_CONTROL = [
+    "IP",          # I_p,ref: reference current (or swap for IPLA)
+    # gas_fringes missing; consider GWfr as partial proxy
+    "PNBI",        # replaces NBI (beam 1)
+    "PNBI2",       # new: beam 2 now separated
+    "PECRH",       # replaces ECRH
+    "MINRAD",      # replaces a_minor
+    "KAPPA",       # same
+    "DELTA_TOP",   # replaces DELTA (now split)
+    "DELTA_BOTTOM",
+]
+
+COLS_DATA = [
+    "FIR_LIDs_core",  # replaces FIR_core
+    "Halpha1",        # replaces PD (H-alpha divertor photodiode)
+    "DML",            # same
+    "POHM",           # same
+    "Z_axis",         # same
+]
+
+
 COLS_LABEL = ["LHD_label"]
 ALL_SIG_COLLS = COLS_META + COLS_CONTROL + COLS_DATA
+
 
 
 # %%
@@ -277,6 +305,129 @@ def combine_all_shots(
     rich.print(nan_summary_df.index.value_counts())
     return pd.concat(all_shot_dfs)
 
+def combine_public_dataset(
+    shots_dir: Path,
+    min_steps_filter: int = 5000,
+    frequency_tolerance=1
+) -> pd.DataFrame:
+    """Load and combine all shots into one dataframe. Check for consistency and discrepancies. 
+
+    Modified version for loading the TCV confinement state database https://zenodo.org/records/16631053
+
+    Guarantuees a frequency of 10 kHz and that the shot is at least min_steps_filter long.
+
+    Renames Halpha1 to PD for backwards compatibility with old code. And it is a simpler name (photodiode).
+
+    Replaces NaNs in the NBI column with 0, as per Yoeri's suggestion.
+    Slices the dataframe to only include the longest window of non-NaNs for all other columns.
+    Will not include shots that have too many NaNs in the X or C columns for a long usable window.
+    
+    Args:
+        min_steps_filter (int, optional): _description_. Defaults to 5000.
+
+    Returns:
+        pd.DataFrame: A dataframe with all shots combined. Index is time. 
+    """
+    all_shot_files = list(shots_dir.glob("TCV_confstate_*.parquet"))
+    rich.print(f"Found {len(all_shot_files)} shot files to combine in dir '{shots_dir}'")
+    if not all_shot_files:
+        raise RuntimeError("No input parquets found in %s", shots_dir)
+    # init counters for discrepancies and memory usage
+    time_discrepancy, shot_num_discrepancy, label_shot_num_discrepancy, length_discrepancy, too_short = 0, 0, 0, 0, 0
+    time_inconsistency = 0
+    nan_rejects = 0
+    memory = 0
+
+    all_shot_dfs = []  # list to store loaded and processed dataframes
+    nan_summaries = []
+    for shot_file in rich.progress.track(all_shot_files, description="Loading and processing shots"):
+        shot_num = re.search(r"(\d+)", str(shot_file.name)).group(0)
+        sig = pd.read_parquet(shot_file)
+        sig.insert(0, 'ShotNum', shot_num)
+        sig.rename(columns={"label_conf": COLS_LABEL[0]}, inplace=True)
+
+        rich.print("Reading shot", shot_num, "Length:", len(sig))
+        if len(sig) < min_steps_filter:
+            rich.print(f"Skipping shot {shot_num} because it has less than {min_steps_filter} steps ({len(sig)})")
+            too_short += 1
+            continue
+
+        ### Assertions for consistency and discrepancies ###
+        # check monotonicity of time
+        if not sig["time"].is_monotonic_increasing:
+            rich.print(f"Time is not monotonically increasing for shot signal {shot_num}")
+            time_discrepancy += 1
+
+        # check time consistency
+        is_consistent, n_inconsistent, freq, step_size_std, t_start, t_end = check_time_consistency(
+            sig, frequency_tolerance=frequency_tolerance
+        )
+        if not is_consistent or n_inconsistent > 10:
+            rich.print(
+                f"Time is not consistent for shot {shot_num}: Frequency: {freq}, Standard deviation of steps: {step_size_std}. {n_inconsistent} steps have a different time step."
+            )
+            rich.print("Skipping shot.")
+            time_inconsistency += 1
+            continue
+        ### End of consistency checks ###
+
+        # extract columns from signal
+        missing_cols=[]
+        for target_col in ALL_SIG_COLLS:
+            if target_col not in sig.columns:
+                rich.print(f"{target_col} column MISSING for shot {shot_num}. SKIPPING")
+                missing_cols.append(target_col)
+        if missing_cols:
+            continue
+        shot_out = sig[ALL_SIG_COLLS].reset_index(names='time_step').set_index("time")
+        float_cols = shot_out.select_dtypes(include="float64").columns
+        shot_out[float_cols] = shot_out[float_cols].astype("float32")
+        shot_out.rename(columns={'Halpha1': 'PD'}, inplace=True)
+        # resample labels with ffill to time steps of signal
+        memory += shot_out.memory_usage().sum()
+        rich.print("Memory:", memory)
+        
+
+        ### Handle NaNs ###
+        # count amount of columns with any nans
+        raw_nan_summary, longest_window = analyze_nans(shot_out)
+        # Replace nans in NBI with 0, as per yoeri's suggestion
+        shot_out.loc[shot_out["PNBI"].isnull(), "PNBI"] = 0
+        nan_summary, (start_usable, end_usable) = analyze_nans(shot_out)
+        # print a representation of the usable window in 100 steps
+        last_time_step = shot_out["time_step"].iloc[-1]
+        rich.print(
+            "Using", start_usable, "to", end_usable, ":", "-" * ceil(start_usable / 200) + "X" *
+            ((end_usable - start_usable) // 200) + "-" * ceil((last_time_step - end_usable) / 200)
+        )
+        # Other columns with too many NaNs are problmeatic, so we drop the shot
+        if not nan_summary.empty and nan_summary["Small C-ratio"].any():
+            nan_summaries.append(nan_summary)  # for later analysis
+            rich.print(
+                f"Shot {shot_num} has columns with too many NaNs ({nan_summary.index.tolist()}). Dropping the shot."
+            )
+            nan_rejects += 1
+            continue
+        # slice the dataframe to only include the longest window of non-NaNs, using the time_step start and end
+        shot_out = shot_out.loc[shot_out["time_step"].between(start_usable, end_usable)]
+        all_shot_dfs.append(shot_out)
+
+    rich.print("Float 64 columns converted before saving:", float_cols)
+    
+    print(
+        f"Total shots: {len(all_shot_files)} of which {too_short} had less than {min_steps_filter} steps. Output total: {len(all_shot_dfs)}"
+    )
+    print(f"Length discrepancy: {length_discrepancy}")
+    print(f"Time discrepancy: {time_discrepancy} (of shots without length discrepancy)")
+    print(f"Time inconsistency: {time_inconsistency}")
+    print(f"Shot number discrepancy: {shot_num_discrepancy}")
+    print(f"Rejected shots due to too many NaNs: {nan_rejects}")
+    rich.print(f"Memory usage: {memory / 1e6} MB")
+    if nan_summaries:
+        nan_summary_df = pd.concat(nan_summaries)
+        rich.print(nan_summary_df.sort_index())
+        rich.print(nan_summary_df.index.value_counts())
+    return pd.concat(all_shot_dfs)
 
 def load_shot(shotno: int, sig_all: dict[int, str], label_all: dict[int, str]):
     """Simple helper function to load a shot from the dataset.
@@ -308,7 +459,7 @@ def generate_report(data: str | pd.DataFrame):
 
 
 #%% CHeck multiple data sets and compare them
-def compare_data_sets(input_dirs: list[str], shot_lists: dict[str, list[int]] = None):
+def compare_data_sets(input_dirs: list[str] = [], shot_lists: dict[str, list[int]]|None = None):
     """Compare multiple datasets and check for duplicates."""
     shot_sets = {} if shot_lists is None else shot_lists.copy()
     for data_dir in input_dirs:
@@ -342,11 +493,11 @@ def compare_data_sets(input_dirs: list[str], shot_lists: dict[str, list[int]] = 
 #%% Run!
 
 if __name__ == "__main__":
-    sig_all, label_all = index_shot_names(DATA_INPUT_DIR)
-    data_df = combine_all_shots(sig_all, label_all)
+    # sig_all, label_all = index_shot_names(DATA_INPUT_DIR)
+    data_df = combine_public_dataset(DATA_INPUT_DIR)
     out_path = f"./data/{DATE}-{DATA_SET_NAME}.parquet"
     data_df.to_parquet(out_path)
-    generate_report(data=data_df)
+    # generate_report(data=data_df)
     print("Saved to ", out_path)
 
     #%%
@@ -370,6 +521,7 @@ compare_data_sets(data_set_dirs)
 
 #%%
 import json
+
 with open("./giants/LDH_demo/train.txt", 'r') as f:
     train_shots = json.load(f)
 with open('./giants/LDH_demo/test.txt', 'r') as f:

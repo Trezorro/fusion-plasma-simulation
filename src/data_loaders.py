@@ -214,7 +214,7 @@ class SourceTargetDS(data.Dataset):
 
 
 class FusionShotDataset(data.Dataset):
-    """
+    """Used to construct the respective train, val and test data sets.
     
     Returns:
         meta, conditioning and x window for a single shot.
@@ -308,6 +308,7 @@ class FusionShotDataset(data.Dataset):
         return self.get_shot_window(shot_number, start_i)
 
     def get_shot_window(self, shot_number, start_i):
+        """Given a window W_i,j, provide X, C and Y together with metadata for plotting in a tuple."""
         shot_data = self.data[self.data['ShotNum'] == shot_number]
         end_i = start_i + self.seq_length
         x = shot_data[self.columns_X].iloc[start_i:end_i].values.T

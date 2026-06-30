@@ -2,6 +2,8 @@
 *.csv
 *.parquet
 *.pdf
+*.pickle
+data/*.html
 
 wandb/
 artifacts/
