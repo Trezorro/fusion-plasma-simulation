@@ -4,6 +4,7 @@
 #SBATCH --error=output/slurms/gpujob-%j-%x.out
 #SBATCH --partition=gpu_mig
 #SBATCH --reservation=terv92681
+#SBATCH --nodelist=gcn3
 #SBATCH --time=800:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -45,7 +46,7 @@ echo "Version: $(python --version 2>&1)"
 
 if [[ $2 == "true" ]]; then
     echo "Will run on latest commit for reeval task"
-    git checkout main
+    git checkout paper
 else
     git checkout tags/$1
 fi

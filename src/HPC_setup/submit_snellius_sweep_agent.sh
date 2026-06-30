@@ -14,7 +14,7 @@ AGENT_TARGET=$1
 REMOTE_USER="mtresoor"
 REMOTE_HOST="snellius.surf.nl"
 REPO_PATH="~/fusion-plasma-simulation"
-GIT_BRANCH="main"  # Branch to pull from
+GIT_BRANCH="paper"  # Branch to pull from
 REMOTE_SLURM_DIR="$REMOTE_USER@$REMOTE_HOST:/home/$REMOTE_USER/fusion-plasma-simulation/output/slurms"
 LOCAL_HPC_PATH="output/snellius/"
 QUEUE_FORMAT="--format=\"%.18i %.50j %.12u %.8T %.10M %.6D %.10P %.17R\""

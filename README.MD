@@ -25,13 +25,35 @@ setup on a cluster.
  - Evaluation functionality is spread between `src/evaluation.py`, the files in `srs/metrics/`, and the plotting code in 
    `src/plotters/`.
 
-Training and evaluation config is done using config YAML files in `configs/`, supported by wandb and `src/cnofig.py`.
-
-
+Training and evaluation config is done using config YAML files in `configs/`, supported by wandb and `src/config.py`.
 
 # Data
 Data can be acquired on request and should be stored in `data/`. Use `src/run_preprocessing.py` to prepare parquet files.
 Data is loaded using `src/data_loaders.py`.
+
+Prior to running jobs on snellius, upload the preprocessed data package to the cluster. 
+```bash
+rsync -vz ./data/*.parquet snellius:fusion-plasma-simulation/data/  
+```
+ - This depends on `snellius` being a defined ssh config on your local machine. 
+
+
+**Example config file in `~/.ssh/config**:
+```
+Host *
+  AddKeysToAgent yes
+  UseKeychain yes
+  IdentityFile ~/.ssh/id_rsa
+
+Host snellius
+    AddKeysToAgent yes
+    UseKeychain yes
+    HostName snellius.surf.nl
+    User mtresoor
+    IdentityFile ~/.ssh/snellius
+```
+
+
 
 
 # Running on Cluster
