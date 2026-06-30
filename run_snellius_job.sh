@@ -4,7 +4,6 @@
 #SBATCH --error=output/slurms/gpujob-%j-%x.out
 #SBATCH --partition=gpu_mig
 #SBATCH --reservation=terv92681
-#SBATCH --nodelist=gcn3
 #SBATCH --time=800:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

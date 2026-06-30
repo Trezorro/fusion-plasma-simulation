@@ -19,7 +19,7 @@ numpy = "<2"
 matplotlib = "*"
 pyarrow = "*"
 plotly = "<6"
-numba = "<=0.58.1"  # numba 0.59.0 caused an import error in ydata-profiling
+numba = ">=0.61"  # numba 0.59.0 caused an import error in ydata-profiling
 torchinfo = "*"
 omegaconf = "*"
 lightning = "*"
@@ -76,3 +76,6 @@ python_version = "3.11.3"
 # scikit-learn: 1.6.1 -> 1.7.0
 # typing-extensions: 4.13.2 -> 4.14.0
 # wandb: 0.19.11 -> 0.20.1
+
+## 30 jun 2026
+# numba 0.61.2 to 0.65.1 to solve a cuda Segmentation fault (core dumped)

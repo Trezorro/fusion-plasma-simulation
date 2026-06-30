@@ -300,3 +300,13 @@ File `array_job_hyperparameters.txt`:
 --seed 44 --learning_rate 1e-2
 --seed 45 --learning_rate 1e-2
 ```
+
+# Advanced
+Launch temporary interactive session on a gpu node for testing and debugging
+```
+
+salloc --partition=gpu_mig --reservation=terv92681 --gpus=1 --time=00:10:00
+# then once you're on the compute node:
+nvidia-smi. # shows available gpu devices
+python -c "from numba import cuda; cuda.detect()"  # tests them
+```
