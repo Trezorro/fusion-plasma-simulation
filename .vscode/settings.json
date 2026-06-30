@@ -19,8 +19,7 @@
 "workbench.editorAssociations": {
     "*.copilotmd": "vscode.markdown.preview.editor",
     "*.tex": "default",
-    "*.ipynb": "jupyter-notebook",
-    "file:/**/*.csv": "jupyter-data-wrangler"
+    "*.ipynb": "jupyter-notebook"
 },
 "python-envs.defaultEnvManager": "ms-python.python:pipenv"
 

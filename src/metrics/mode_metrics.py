@@ -7,14 +7,30 @@ import torchmetrics
 
 #%%
 class ModeTransitionMetric(torchmetrics.Metric):
-    """Metric name scheme:
+    """Counts confinement-mode transitions in the future window Wf and compares pred vs target.
+
+    A "transition" is a change in confinement mode (L/D/H) between two consecutive
+    label steps within Wf. The metric accumulates per-sample transition matrices,
+    conditioned on a logical property of the history window Wh, and reports expected
+    transition counts and transition probabilities for both the generated and target
+    sequences plus their divergence.
+
+    Surrogate labels from generate_surrogate_labels_batched are used (not the ground
+    truth LHD_label), since the FNOLSTM classifier is run on the generated sequences
+    so that pred and target are scored on the same footing.
+
+    WINDOW_OF_INFLUENCE_SPILL crops the first and last 15 index positions of the
+    surrogate label sequence, because the classifier's output is less reliable near
+    the boundaries (its prediction horizon spills past where it assigns labels).
+
+    Metric name scheme:
     `<data_set>/<on_condition>/<from>/<to>/<statistic>/<view>`
 
     - `data_set` ∈ {`train`, `val`, `test`}
     - `on_condition`: Logical condition on the history window Wh, e.g. `L_only_Wh`, `D_in_Wh`, `H_not_in_Wh` or 'any_Wh'
     - `from`, `to`: Initial and resulting mode states (e.g. `from_L`, `to_H`, `from_any`)
-    - `statistic` ∈ {`expect`, `p_gt0`} — representing expected number of transitions or probability of any transition occurring
-    - `view` ∈ {`target`, `pred`, `error`} — indicates whether the value is computed from the ground truth, model prediction, or their difference
+    - `statistic` ∈ {`expect`, `p_gt0`}: representing expected number of transitions or probability of any transition occurring
+    - `view` ∈ {`target`, `pred`, `error`}: indicates whether the value is computed from the ground truth, model prediction, or their difference
 
     Instead of statistic and view, we may see the divergence as wasserstein or kl divergence.
     """
@@ -40,6 +56,8 @@ class ModeTransitionMetric(torchmetrics.Metric):
         super().__init__()
         self.condition = condition_history
         self.C = get_current_config()
+        # FNOLSTM has a ~15-sample (1.5 ms at 10 kHz) zone of influence near sequence boundaries; crop to avoid spurious transitions
+        # same constant is hardcoded as 15 in flow.py (dice metric); here it is capped at history_length so the crop never exceeds Wh
         WINDOW_OF_INFLUENCE_SPILL = min(
             15, self.C.data.history_length
         )  # the surrogate model looks ahead 15 steps past where it assigns a label.
@@ -53,6 +71,16 @@ class ModeTransitionMetric(torchmetrics.Metric):
         self.add_state(f"total_hits", default=torch.zeros(1, dtype=torch.int32), dist_reduce_fx="sum")
 
     def update(self, surr_labels_pred, surr_labels_target):
+        """Accumulate transition counts from one batch.
+
+        Splits the surrogate label sequence into history (for condition checking)
+        and future (for transition counting). Only samples satisfying the instance's
+        condition are included.
+
+        Args:
+            surr_labels_pred: Integer labels for generated sequences, shape (B, history+future).
+            surr_labels_target: Integer labels for target sequences, shape (B, history+future).
+        """
         # history should of course be the same as it is conditioning information
         history = surr_labels_target[:, :self.history_length]
         future_pred_y = surr_labels_pred[:, self.history_length:]
@@ -137,7 +165,15 @@ class ModeTransitionMetric(torchmetrics.Metric):
             raise ValueError("Input must be 2D or 3D tensor of shape (3,3) or (B,3,3)")
 
     def compute(self):
-        """Output expected number of transitions and P(eta>0) for each from-to pair, for pred, target, and squared error views."""
+        """Return aggregated transition statistics across all accumulated batches.
+
+        Outputs expected number of transitions and P(eta>0) for each from-to pair,
+        for pred, target, and squared error views.
+
+        Returns:
+            dict: Keys follow the metric name scheme defined in the class docstring.
+                Contains expect, p_gt0, and div statistics for each (condition, from, to) combination.
+        """
         # Reduce over the super-batch dimension (concatenate dim) and calculate from/to any totals
         total_hits = self.total_hits.item() if hasattr(self.total_hits, 'item') else float(self.total_hits)
         out = {f"{self.condition}/total_hits": total_hits}

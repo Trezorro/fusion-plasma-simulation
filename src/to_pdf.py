@@ -8,6 +8,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 def dump_figure_to_pdfs(fig, plot_name, subgroup, measure, channel_name, limit_size=None, metadata: dict =None):
+    """Export a Plotly figure to PDF at multiple sizes and an "atom" compact variant.
+
+    Writes to output/pdfplots/{run_name}/{plot_name}/{subgroup}/{WxH}/{channel_name}_{measure}.pdf
+    for each size in [(300,250), (400,450), (600,500), (800,500), (1200,600), (1300,910),
+    (800,1200), (600,1000)]. Also writes an atom variant (500x400, serif font, no margins)
+    for minimal-margin thesis figures. A throwaway.pdf is written first to flush
+    kaleido's MathJax overlay artifact.
+
+    If metadata is provided, saves it as batch_metrics_{subgroup}_{channel_name}_{measure}.json
+    alongside the PDFs.
+
+    Args:
+        fig: Plotly figure to export.
+        plot_name: Subdirectory under the run's pdfplots folder (e.g. "qualitative_samples").
+        subgroup: Further subdirectory (e.g. "full" or "nolegend").
+        measure: Label appended to the filename after the channel name.
+        channel_name: Label prepended to the filename (often the shot number or channel).
+        limit_size: If set, only exports sizes where both width and height are <= this value.
+        metadata: Optional dict of metrics to save alongside the PDFs as JSON.
+            Tensors are converted to scalars; non-serializable values become strings.
+    """
     run_name = get_current_config().run_name
     SIZES = [
         (w, h)
@@ -17,6 +38,7 @@ def dump_figure_to_pdfs(fig, plot_name, subgroup, measure, channel_name, limit_s
     ]
     out_folder = Path(f"output/pdfplots/{run_name}") / plot_name / subgroup
     out_folder.mkdir(parents=True, exist_ok=True)
+    # kaleido includes a MathJax loading overlay in the first PDF it renders; this throwaway flushes it
     fig.write_image(out_folder / "throwaway.pdf", format="pdf", width=200, height=300)  # prevents an ugly mathjax overlay being included
     time.sleep(1)
     for w, h in SIZES:

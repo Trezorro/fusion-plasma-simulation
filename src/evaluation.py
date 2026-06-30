@@ -31,6 +31,15 @@ logger.setLevel(logging.DEBUG)
 
 
 def prune_online_checkpoints(run):
+    """Deletes wandb model artifacts that do not have a 'best' or 'latest' alias.
+
+    Wandb logs every checkpoint as an artifact (log_model="all" in WandbLogger).
+    This function keeps only the meaningful checkpoints and removes the rest to
+    save cloud storage. Called at the end of each validation epoch and at run end.
+
+    Args:
+        run: Active wandb run object.
+    """
     api = wandb.Api()
     artifacts = api.run(run.path).logged_artifacts()
     for art in artifacts:
@@ -113,6 +122,8 @@ class PlotsCallback(L.Callback):
             if not wandb.run.disabled:
                 prune_online_checkpoints(wandb.run)
             # Skip for all other epochs
+            # Fires at epochs 1, 6, 11, ... (== 1 not == 0) so epoch 0 is only covered
+            # by scrutinize_epochs, not the periodic trigger.
             if (trainer.current_epoch % self.val_every_n_epochs == 1) or trainer.current_epoch <= self.scrutinize_epochs:
                 if torch.cuda.is_available():
                     logger.info(torch.cuda.memory_summary(device=None, abbreviated=False))
@@ -167,7 +178,11 @@ class PlotsCallback(L.Callback):
 
 
 class TrainStepMonitor(L.Callback):
-    """Logs the number of train steps and train steps per minute to wandb."""
+    """Logs the number of train steps and train steps per minute to wandb.
+
+    samples_seen counts rematches: each batch is counted batch_rematch_factor
+    times, reflecting actual gradient updates rather than data items.
+    """
 
     def __init__(self):
         super().__init__()
@@ -227,6 +242,22 @@ def output_variance_per_input_variance(output_batch, input_batch, mean_adjusted=
 
 
 def evaluate_window_set(model: FlowModule, data_module: FusionShotDataModule, shot_t: list[tuple]):
+    """Evaluates the model on a set of specific shot windows and writes PDF plots.
+
+    Runs after every trainer.validate(), including reeval runs. Always executes
+    regardless of other config flags; control which windows are evaluated by
+    editing window_set in the config.
+
+    Args:
+        model: FlowModule instance (must already be on the target device).
+        data_module: FusionShotDataModule with a prepared test_dataset.
+        shot_t: List of [shot_number, time_seconds] pairs from config.window_set.
+            Each pair identifies a specific moment in a TCV shot to evaluate.
+
+    Outputs:
+        PDF plots at output/pdfplots/{run_name}/qualitative_samples/ at 8 sizes,
+        plus a "nolegend" variant and a JSON metadata file per window.
+    """
     test_dataset = data_module.test_dataset
     logger.info("Running evaluate_window_set for %s shot windows", len(shot_t))
     for shot, t in shot_t:

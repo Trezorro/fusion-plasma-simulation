@@ -235,6 +235,12 @@ class FusionShotDataset(data.Dataset):
         force_fixed_shot: If not None, the dataset will always return the same shot. Useful for debugging by overfitting.
         force_start: If not None, the dataset will always return the same start timestep index. May be modified by random_start.
         **kwargs: Additional arguments that are not used.
+
+    Note:
+        The PD column (H-alpha divertor photodiode) is required by the mode classifier
+        in src/metrics/evaluate_modes.py and is looked up by name via
+        C.data.cols.x.index("PD"). Renaming or removing PD from cols.x will cause
+        a runtime error during mode metric computation.
     """
 
     def __init__(
@@ -289,6 +295,7 @@ class FusionShotDataset(data.Dataset):
                         self.viable_indices.append((shot_number, start_idx))
                         viable_shots.add(shot_number)
             else:
+                # Test set uses stride=10 to cap index count; at stride=1 the test set has 2M+ viable windows
                 stride = 10 if self.name == "Test" else 1
                 # Use all possible start indices within the viable range and crop margin
                 for start_idx in range(self.crop_margin, viable_start_max + 1, stride):
@@ -300,6 +307,7 @@ class FusionShotDataset(data.Dataset):
         if self.pre_shuffle and self.name != "Test":
             random.shuffle(self.viable_indices)
         elif self.name == "Test":
+            # Test set is sorted by start index for deterministic and cache-friendly ordering
             self.viable_indices.sort(key=lambda x: x[1])
             logger.info(f"Sorted test set on time index.")
 
@@ -334,6 +342,7 @@ class FusionShotDataset(data.Dataset):
             conditioning_input['x_history'] = x_history
             start_i = history_start
 
+        # raw time index in seconds, deliberately NOT normalized; the positional embedding's max_value=2.0 spans this range
         conditioning_input['position_sequence'] = shot_data.index[start_i:end_i].values.astype(np.float32)
         if self.columns_C:
             conditioning_input['c'] = shot_data[self.columns_C].iloc[start_i:end_i].values.T
@@ -361,7 +370,33 @@ class FusionShotDataset(data.Dataset):
 
 class FusionShotDataModule(L.LightningDataModule):
     """
-    A LightningDataModule for loading and preparing shot data.
+    Lightning DataModule for TCV plasma shot data.
+
+    Loads a combined parquet file of TCV shots, normalizes signal columns to [0,1]
+    using train-split statistics, and constructs train/val/test FusionShotDataset
+    instances. Shot assignments are fixed lists (not random splits) for reproducibility.
+
+    Column names in cols.x, cols.c, and cols.label must exactly match the parquet
+    column names. There is no validation at load time; a mismatch causes a KeyError
+    or silent NaN values during normalization.
+
+    Args:
+        dir: Directory containing the parquet file.
+        file: Parquet filename.
+        cols: OmegaConf DictConfig with keys 'x' (observable channels), 'c' (conditioning
+            channels), 'label' (mode label column), and 'meta' (metadata columns).
+        train_shots: Shot numbers to use for training.
+        val_shots: Shot numbers to use for validation.
+        test_shots: Shot numbers to use for testing.
+        batch_size: Batch size for all DataLoaders.
+        seq_length: Length of the future window Wf in samples.
+        crop_margin: Minimum distance from shot boundaries to any window start;
+            must be >= history_length to provide enough context for x_history.
+        history_length: Length of the history window Wh. 0 disables x_history conditioning.
+        allowed_start_indices: If set, restricts sampling to only these start indices.
+        overfit_on_shots: If set, restricts all splits to these shot numbers (for debugging).
+        pre_shuffle: Shuffle training and validation index lists at init. Test set is
+            always sorted by index regardless of this flag.
     """
 
     def __init__(
@@ -402,7 +437,12 @@ class FusionShotDataModule(L.LightningDataModule):
         self.num_workers = 2 if torch.cuda.is_available() else 0
 
     def prepare_data(self):
-        """Load the data file."""
+        """Load the parquet file, forward-fill NaN values, and create any derived columns.
+
+        Forward-fill (ffill) handles gaps in sensor readings by propagating the last
+        valid measurement forward. Derived columns (DML-r, NBI-median, ECRH-median)
+        are created only if their names appear in cols.x or cols.c.
+        """
         self.data = pd.read_parquet(self.dir + self.file)
         self.data_is_normalized = False
         self.data['ShotNum'] = self.data['ShotNum'].astype(np.int32)
@@ -461,7 +501,12 @@ class FusionShotDataModule(L.LightningDataModule):
         )
 
     def normalize_xc_data(self):
-        """Normalize within 0-1"""
+        """Normalize X and C columns to [0, 1] using min/max computed from the TRAIN split only.
+
+        Computing stats from the train split prevents data leakage. The same min/max
+        is applied to val and test splits. Stats are logged to wandb config under
+        data.train_stats and stored as GPU tensors for fast denormalize() calls.
+        """
         assert not self.data_is_normalized, "Data already normalized. Call setup() first."
         target_cols = list(self.cols.x + self.cols.get('c', []))
         train_df = self.data[self.data['ShotNum'].isin(self.train_shots)]
@@ -508,6 +553,9 @@ class FusionShotDataModule(L.LightningDataModule):
         """Get the full history of a shot up to the start index.
 
         Supports both scalar input as well as batched input. Returns (*input shape, T).
+
+        Note: Returns data in the normalized [0,1] space; call denormalize() before
+        passing to downstream models that expect physical units.
         """
         if isinstance(shot_number, (torch.Tensor)) and isinstance(start_i, (torch.Tensor)):
             assert len(shot_number) == len(

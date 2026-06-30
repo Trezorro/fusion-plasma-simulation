@@ -1,0 +1,212 @@
+# PlasmaFlow Evaluation Metrics
+
+This doc explains every metric PlasmaFlow computes during evaluation: what it measures physically, how it is computed, when it fires, and where it shows up in wandb. The goal is that when you stare at a wandb dashboard you know exactly what each number means and why it moved.
+
+The model generates future plasma diagnostic trajectories conditioned on a history window. Every metric here is fundamentally a comparison between a batch of **generated** futures and the matching batch of **target** (ground-truth) futures. Some metrics compare summary statistics of the two distributions; others compare classifier-derived mode labels; one compares raw sequence shape directly.
+
+---
+
+## When metrics are computed
+
+| Phase | When | Wandb prefix |
+|---|---|---|
+| Validation (conditional) | `epoch % val_every_n_epochs == 1` OR `epoch <= scrutinize_epochs` | `val/` |
+| Test epoch end | after `trainer.test()` | `test/final/` |
+| Test step | per test batch | `test/step/` |
+| Evaluate (window_set) | after `validate()`, for each shot window | not logged separately; written to PDF metadata JSON |
+
+All metrics are computed inside `model.evaluate()` (validation and the window_set evaluation path) or `update_metrics()` (the test path). The `evaluate()` path calls `self.init_metrics()` at the end to reset all torchmetrics state, so each evaluation starts clean.
+
+The `scrutinize_epochs` clause means the early epochs of a run get full metric computation every epoch, so you can watch a model converge in detail before metrics settle into the cheaper `val_every_n_epochs` cadence.
+
+---
+
+## 1. Moment errors (`MomentsMetric`)
+
+Computed in `src/metrics/metrics.py`. This measures the distributional distance between generated and target sequences using statistical moments. It does not care about temporal alignment of individual samples; it asks whether the *distribution* of values the model produces at each time step has the right shape.
+
+For each channel in `data.cols.x`, and for both the raw signal and its first difference (the step-to-step change):
+
+- Compute the mean, variance, skewness, and kurtosis across the batch, at each time step.
+- Measure MSE between the generated distribution's moment and the target's moment.
+
+That gives 8 combinations per channel: {magnitude, diff} x {mean, var, skew, kurtosis}.
+
+**Wandb keys:**
+
+- `{prefix}/error/magnitude_mean_mse/{channel}` (raw signal moments)
+- `{prefix}/error/magnitude_var_mse/{channel}`
+- `{prefix}/error/magnitude_skew_mse/{channel}`
+- `{prefix}/error/magnitude_kurtosis_mse/{channel}`
+- `{prefix}/error/diff_mean_mse/{channel}` (first-difference moments)
+- `{prefix}/error/diff_var_mse/{channel}`
+- `{prefix}/error/diff_skew_mse/{channel}`
+- `{prefix}/error/diff_kurtosis_mse/{channel}`
+- `{prefix}/error/magnitude_mean_mse/mean` (and the `/mean` variant for every other key: mean across all channels)
+
+**Physical interpretation:** the moments factorize "is the model right?" into distinct failure modes. If the model captures the correct mean trajectory but overestimates spread, you see low `magnitude_mean_mse` but high `magnitude_var_mse`. The diff moments are sensitive to the *roughness* of the signal: a model that produces correct values but too-smooth or too-jagged transitions shows up in `diff_var_mse` even when the magnitude moments look fine.
+
+---
+
+## 2. Entropy metrics
+
+Computed in `src/metrics/metrics.py` using the `antropy` library. These measure the complexity and irregularity of the generated time series, which is a different question from "does it have the right mean and variance". A signal can have correct moments and still be too regular or too noisy.
+
+Three entropy methods (all enabled in the current config):
+
+- **Approximate entropy** (`app_entropy`): quantifies regularity and predictability of the series. Lower means more predictable.
+- **Spectral entropy** (`spectral_entropy`): entropy of the power spectral density. Higher means more broadband noise; lower means energy concentrated in a few frequencies.
+- **Permutation entropy** (`perm_entropy`): entropy of ordinal patterns (the relative ordering of nearby samples) in the series.
+
+For each channel x method combination, four distance metrics are computed between the batch distribution of entropies (generated vs target):
+
+- MSE, MAE, MSD (mean signed difference), and Wasserstein distance.
+
+The MSD is signed, so it tells you the *direction* of the error: whether the model is systematically generating too much or too little entropy, not just how far off it is.
+
+**Wandb key pattern:** `{prefix}/error/{method}_{distance}/{channel}` and the `{prefix}/error/{method}_{distance}/mean` aggregate.
+
+**Note on sampling frequency:** the spectral entropy implementation uses `sf=100` as the sampling frequency parameter, not the actual 10 kHz sample rate. This reflects a downsampling assumption made when the metric was introduced. It does not affect the validity of relative comparisons (model A vs model B, or generated vs target), but the absolute spectral entropy values should be read with this in mind.
+
+---
+
+## 3. Peak metrics (`PeakMetric`)
+
+Computed in `src/metrics/peak_metric.py`. This measures whether the model produces the right number, shape, and energy of peaks in each channel. Peaks matter physically because many of the events we care about (ELMs, mode transitions, bursts) show up as peaks in the diagnostic signals, so a model can have good moments and good entropy while still getting the *event structure* wrong.
+
+Peak detection uses `scipy.signal.find_peaks` on each sequence independently.
+
+**Measured properties for each peak:**
+
+- `height`: absolute signal value at the peak.
+- `prominence`: peak prominence (how much the peak stands out from its surroundings).
+- `base`: signal value at the base of the peak.
+- `width`: peak width at half prominence.
+
+**DML-specific properties** (computed when peaks are detected in the DML channel):
+
+- `energy_delta`: energy change in the DML signal around the peak.
+- `pd_prominence`: concurrent H-alpha (PD channel) prominence at the time of the DML peak.
+- `energy_ratio`: ratio of energy before and after the peak (related to ELM characterization).
+
+**Conditions:** peaks are analyzed separately for three L/H/D mode conditions in the history window:
+
+- `L_only_Wh`: history is entirely L-mode.
+- `D_only_Wh`: history is entirely D-mode (dithering).
+- `H_only_Wh`: history is entirely H-mode.
+
+Splitting by history mode matters because the peak behavior the model *should* produce depends heavily on the confinement regime it is starting from.
+
+**Statistics per property per condition:**
+
+- `mean_pairwise_wasserstein`: average pairwise Wasserstein distance between generated and target peak distributions.
+- `marginal_wasserstein`: Wasserstein distance between the marginal distributions.
+- `count_mse`: MSE of peak count between generated and target.
+
+**Wandb key pattern:** `{prefix}/peak_{measure}_{stat}/{channel}`
+
+**Note on label indexing:** `PeakMetric` depends on the condition labels from `cols.label` (the LHD_label). The mode indices used internally are `0=L, 1=D, 2=H`. The label column itself uses 1-indexed modes, so it is shifted by `-1` before use in `update_metrics()`. If you ever touch this code, that off-by-one shift is the thing to be careful about.
+
+---
+
+## 4. Mode transition metrics (`ModeTransitionMetric`)
+
+Computed in `src/metrics/mode_metrics.py`. This measures whether the model generates the right *sequence of confinement mode transitions* (L-mode, D-mode/dithering, H-mode). This is arguably the metric group that matters most physically: getting the trajectory shape right is necessary, but the scientifically interesting question is whether the model reproduces the correct mode dynamics.
+
+### Surrogate labels
+
+The true LHD_label is only available for the history (conditioning) window, not for the future the model is supposed to predict. So to score mode behavior on the future, we run the mode classifier (FNOLSTM, the same model used in preprocessing) on both the generated and the target future windows to produce *surrogate* mode labels. This happens in `generate_surrogate_labels_batched()` in `src/metrics/evaluate_modes.py`.
+
+Surrogate label generation details:
+
+- Input: PD (H-alpha) channel only.
+- Sliding window of `TW=40` samples with `STRIDE=10` and `OFFSET_PRED=20`.
+- Output: one integer label per 10-sample stride.
+- The label is shifted by `OFFSET_PRED=20` steps. The LSTM has a 20-step prediction horizon, and this offset aligns the label with the time it actually describes.
+- `WINDOW_OF_INFLUENCE_SPILL = min(15, history_length)` (15 in practice): the first and last 15 index positions of the surrogate label sequence are cropped when computing transition metrics, because the classifier has a "spill" where nearby context bleeds into the boundary predictions. Cropping removes those unreliable edge labels.
+
+### Transition matrix
+
+For each sample, a 3x3 transition count matrix is computed from the surrogate label sequence (row = from-mode, col = to-mode). This matrix is then expanded to 4x4 by adding "any" rows and columns, so that transitions *from any mode* or *to any mode* can be queried as a single aggregate.
+
+### Conditions on the history window (Wh)
+
+| Condition | Meaning |
+|---|---|
+| `L_only_Wh` | history contains only L-mode |
+| `D_only_Wh` | history contains only D-mode |
+| `H_only_Wh` | history contains only H-mode |
+| `L_in_Wh` | history contains at least one L-mode step |
+| `D_in_Wh` | history contains at least one D-mode step |
+| `H_in_Wh` | history contains at least one H-mode step |
+| `any_Wh` | no condition (all samples) |
+
+The `_only_` conditions isolate clean starting regimes; the `_in_` conditions are looser and catch mixed histories.
+
+### Statistics per (condition, from, to) combination
+
+- `expect_target`: expected number of transitions in the target.
+- `expect_pred`: expected number of transitions in the generated output.
+- `expect_error`: the difference between the two.
+- `p_gt0_target`: probability of *any* such transition occurring in the target.
+- `p_gt0_pred`: same, for generated.
+- `p_gt0_error`: the difference.
+
+The `expect_` family asks "how many transitions"; the `p_gt0_` family asks "does the transition happen at all". A model can get the rate of common transitions right while still missing rare ones, and these two views separate those cases.
+
+**Wandb key pattern:** `{prefix}/mode/{condition}/{from}_{to}_{stat}`
+
+Example: `val/mode/any_Wh/from_L_to_H_expect_target` is the expected number of L->H transitions across all samples.
+
+---
+
+## 5. Dice score
+
+A simple classification-accuracy metric comparing the surrogate mode labels of generated vs target sequences. It is computed on the future window (Wf) only, with the `WINDOW_OF_INFLUENCE_SPILL` crop applied so that unreliable boundary labels do not pollute the score.
+
+**Wandb key:** `{prefix}/dice`
+
+**Interpretation:** 1.0 is perfect mode-sequence reproduction, 0.0 is random. Where the transition metrics measure whether the model gets the right *counts and rates* of transitions, the Dice score measures whether it gets the *timing* right: it rewards the model for putting the right mode at the right time step, not just for producing the right number of transitions overall. A high Dice score means the model generates trajectories that are both plausible-looking and correctly timed.
+
+---
+
+## 6. SoftDTW
+
+Computed in `src/metrics/metrics.py` using `pysdtw` with numba CUDA JIT. Active on GPU only.
+
+Soft dynamic time warping between generated and target sequences. Unlike the moment and entropy metrics (which compare distributions and ignore alignment), SoftDTW compares sequence *shape* directly while being robust to temporal shifts: a generated trajectory that is correct but slightly early or late is not heavily penalized. It is used as a secondary metric.
+
+**Important dependency:** SoftDTW requires `numba >= 0.61` on the cluster. The Pipfile pins an older numba for local compatibility (`ydata-profiling`), so the cluster venv has the correct version installed manually. With `numba 0.58.1` the kernel launch segfaults under the cluster's driver. See the repo CLAUDE.md and the bottom of the Pipfile for the full story.
+
+---
+
+## Metric computation flow
+
+```
+evaluate() or update_metrics()
+  |
+  |-- moments_metrics(generated_samples, target_samples)      # GPU, all channels
+  |-- peak_metrics(generated_samples, target_samples, ...)    # GPU, per condition
+  |-- mode_test_metrics(pred_labels, target_labels)           # GPU, surrogate labels
+  |-- dice_metric(pred_labels, target_labels)                 # GPU
+  |
+  [move to CPU]
+  |
+  |-- get_entropy_metrics(generated_samples, target_samples)  # CPU, antropy
+  |-- cpu_batch_peak_metrics(generated_samples, ...)          # CPU, scipy
+```
+
+The GPU-resident metrics run first while the tensors are still on device; the batch is then moved to CPU for the metrics that rely on CPU-only libraries (`antropy` and `scipy.signal`). SoftDTW, when active, runs on GPU as part of the GPU block.
+
+---
+
+## Quick reference: which metric answers which question
+
+| Question | Metric group |
+|---|---|
+| Does the output have the right value distribution (mean/spread/shape) per time step? | Moment errors |
+| Is the signal the right amount of regular vs noisy? | Entropy metrics |
+| Does it produce the right peaks/events (count, shape, energy)? | Peak metrics |
+| Does it produce the right mode transitions (rates and probabilities)? | Mode transition metrics |
+| Does it get the mode timing right? | Dice score |
+| Is the overall sequence shape right, allowing for small time shifts? | SoftDTW |

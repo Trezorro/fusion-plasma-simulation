@@ -1,4 +1,22 @@
-"""To be run on local machine. Preferably in vscode with correct cell execution."""
+"""Data preprocessing for PlasmaFlow training data.
+
+Reads individual TCV shot parquet files from the Poels et al. public dataset,
+generates surrogate confinement mode labels using the FNOLSTM classifier on the
+PD (H-alpha divertor photodiode) channel, and writes a single combined parquet
+file used for all training runs.
+
+Run locally only: requires ydata-profiling, which is not installed on Snellius.
+
+Input:  {DATA_INPUT_DIR}/*.parquet  (one file per TCV shot)
+Output: data/{DATE}-{DATA_SET_NAME}.parquet     (all shots, with LHD_label column)
+
+LHD_label is the confinement mode integer label (0=L, 1=D, 2=H) produced by
+the FNOLSTM classifier (configs/MHD_model_yoerie/weights_PD.pt). The classifier
+output column label_conf is renamed to LHD_label in the combined output file.
+
+Column names in the output must match data.cols in configs/plasmaflow.yaml exactly.
+"""
+# To be run on local machine. Preferably in vscode with correct cell execution.
 # %%
 import glob
 import re
@@ -344,6 +362,7 @@ def combine_public_dataset(
         shot_num = re.search(r"(\d+)", str(shot_file.name)).group(0)
         sig = pd.read_parquet(shot_file)
         sig.insert(0, 'ShotNum', shot_num)
+        # rename to LHD_label to match the column name expected by data_loaders.py and plasmaflow.yaml
         sig.rename(columns={"label_conf": COLS_LABEL[0]}, inplace=True)
 
         rich.print("Reading shot", shot_num, "Length:", len(sig))

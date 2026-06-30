@@ -33,6 +33,19 @@ class TestStepHDFCache:
         w: Write: Will overwrite any ancountered present keys during setting.
         r: Read: No setting allowed, just reading. If a key is not present, a whole batch get will fail.
         a: Setting will skip any present values without overwriting, saving a little bit of I/O. Reading same as r.
+
+    HDF5 layout:
+        Groups are nested as ``{shot_number}/{start_idx}/``. Each leaf group holds
+        three datasets: ``generated_x``, ``surr_labels_gen``, and ``surr_labels_target``.
+
+    Resumability:
+        ``mode='a'`` is safe for re-runs: it skips any group that already has
+        ``generated_x``, so a partial run can be resumed without losing existing data.
+
+    Cache location:
+        ``get_cache_dir()`` checks the ``TEST_CACHE_DIR`` environment variable
+        (set to ``/scratch-shared/mtresoor/final_cache/`` on Snellius); it falls back
+        to ``output/test_cache/`` locally.
     """
 
     def __init__(self, cache_filename: str = "test_step_cache", mode: Literal['w', 'r', 'a'] = "w"):
@@ -43,6 +56,14 @@ class TestStepHDFCache:
         logger.info("Initialized HDF5 cache at %s in mode '%s'", self.h5_path, self.mode)
 
     def save_json_friend(self, dict):
+        """Write a JSON-serializable copy of a metrics dict alongside the HDF5 cache.
+
+        Tensors are converted to scalars; values that fail json.dumps are stringified.
+        Writes to the same directory as the HDF5 file as {cache_filename}.json.
+
+        Args:
+            dict: Metrics dict from on_test_epoch_end. Modified in-place during serialization.
+        """
         json_file = self.base_dir / (self.cache_filename + '.json')
         dict = dict.copy()
         for k,v in dict.items():
@@ -69,6 +90,12 @@ class TestStepHDFCache:
         generated_x: np.ndarray, shape (batch, channels, timesteps)
         surr_labels_gen: np.ndarray, shape (batch, channels, timesteps)
         surr_labels_target: np.ndarray, shape (channels, timesteps)
+
+        In ``mode='a'`` the group is only skipped if ``generated_x`` already exists;
+        if ``generated_x`` is missing, all three datasets are written even in append mode.
+
+        ``generated_x`` is stored as float32; the label datasets are stored as int16
+        (saves space).
         """
         match self.mode:
             case 'r':
@@ -117,6 +144,7 @@ class TestStepHDFCache:
         C.data.history_length
         C.data.seq_length
         batch_size = len(shot_nums)
+        # 5 is hardcoded here because the cache was created with 5 X-channels; this must match the training config
         generated_x_batch = np.zeros((batch_size, 5, C.data.seq_length), dtype=np.float32)
         surr_labels_gen_batch = np.zeros((batch_size, C.data.history_length + C.data.seq_length), dtype=np.int16) - 1
         surr_labels_target_batch = np.zeros_like(surr_labels_gen_batch) - 1
@@ -134,8 +162,13 @@ class TestStepHDFCache:
 
     def find_cached_idxs(self, shot_number):
         """
-        Find all start_idxs that have been cached for a given shot_number.
-        Returns a list of start_idxs.
+        Return all cached start indices for a given shot number.
+
+        Args:
+            shot_number: TCV shot number (int or string).
+
+        Returns:
+            Sorted list of integer start indices.
         """
         with h5py.File(self.h5_path, "r") as f:
             if str(shot_number) not in f:
@@ -144,7 +177,21 @@ class TestStepHDFCache:
             return sorted(int(k) for k in shot_group.keys() if k.isdigit())
 
     def quick_window(self, shot_number, time, dataset, repeat=1):
-        """Convenience function for plotting a specific window Wh and Wf around time t. """
+        """Retrieve the generated samples and surrogate labels for the cached window nearest to a given time.
+
+        Looks up the closest available cached start index to the given time (by finding the
+        nearest index in the parquet DataFrame, then snapping to the nearest cached index).
+
+        Args:
+            shot_number: TCV shot number.
+            time: Target time in seconds (relative to shot start).
+            dataset: Full parquet DataFrame with 'ShotNum' and 'time' columns.
+            repeat: Number of times to tile the generated_x sample along axis 0
+                (for visualization with multiple trajectories).
+
+        Returns:
+            Tuple of (sample, labels_gen, labels_real, start_idx).
+        """
         shot_data_index = dataset[dataset['ShotNum'] == shot_number].index
         if len(shot_data_index) == 0:
             raise ValueError(f"Shot {shot_number} not found in dataset.")

@@ -1,3 +1,15 @@
+"""Surrogate mode label generation for generated and target plasma sequences.
+
+Uses a pretrained FNOLSTM classifier (Yoeri Poels' confinement-state model)
+to assign confinement mode labels (0=L-mode, 1=D-mode, 2=H-mode) to generated
+and target future windows. These surrogate labels are used by ModeTransitionMetric
+and the Dice score to assess whether the flow model produces the correct mode dynamics.
+
+Dependencies:
+    configs/MHD_model_yoerie/weights_PD.pt  -- FNOLSTM classifier weights
+    configs/MHD_model_yoerie/stats_PD.json  -- normalization stats for the PD channel
+    The PD column must be present in data.cols.x (looked up by name at runtime).
+"""
 # %%
 import json
 import pathlib
@@ -20,9 +32,9 @@ logger = logging.getLogger(__name__)
 # %%
 # global model settings
 MODEL_METADATA_DIR = pathlib.Path("configs/MHD_model_yoerie")
-TW = 40
-OFFSET_PRED = 20
-STRIDE = 10
+TW = 40  # FNOLSTM input window width (samples); 40 samples = 4 ms at 10 kHz
+OFFSET_PRED = 20  # classifier predicts TW-offset_pred steps ahead; aligns output label with the center of the input window
+STRIDE = 10  # sliding window stride (samples); output label density is 1 per 10 samples = 1 kHz
 
 with open(MODEL_METADATA_DIR / 'stats_PD.json', 'r') as f:
     stats_PD = json.load(f)
@@ -52,6 +64,16 @@ model_PD.to(DEVICE)
 
 # %%
 def normalize_input_multichannel(sig, signal_list, stats):
+    """Normalize multiple signal channels using per-channel mean/std from stats dict.
+
+    Args:
+        sig: DataFrame with a 'time' column and signal columns.
+        signal_list: Column names to normalize; must all be present in stats.
+        stats: Dict mapping column name to {"mean": float, "sd": float}.
+
+    Returns:
+        Tuple of (time tensor, stacked normalized signal tensor of shape (len(signal_list), T)).
+    """
     assert all([s in stats for s in signal_list])
     columns = []
     for s in signal_list:
@@ -61,6 +83,22 @@ def normalize_input_multichannel(sig, signal_list, stats):
 
 # %%
 def pred_sample_slidingwindow(model: FNOLSTM, t, x, tw, stride, offset_pred, i_start=0):
+    """Run the FNOLSTM classifier in a sliding window over a signal tensor.
+
+    Args:
+        model: FNOLSTM classifier.
+        t: Timeline array of shape (T,) or (T, batch); index values for label alignment.
+        x: Signal tensor of shape (1, channels, T) or (batch, channels, T).
+        tw: Window width in samples.
+        stride: Step size between windows in samples.
+        offset_pred: Offset between window end and the assigned label time index;
+            accounts for the LSTM prediction horizon.
+        i_start: Start index for the sliding window (default 0).
+
+    Returns:
+        Tuple of (y_times, y_preds) where y_times has the label timestamps
+        and y_preds has integer class indices (0=L, 1=D, 2=H).
+    """
     model.eval()
     x = x.to(DEVICE)
     if x.dim() == 2:
@@ -86,7 +124,21 @@ def pred_sample_slidingwindow(model: FNOLSTM, t, x, tw, stride, offset_pred, i_s
 
 
 def clean_labels_series(label_t, surr_labels, history_length, seq_length):
-    """Resample the labels such that we have a label for every step from -history to +seq_length"""
+    """Resample sparse surrogate labels to a dense label for every index in [-history_length, seq_length).
+
+    The classifier produces one label per stride (every 10 samples), indexed by the
+    label's time offset from Wf start. This function reindexes to the full window
+    range and fills gaps using nearest-neighbor interpolation then forward-fill.
+
+    Args:
+        label_t: Array of label timestamps output by pred_sample_slidingwindow.
+        surr_labels: Integer label array (0=L, 1=D, 2=H) from the classifier.
+        history_length: Length of the history window Wh in samples.
+        seq_length: Length of the future window Wf in samples.
+
+    Returns:
+        pd.Series indexed from -history_length to seq_length-1.
+    """
     resampled_series = pd.Series(data=surr_labels, index=label_t.numpy())
     # Extend the index to the full range and forward fill the series
     # cut to around the target timeline, interpolate nearest,
@@ -148,9 +200,23 @@ def get_mode_predictions_batched_window(
 
 
 def generate_surrogate_labels(meta, generated_samples, target_samples, data_module):
-    """To be called by test or evaluate step. 
+    """Generate surrogate confinement mode labels for one batch sample (non-batched, slow path).
 
-    Dataset is needed for get history and denormalization."""
+    Iterates over samples in the batch one by one. For each sample, retrieves the full
+    shot history from the data module, concatenates it with the generated/target future
+    windows, and runs the FNOLSTM classifier. Use generate_surrogate_labels_batched
+    for GPU runs; this function is the reference (non-batched) implementation.
+
+    Args:
+        meta: Batch metadata dict with 'shot_number' and 'start_i' tensors.
+        generated_samples: Model-generated future windows, shape (B, C, L), normalized [0,1].
+        target_samples: Ground-truth future windows, shape (B, C, L), normalized [0,1].
+        data_module: FusionShotDataModule used to retrieve full history and denormalize.
+
+    Returns:
+        Tuple of (surr_labels_pred, surr_labels_target), each shape (B, history_length + seq_length),
+        integer arrays with values 0=L-mode, 1=D-mode, 2=H-mode.
+    """
     C = get_current_config()
     shot_numbers = meta['shot_number'].cpu()
     prediction_window_starts_idx = meta['start_i']
@@ -209,13 +275,27 @@ def generate_surrogate_labels(meta, generated_samples, target_samples, data_modu
 
 
 def generate_surrogate_labels_batched(meta, generated_samples, target_samples, data_module):
-    """Batched version of generate_surrogate_labels.
-    Calls get_full_history in batch, pads after concat, and processes in batch.
+    """Batched version of generate_surrogate_labels; pads sequences and processes all at once.
+
+    Retrieves all full histories in one get_full_history call, pads the concatenated
+    [history + future] sequences to the same length, and runs the FNOLSTM classifier
+    on the entire padded batch in a single forward pass.
+
+    Args:
+        meta: Batch metadata dict with 'shot_number' and 'start_i' tensors.
+        generated_samples: Model-generated future windows, shape (B, C, L), normalized [0,1].
+        target_samples: Ground-truth future windows, shape (B, C, L), normalized [0,1].
+        data_module: FusionShotDataModule used to retrieve full history and denormalize.
+
+    Returns:
+        Tuple of (surr_labels_pred, surr_labels_target), each shape (B, history_length + seq_length),
+        integer arrays with values 0=L-mode, 1=D-mode, 2=H-mode.
     """
     import torch.nn.functional as F
     C = get_current_config()
     shot_numbers = meta['shot_number'].cpu()
     prediction_window_starts_idx = meta['start_i'].cpu()
+    # PD (H-alpha divertor photodiode) is the only input to the FNOLSTM classifier
     PD_index = C.data.cols.x.index("PD")
     history_length = C.data.history_length
     seq_length = C.data.seq_length
@@ -254,6 +334,7 @@ def generate_surrogate_labels_batched(meta, generated_samples, target_samples, d
     )
 
     # 4. Build timeline for each sample (broadcasted, shape [MAXT, batch_size])
+    # timelines are relative to Wf start (0); history indices are negative
     MAXT = total_len  # or max(concat_lens)
     idx_timelines = np.arange(MAXT)[:, None] - prediction_window_starts_idx[None, :].numpy()  # Wf starts at 0
 
