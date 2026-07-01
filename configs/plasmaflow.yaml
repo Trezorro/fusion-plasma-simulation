@@ -129,7 +129,7 @@ data:
   batch_size: ${ batch_size }
   seq_length: 256
   history_length: ${ data.seq_length } # default null / 0, if positive int, will include x_history in the conditioning_inputs
-  crop_margin: 128 # Determines the unused period at start and end of each shot for preprocessing
+  crop_margin: 384 # Determines the unused period at start and end of each shot for preprocessing. Must be larger than seq_length
   overfit_on_shots: null # list of ints or null
   allowed_start_indices: null # list of ints or null
   sample_rate: 10000
