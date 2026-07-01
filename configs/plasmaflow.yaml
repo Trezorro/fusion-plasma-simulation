@@ -106,7 +106,7 @@ model:
       # activation: GELU  # Default GELU # TODO implement configurable activation
       time_embedding: sinusoidal+mlp # default: sinusoidal, with optional +mlp, other: dummy
       time_embedding_d: 32 # Default 32
-      positional_encoding: null # sinusoidal+mlp # Default sinusoidal, other: sinusoidal+mlp, dummy
+      positional_encoding: sinusoidal+mlp # Default sinusoidal, other: sinusoidal+mlp, dummy
       positional_encoding_d: 32
       positional_encoding_c: 8 # Only used if using +mlp
       ch_mults: [2, 2, 2, 2] # Default [1, 2, 2, 4]
