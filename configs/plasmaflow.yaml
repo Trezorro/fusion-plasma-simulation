@@ -84,7 +84,7 @@ evaluation:
 # model: configs/unflow.yaml
 
 model:
-  Class: FlowModule
+  Class: UnFlowModule
   params:
     prior: "normal" # normal, copy, brownian, levy, resample, constant
     prior_sigma: 0.3 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
