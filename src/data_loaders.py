@@ -446,6 +446,7 @@ class FusionShotDataModule(L.LightningDataModule):
         self.data = pd.read_parquet(self.dir + self.file)
         self.data_is_normalized = False
         self.data['ShotNum'] = self.data['ShotNum'].astype(np.int32)
+        self.data['LHD_label'] = self.data['LHD_label'] + 1 # Hardcoded compatibility shortcut for new data set (which has labels L: 0, D: 1, H, 2)
         self.data = self.data.ffill()
         logger.info(f"Loaded {self.data['ShotNum'].nunique()} shots from {self.file}")
         # add artificial columns if found in the config:

@@ -2,14 +2,14 @@
 features:
   - manual_optimization
   - batch_rematching
-  - pass_t_to_conditioning_input  #  Makes sure flow t is also available in the conditioning input when sequentially conditioning
+  - pass_t_to_conditioning_input #  Makes sure flow t is also available in the conditioning input when sequentially conditioning
   - learning_rate_schedule
   - true_condition_concat
   - speed_monitor
   - FIX_conditioning_input_matching
   - learning_rate_scheduler
   # - resume_run
-run_name: testrunAAA
+# run_name: testrunAAA
 # resume_id: fwxfmft7
 # resume_name: seq_normal_smC_BIG2
 
@@ -18,20 +18,19 @@ limit_train_batches: 150
 limit_val_batches: 30
 batch_size: 128
 patience: 20
-gradient_clip_val: 10  # in testing, lower values did not help prevent loss explosions. This is just a safeguard
+gradient_clip_val: 10 # in testing, lower values did not help prevent loss explosions. This is just a safeguard
 skip_log_summary: false
 
-# test_cache_name: ${ run_name }
+test_cache_name: ${ run_name }
 test_cache_mode: create # create or use
 
-
-window_set:  # for evaluation plots
+window_set: # for evaluation plots
   - [57013, 0.94]
   - [57013, 1.08]
   - [73368, 0.38] # All low and boring
   - [77604, 0.72]
   - [77604, 0.77]
-  - [77409,1.32]
+  - [77409, 1.32]
   - [69514, 0.51]
   - [69514, 0.51]
   - [64770, 0.17] # L Mode boringness
@@ -40,12 +39,10 @@ window_set:  # for evaluation plots
   - [61237, 0.89] # 75% BIG peaks
   - [61028, 0.98] # 75%
   - [61028, 1.12] # 78%
-  - [60813,1.00] # NBI ramping up
-  - [60813,1.42] # ramped up to 75%
+  - [60813, 1.00] # NBI ramping up
+  - [60813, 1.42] # ramped up to 75%
   - [77595, 0.94] # High NBI
   - [76702, 1.14] # high NBI
-
-
 
 evaluation:
   n_steps: 100 # enough for rk4
@@ -53,7 +50,7 @@ evaluation:
   max_n: 64
   val_every_n_epochs: 5
   train_every_n_epochs: 20
-  scrutinize_epochs: 3  # Epochs equal or lower than this will always be fully evaluated. -1 to disable
+  scrutinize_epochs: 3 # Epochs equal or lower than this will always be fully evaluated. -1 to disable
   plot_functions:
     # every item has to have a 'key' key.
     # n are optional through defaults in PlotsCallback
@@ -65,7 +62,7 @@ evaluation:
     - key: multi_channel_lines
       n: 16
       buttons: true
-    - key: histogram  # see histograms.py
+    - key: histogram # see histograms.py
       log_key: peak_histogram/PD_count
       channel_name: PD
       measure: count
@@ -83,49 +80,47 @@ evaluation:
     #   log_key: permutation_entropy_plot
     #   n: 64
 
-
 # model: model.yaml # To be replaced by respective yaml file content
 # model: configs/unflow.yaml
 
-model: 
+model:
   Class: FlowModule
   params:
-    prior: 'normal'  # normal, copy, brownian, levy, resample, constant
+    prior: "normal" # normal, copy, brownian, levy, resample, constant
     prior_sigma: 0.3 # Default 0.3, which gets about 90% of the values between the normalized 0 and 1 range
-    ot_method: null  # null to disable
-    ot_replace: true  # Default false
-    batch_rematch_factor: 5  # Default 1
-    step_every_nth_match: 1  # Default 1 # TODO
+    ot_method: null # null to disable
+    ot_replace: true # Default false
+    batch_rematch_factor: 5 # Default 1
+    step_every_nth_match: 1 # Default 1 # TODO
     gradient_clip_val: ${ gradient_clip_val }
     solve_method: ${ evaluation.solve_method }
     flow_steps: ${ evaluation.n_steps }
-    model: ConditionalUNet  # Must accept x, t inputs
+    model: ConditionalUNet # Must accept x, t inputs
     model_params:
-      conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
+      conditioning: ["x_history", "c", "position_sequence"] # TODO will affect architecture
       conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 5 # Default 3
-      c_channels: 0  # Default 0 disables conditioning on C
-      apex_hidden_channels: 64  # Default 128
+      c_channels: 0 # Default 0 disables conditioning on C
+      apex_hidden_channels: 64 # Default 128
       # activation: GELU  # Default GELU # TODO implement configurable activation
-      time_embedding: sinusoidal+mlp  # default: sinusoidal, with optional +mlp, other: dummy
-      time_embedding_d: 32  # Default 32 
-      positional_encoding: sinusoidal+mlp  # Default sinusoidal, other: sinusoidal+mlp, dummy
+      time_embedding: sinusoidal+mlp # default: sinusoidal, with optional +mlp, other: dummy
+      time_embedding_d: 32 # Default 32
+      positional_encoding: null # sinusoidal+mlp # Default sinusoidal, other: sinusoidal+mlp, dummy
       positional_encoding_d: 32
-      positional_encoding_c: 8  # Only used if using +mlp
-      ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
+      positional_encoding_c: 8 # Only used if using +mlp
+      ch_mults: [2, 2, 2, 2] # Default [1, 2, 2, 4]
       is_attn: [true, false, false, false] # Default [false, false, false, false]
       mid_attn: true # Default false
-      attn_heads: 2  # Default 1
+      attn_heads: 2 # Default 1
       n_blocks: 2 # Default 2. Number of residual blocks
       norm_groups: 4 # Default false
       use1x1: false # Default false
     loss: MSELoss
     optimizer_params:
       lr: 0.00005
-      weight_decay: 0  # Default 0
-      amsgrad: false  # Default false
-
+      weight_decay: 0 # Default 0
+      amsgrad: false # Default false
 
 data:
   Class: FusionShotDataModule
@@ -134,27 +129,27 @@ data:
   batch_size: ${ batch_size }
   seq_length: 256
   history_length: ${ data.seq_length } # default null / 0, if positive int, will include x_history in the conditioning_inputs
-  crop_margin: 1024  # Determines the unused period at start and end of each shot for preprocessing
-  overfit_on_shots: null  # list of ints or null
-  allowed_start_indices: null  # list of ints or null
+  crop_margin: 128 # Determines the unused period at start and end of each shot for preprocessing
+  overfit_on_shots: null # list of ints or null
+  allowed_start_indices: null # list of ints or null
   sample_rate: 10000
   pre_shuffle: true
   cols:
     meta:
-    - ShotNum
-    - time
+      - ShotNum
+      - time
     x: [
-        "FIR_LIDs_core",  # replaces FIR_core
+        "FIR_LIDs_core", # replaces FIR_core
         # "Halpha1",        # replaces PD (H-alpha divertor photodiode)
         "PD", # renamed H alpha 1 column back to PD for explicit compatibility
-        "DML",            # same
-        "POHM",           # same
-        "Z_axis",         # same
-        ]
+        "DML", # same
+        "POHM", # same
+        "Z_axis", # same
+      ]
     c:
       # - NBI-median
       # - ECRH-median
-      - IP  # Current reference line
+      - IP # Current reference line
       # - gas_fringes  # Ingepompte gas
       # - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
       # - ECRH  # magnetron.
@@ -162,11 +157,42 @@ data:
       # - KAPPA
       # - DELTA  # linkerbovenhoek naar links vanuit hetmidden
     label: LHD_label
-  val_shots: [53623, 57732, 64393, 73631, 57094, 63878, 64686, 77089, 75264, 64678, 77598, 64386] # 103608 viable samples
-  test_shots: [57013, 76702, 77196, 73935, 61028, 64857, 73368, 60814, 77599, 61237, 77409, 76304, 77595, 65481, 77193, 68697, 69514, 68631, 67112, 63306, 64770, 60813, 64365, 77604, 77602] # 217308 viable samples
-  train_shots: [26386, 29511, 30043, 30197, 30225, 30262, 30268, 30290, 30310, 31211, 31554, 31650, 31718, 31807, 31839, 32191, 32195, 32592, 32716, 32911, 33188, 33271, 33281, 33459, 33567, 33942, 34010, 34309, 42197, 42514, 43454, 45103, 45105, 46853, 47962, 48580, 52302, 53601, 53625, 53627, 53629, 56662, 57000, 57009, 57010, 57011, 57024, 57026, 57077, 57081, 57093, 57095, 57103, 57218, 57622, 57623, 57624, 57706, 57715, 57751, 58182, 58460, 59061, 59064, 59065, 59066, 59073, 59076, 59825, 60097, 60275, 60812, 60830, 60992, 60995, 61000, 61005, 61009, 61010, 61021, 61038, 61039, 61042, 61043, 61044, 61055, 61057, 61058, 61060, 61242, 61246, 61254, 61260, 61274, 61275, 61277, 61279, 61281, 61608, 61609, 61630, 61631, 61702, 61703, 61711, 61712, 61713, 61714, 61716, 61719, 62744, 63229, 63230, 63232, 63234, 63236, 63238, 63240, 63242, 63244, 63246, 63250, 63298, 63300, 63302, 63308, 63310, 63843, 63847, 63849, 63853, 63877, 63879, 63880, 63882, 63887, 63888, 63920, 63923, 63943, 63944, 63945, 64060, 64067, 64327, 64335, 64336, 64338, 64340, 64342, 64363, 64364, 64366, 64367, 64368, 64369, 64370, 64371, 64372, 64373, 64374, 64376, 64378, 64389, 64392, 64647, 64648, 64658, 64659, 64662, 64666, 64670, 64675, 64680, 64774, 64820, 64855, 64858, 64859, 64911, 64912, 64913, 64914, 64915, 64916, 64917, 64918, 64919, 64923, 64924, 65253, 65280, 65281, 65282, 65283, 65285, 65288, 65317, 65318, 65319, 65320, 65321, 65322, 65336, 65482, 65487, 65557, 65561, 65564, 65566, 66494, 67182, 67186, 68268, 68628, 69127, 69129, 69133, 69512, 69515, 70777, 71208, 73330, 73367, 73632, 73927, 73929, 73931, 73934, 73936, 74498, 74916, 75263, 75265, 76322, 77092, 77411, 77426] # 1963980 viable samples
-
-
+  val_shots: [
+                52302,
+                56662,
+                57009,
+                57010,
+                57011,
+                58460,
+                60812,
+                60830,
+                61060,
+                61274,
+                61275,
+                61277,
+                61279,
+                61281,
+                61702,
+                61703,
+                64060,
+                64067,
+                66494,
+                67182,
+                67186,
+                69512,
+                69515,
+                73330,
+                73367,
+                73927,
+                73929,
+                73931,
+                73934,
+                73936
+            ] # ??? viable samples
+  test_shots: [
+        57094, 57732, 60814, 64365, 67112, 72929, 75264, 76702, 77409, 77595, 53623, 57013, 60813, 61028, 61056, 61237, 63306, 63878, 64386, 64393, 64678, 64686, 64770, 64857, 65469, 65481, 68631, 68697, 69514, 71344, 73368, 73631, 73935, 76304, 77089, 77193, 77196, 77598, 77599, 77602, 77604, 78069, 79825, 83049
+    ] # ???? viable samples
+  train_shots: [ 26386, 29511, 30043, 30197, 30225, 30262, 30268, 30290, 30310, 31211, 31554, 31650, 31718, 31807, 31839, 32191, 32195, 32592, 32716, 32911, 33188, 33271, 33281, 33459, 33567, 33942, 34010, 34309, 42197, 42514, 43454, 45103, 45105, 46853, 47962, 48580, 53601, 53625, 53627, 53629, 57000, 57024, 57026, 57077, 57081, 57093, 57095, 57103, 57218, 57622, 57623, 57624, 57706, 57715, 57751, 58182, 59061, 59064, 59065, 59066, 59073, 59076, 59825, 60097, 60275, 60992, 60995, 61000, 61005, 61009, 61010, 61021, 61038, 61039, 61042, 61043, 61044, 61055, 61057, 61058, 61242, 61246, 61254, 61260, 61608, 61609, 61630, 61631, 61711, 61712, 61713, 61714, 61716, 61719, 62744, 63229, 63230, 63232, 63234, 63236, 63238, 63240, 63242, 63244, 63246, 63250, 63298, 63300, 63302, 63308, 63310, 63843, 63847, 63848, 63849, 63853, 63877, 63879, 63880, 63882, 63887, 63888, 63920, 63923, 63943, 63944, 63945, 64327, 64335, 64336, 64338, 64340, 64342, 64363, 64364, 64366, 64367, 64368, 64369, 64370, 64371, 64372, 64373, 64374, 64376, 64378, 64389, 64392, 64647, 64648, 64658, 64659, 64662, 64666, 64670, 64675, 64680, 64774, 64820, 64855, 64858, 64859, 64911, 64912, 64913, 64914, 64915, 64916, 64917, 64918, 64919, 64923, 64924, 65253, 65280, 65281, 65282, 65283, 65285, 65288, 65317, 65318, 65319, 65320, 65321, 65322, 65336, 65391, 65468, 65474, 65482, 65487, 65488, 65527, 65557, 65561, 65564, 65566, 68268, 68628, 68643, 68693, 68699, 68919, 68984, 68987, 69113, 69115, 69127, 69129, 69133, 70777, 71208, 72828, 73632, 74498, 74916, 75263, 75265, 76322, 77092, 77330, 77411, 77426, 79815, 79826, 79827, 82610 ] # 1963980 viable samples
 
 # Shorthands for important parameters for wandb
 Prior: ${ model.params.prior }
@@ -187,144 +213,141 @@ Seq_L: ${ data.seq_length }
 Crop: ${ data.crop_margin }
 Cols: ${ data.cols.x }
 Learning_rate: ${ model.params.optimizer_params.lr }
-Rematches: ${ model.params.batch_rematch_factor }
+Rematches:
+  ${ model.params.batch_rematch_factor }
 
-
-
-
-
-    # Prominence histograms
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/dml_energy_delta
-    #   channel_name: DML
-    #   measure: energy_delta
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/dml_pd_prominence
-    #   channel_name: DML
-    #   measure: pd_prominence
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/dml_pd_ratio
-    #   channel_name: DML
-    #   measure: energy_ratio
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/FIR_core_count
-    #   channel_name: FIR_core
-    #   measure: count
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/DML_count
-    #   channel_name: DML
-    #   measure: count
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/POHM_count
-    #   channel_name: POHM
-    #   measure: count
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/Z_axis_count
-    #   channel_name: Z_axis
-    #   measure: count
-    #   n: 64
-    # # Peak Prominence histograms
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/PD_prominence
-    #   channel_name: PD
-    #   measure: prominence
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/DML_prominence
-    #   channel_name: DML
-    #   measure: prominence
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/POHM_prominence
-    #   channel_name: POHM
-    #   measure: prominence
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/Z_axis_prominence
-    #   channel_name: Z_axis
-    #   measure: prominence
-    #   n: 64
-    # # Peak Width histograms
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/FIR_core_width
-    #   channel_name: FIR_core
-    #   measure: width
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/PD_width
-    #   channel_name: PD
-    #   measure: width
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/DML_width
-    #   channel_name: DML
-    #   measure: width
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/POHM_width
-    #   channel_name: POHM
-    #   measure: width
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/Z_axis_width
-    #   channel_name: Z_axis
-    #   measure: width
-    #   n: 64
-    # # Peak Height histograms
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/FIR_core_height
-    #   channel_name: FIR_core
-    #   measure: height
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/PD_height
-    #   channel_name: PD
-    #   measure: height
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/DML_height
-    #   channel_name: DML
-    #   measure: height
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/POHM_height
-    #   channel_name: POHM
-    #   measure: height
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/Z_axis_height
-    #   channel_name: Z_axis
-    #   measure: height
-    #   n: 64
-    # # Peak Base histograms
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/FIR_core_base
-    #   channel_name: FIR_core
-    #   measure: base
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/PD_base
-    #   channel_name: PD
-    #   measure: base
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/DML_base
-    #   channel_name: DML
-    #   measure: base
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/POHM_base
-    #   channel_name: POHM
-    #   measure: base
-    #   n: 64
-    # - key: histogram  # see histograms.py
-    #   log_key: peak_histogram/Z_axis_base
-    #   channel_name: Z_axis
-    #   measure: base
-    #   n: 64
+  # Prominence histograms
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/dml_energy_delta
+  #   channel_name: DML
+  #   measure: energy_delta
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/dml_pd_prominence
+  #   channel_name: DML
+  #   measure: pd_prominence
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/dml_pd_ratio
+  #   channel_name: DML
+  #   measure: energy_ratio
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/FIR_core_count
+  #   channel_name: FIR_core
+  #   measure: count
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/DML_count
+  #   channel_name: DML
+  #   measure: count
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/POHM_count
+  #   channel_name: POHM
+  #   measure: count
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/Z_axis_count
+  #   channel_name: Z_axis
+  #   measure: count
+  #   n: 64
+  # # Peak Prominence histograms
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/PD_prominence
+  #   channel_name: PD
+  #   measure: prominence
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/DML_prominence
+  #   channel_name: DML
+  #   measure: prominence
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/POHM_prominence
+  #   channel_name: POHM
+  #   measure: prominence
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/Z_axis_prominence
+  #   channel_name: Z_axis
+  #   measure: prominence
+  #   n: 64
+  # # Peak Width histograms
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/FIR_core_width
+  #   channel_name: FIR_core
+  #   measure: width
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/PD_width
+  #   channel_name: PD
+  #   measure: width
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/DML_width
+  #   channel_name: DML
+  #   measure: width
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/POHM_width
+  #   channel_name: POHM
+  #   measure: width
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/Z_axis_width
+  #   channel_name: Z_axis
+  #   measure: width
+  #   n: 64
+  # # Peak Height histograms
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/FIR_core_height
+  #   channel_name: FIR_core
+  #   measure: height
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/PD_height
+  #   channel_name: PD
+  #   measure: height
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/DML_height
+  #   channel_name: DML
+  #   measure: height
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/POHM_height
+  #   channel_name: POHM
+  #   measure: height
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/Z_axis_height
+  #   channel_name: Z_axis
+  #   measure: height
+  #   n: 64
+  # # Peak Base histograms
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/FIR_core_base
+  #   channel_name: FIR_core
+  #   measure: base
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/PD_base
+  #   channel_name: PD
+  #   measure: base
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/DML_base
+  #   channel_name: DML
+  #   measure: base
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/POHM_base
+  #   channel_name: POHM
+  #   measure: base
+  #   n: 64
+  # - key: histogram  # see histograms.py
+  #   log_key: peak_histogram/Z_axis_base
+  #   channel_name: Z_axis
+  #   measure: base
+  #   n: 64
