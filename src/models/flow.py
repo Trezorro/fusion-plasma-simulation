@@ -58,6 +58,7 @@ class FlowModule(L.LightningModule):
         optimizer_params: Optional[DictConfig | dict] = None,
         prior: Literal["normal", "levy", "resample", "brownian", "copy", "constant"] = "normal",
         prior_sigma: float = 0.3,
+        seq_length: Optional[int] = None,
         ot_method: Optional[str] = None,
         ot_replace: bool = False,
         batch_rematch_factor: int = 1,
@@ -95,6 +96,7 @@ class FlowModule(L.LightningModule):
         self.loss = self.LOSS_OPTIONS[loss]()
         self.prior = prior
         self.prior_sigma = prior_sigma
+        self.seq_length = seq_length
         self.ot_method = ot_method
         self.ot_sampler = OTPlanSampler(method=ot_method, reg=0.05) if ot_method else None
         self.ot_replace = ot_replace
@@ -105,8 +107,10 @@ class FlowModule(L.LightningModule):
         self.solve_method = solve_method
         self._validate_configuration()
         self.automatic_optimization = False
-        # precomputed on the right device; used by generate_brownian_motion for fixed dt = 1/sample_rate
-        self.register_buffer("sqrt_dt", torch.sqrt(torch.tensor(1 / self.SAMPLE_RATE)))
+        # dt = 1/seq_length gives a fixed diffusion horizon T=1 over the window, decoupled from
+        # the acquisition rate. Precomputed once on the right device for generate_brownian_motion.
+        if seq_length is not None:
+            self.register_buffer("sqrt_dt", torch.sqrt(torch.tensor(1.0 / seq_length)))
         self.init_metrics()
         self.test_cache_name = None
         self.test_cache = None
@@ -273,13 +277,19 @@ class FlowModule(L.LightningModule):
         return prior_samples
 
     def generate_brownian_motion(self, x_last, seq_length):
-        """Generate a Brownian motion trajectory with fixed dt = 1/10000.
+        """Generate a Brownian motion trajectory with dt = 1/seq_length (horizon T=1).
+
+        The diffusion horizon is normalized to the window (T=1) rather than tied to the
+        acquisition rate, so the prior's spread is independent of the sampling frequency.
+        With dt = 1/seq_length, the marginal variance grows as Var(x_k) = (k/seq_length) *
+        prior_sigma^2: the terminal marginal std equals prior_sigma and the time-averaged
+        std equals prior_sigma / sqrt(2).
 
         Brownian motion follows the stochastic differential equation:
         dx_t = dB_t,
             where B_t is a standard Brownian motion with independent Gaussian increments:
             x_{t+dt} = x_t + \\sqrt{dt} * \\xi,  \\xi \\sim \\mathcal{N}(0,1).
-        
+
         Parameters:
         x_last (torch.Tensor): Initial positions of shape (N, C), where N = batch size, C = number of channels.
         seq_length (int): Number of time steps in the sequence.

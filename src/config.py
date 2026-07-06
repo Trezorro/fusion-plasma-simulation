@@ -122,6 +122,9 @@ def update_model_input_channels(conf):
             conf.model.params.model_params.input_channels = len(conf.data.cols.x)
         if 'c' in conf.data.cols:
             conf.model.params.model_params.c_channels = len(conf.data.cols.c)
+    if 'data' in conf and 'seq_length' in conf.data:
+        # Used by the Brownian prior to set dt = 1/seq_length (horizon T=1).
+        conf.model.params.seq_length = conf.data.seq_length
 
 
 def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.public.Run | None:
