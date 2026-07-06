@@ -1,3 +1,8 @@
+"""Compares torchmetrics MSE/MSLE against src.fourier.FourierMSLE on synthetic sine/gaussian/mixture signals. Prototype/legacy, unmaintained.
+
+Inputs/Outputs: scratch, inline only; generates synthetic signals, no file I/O.
+FourierMSLE usage pattern and the experiment/generate_dataframe sweep helpers could be extracted for metric validation in src/metrics/.
+"""
 #%% Imports
 import numpy as np
 import pandas as pd

@@ -1,3 +1,8 @@
+"""Minimal template: load a FusionShotDataModule and plot one shot's channels with plotly. Prototype/legacy, unmaintained.
+
+Inputs/Outputs: reads ./data/2024_05_01-NaNsFiltered.parquet via FusionShotDataModule; scratch plot only, no writes.
+Handy: plot_shot (per-channel plotly line plot, dark theme) is a minimal reusable starting point for quick data-loading smoke tests.
+"""
 # %% [markdown]
 # # Test entropy
 #

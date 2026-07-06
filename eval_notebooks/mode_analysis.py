@@ -1,3 +1,13 @@
+"""Mode-transition (L/D/H) matrices and statistics from cached /modes results; LaTeX tables plus bar and stacked-bar plots comparing model vs ground-truth switching.
+
+Scientific output: thesis mode-dynamics tables (output/tables/mode/{condition}.tex) and transition bar plots.
+Inputs:  all output/test_cache/*.h5 via pd.read_hdf(key='/modes/{cond}/{measure}') over 11 conditions x 9 measures (each a 4x4 from/to L,D,H,any matrix); output/X2.csv wandb metadata for human names; ground truth read ONLY from the FM-Sequence-Gaussian cache (its '_target' rows).
+Outputs: output/tables/mode/{condition}.tex (5 conditions); output/pdfplots/{condition}_{measure}.pdf (~20); appends to output/pdfplots/modes all.tex; output/tables/model_overview.tex; renames run dirs under output/pdfplots/.
+Usage:   export X2.csv from wandb first; CONDS, MEASURES, and MODEL_ORDER are hardcoded; run cells top to bottom.
+Limits:  fragile; inflexible HDF5 key names; appends to 'modes all.tex' without clearing (re-runs accumulate); KeyError logged if a CSV cache is missing on disk; FM-Sequence-Gaussian hardcoded as ground truth; file was renamed from mode_transtions.py.
+Handy:   get_h5_tree()/print_h5_tree()/list_mode_keys() HDF5 introspection; df_from_cache() and combine_caches(); plot_multifacet_bar()/plot_multifacet_stacked_bar(); the LaTeX pivot with bold-min highlighting (highlight_min/rename_cols). Worth extracting into src/.
+History: created Jun 15 2025 as mode_transtions.py, renamed Jun 16, finalized Jun 17 ("Finish awesome boxplots and all tables"); frozen since.
+"""
 #%% Imports
 import pandas as pd
 from pathlib import Path

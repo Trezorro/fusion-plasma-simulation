@@ -1,3 +1,8 @@
+"""Loads a single TCV shot (parquet + LHD label csv) and renders time-domain/spectrum plotly plots to HTML. Prototype/legacy, unmaintained. For fft models.
+
+Inputs/Outputs: reads ../data/LHD_labeled_TCV/TCV_DATA*.parquet and TCV_*_apau_labeled.csv; writes output/Shot{shotno}_plotly_preview.html.
+Handy: plot_signal_and_spectrum (dual-subplot time/spectrum plot with log/linear and predicted/target toggle buttons) is a reusable plotting routine worth extracting into src/plotters/.
+"""
 # %%
 import pandas as pd
 from pathlib import Path

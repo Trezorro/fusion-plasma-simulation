@@ -1,4 +1,10 @@
-# %% Orignal by Jakub Tomczak for the book Deep Generative Models
+"""Autoregressive causal-conv (PixelCNN-style) baseline for single-channel TCV signal, adapted from Tomczak's Deep Generative Models Digits example. Prototype/legacy, unmaintained.
+
+Inputs/Outputs: reads /Users/milan/Code/fusion/experiments/shots/TCV_DATA*clean.parquet and TCV_*_apau_labeled.csv; writes model checkpoints/PDFs under results_fusion/.
+Handy: CausalConv1d and the ARM (log_categorical + autoregressive sampling) class are reusable building blocks, though superseded by the flow matching model in src/models/.
+
+Orignal code by Jakub Tomczak for the book Deep Generative Models
+"""
 import os
 import glob
 import re
@@ -504,6 +510,3 @@ samples_generated(result_dir + name, dataloader, extra_name="_conditioned", star
 # plot_curve(result_dir + name, nll_val)
 
 # %%
-
-
-

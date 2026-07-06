@@ -82,6 +82,7 @@ bash src/HPC_setup/submit_remote_job_snellius.sh my_experiment
 | [evaluation-metrics.md](evaluation-metrics.md) | Every metric computed: definition, wandb key, timing |
 | [plots.md](plots.md) | All plot types: what they show, how to configure |
 | [hpc-snellius.md](hpc-snellius.md) | Snellius HPC: submit, sync, debug, venv setup |
+| [notebooks.md](notebooks.md) | Analysis notebooks: which one makes which thesis figure/table, inputs/outputs, run order |
 
 ## Key output artifacts
 

@@ -1,3 +1,13 @@
+"""Canonical peak-property LaTeX/Excel tables (Wasserstein marginal/pairwise plus MSE) per channel, auto-splitting wide tables.
+
+Scientific output: thesis peak-metric tables (appendix), with detailed W_marg/W_pair/MSE captions.
+Inputs:  output/test_cache/*.json via parse_metrics_json(); *.h5 /peaks/{condition} keys are globbed for MODEL_ORDER context but the table export is JSON-based; MODEL_ORDER reversed at definition, sliced [1:] (drops Ground Truth) for the pivot; ground truth handled as the 'Real' rows in the JSON.
+Outputs: output/tables/peak_props_{channel}.xlsx and output/tables/peaks_overview_{channel}.tex plus peaks_overview_split_{channel}.tex, for each of FIR_core, PD, PD large peaks, DML, POHM, Z_axis.
+Usage:   highly robust and self-contained; run top to bottom; treat as the canonical peak-table generator (run last of the three peak notebooks).
+Limits:  shares peak_props_*/peaks_overview_* output filenames with moments.py and peak_analysis.py (last run wins); SettingWithCopy-style in-place edits on channel_df.
+Handy:   split_and_write_latex_table() column chunker (max 10 cols); pivot_peaks_df(); export_tables_for_channel() with min-value bold highlighting; parse_metrics_json(). All good src/ candidates.
+History: created Jun 17 2025 ("Finish awesome boxplots and all tables"), single commit, never edited (frozen finalized artifact).
+"""
 #%%# Peak Metrics Analysis from Archived HDF5 Files
 
 # This notebook loads peak property DataFrames directly from HDF5 archives created by PeakMetric, combines them, and explores their dimensions for pivot table analysis.

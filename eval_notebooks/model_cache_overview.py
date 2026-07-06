@@ -1,3 +1,13 @@
+"""Cache inventory, config audit, and rsync sync from Snellius; maps wandb run configs to cache names.
+
+Scientific output: none (bookkeeping and orchestration).
+Inputs:  output/X2.csv and output/XR-overview.csv; a hardcoded ~30-name cache list; wandb.Api() runs (used elsewhere in the notebook family).
+Outputs: console tables; a guarded rsync command (prints a reminder to uncomment the dry-run flag before running).
+Usage:   the final rsync cell pulls snellius:/scratch-shared/mtresoor/final_cache/ into output/test_cache/; update the hardcoded 'caches' list as caches change.
+Limits:  very fragile; stale hardcoded cache list; buggy get_cache_overview(CSV, group_cols, cache_col, caches) call (the local def takes 1 arg); CACHE_DIR typo 'ouptut/test_cache'.
+Handy:   the rsync include-pattern builder for selective cache download and the groupby cache-existence summary (summarize_caches) are the reusable bits.
+History: created Jun 14 2025 ("Final reeval") in the repo root; XR-* tracking edits Jun 14-16; moved into eval_notebooks/ Oct 11 2025.
+"""
 #%%
 import pandas as pd
 import os
