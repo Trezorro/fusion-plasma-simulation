@@ -86,7 +86,7 @@ evaluation:
 model:
   Class: FlowModule
   params:
-    prior: "normal" # normal, copy, brownian, levy, resample, constant
+    prior: "brownian" # normal, copy, brownian, levy, resample, constant
     # prior_sigma: std of the prior (source) distribution in the normalized [0,1] space.
     # Meaning is per-prior: normal -> constant per-step std; brownian -> terminal std
     # (its time-averaged std is prior_sigma/sqrt(2)). At 0.3 every prior lands in the
