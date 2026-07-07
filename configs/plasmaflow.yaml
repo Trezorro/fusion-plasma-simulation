@@ -92,10 +92,10 @@ model:
     # (its time-averaged std is prior_sigma/sqrt(2)). At 0.3 every prior lands in the
     # 0.2-0.3 band that spans the normalized data range, so one default serves all priors:
     # normal keeps ~90% of mass in [0,1], brownian gets terminal std 0.30 / avg 0.21.
-    prior_sigma: 0.3
+    prior_sigma: 0.8
     ot_method: null # null to disable
     ot_replace: true # Default false
-    batch_rematch_factor: 5 # Default 1
+    batch_rematch_factor: 10 # Default 1
     step_every_nth_match: 1 # Default 1 # TODO
     gradient_clip_val: ${ gradient_clip_val }
     solve_method: ${ evaluation.solve_method }
@@ -103,10 +103,10 @@ model:
     model: ConditionalUNet # Must accept x, t inputs
     model_params:
       conditioning: ["x_history", "c"] # TODO will affect architecture
-      conditioning_method: channels # sequence, channels, mid-sequence, mid-channels
-      spatial_dim: 1
+      conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
+      spatial_dim: 1  # always 1 for time series, may be 2 for 2d convolutions in u-net
       input_channels: 5 # Default 3
-      c_channels: 0 # Default 0 disables conditioning on C
+      c_channels:  # Default 0 disables conditioning on C
       apex_hidden_channels: 64 # Default 128
       # activation: GELU  # Default GELU # TODO implement configurable activation
       time_embedding: sinusoidal+mlp # default: sinusoidal, with optional +mlp, other: dummy
@@ -115,7 +115,7 @@ model:
       positional_encoding_d: 32
       positional_encoding_c: 8 # Only used if using +mlp
       ch_mults: [2, 2, 2, 2] # Default [1, 2, 2, 4]
-      is_attn: [true, false, false, false] # Default [false, false, false, false]
+      is_attn: [false, false, false, false] # Default [false, false, false, false]
       mid_attn: true # Default false
       attn_heads: 2 # Default 1
       n_blocks: 2 # Default 2. Number of residual blocks
@@ -156,8 +156,8 @@ data:
       # - ECRH-median
       - IP # Current reference line
       # - gas_fringes  # Ingepompte gas
-      # - NBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
-      # - ECRH  # magnetron.
+      - PNBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
+      - PECRH  # magnetron.
       # - a_minor  # reel gemeten plasma shape a k d (horizontale radius
       # - KAPPA
       # - DELTA  # linkerbovenhoek naar links vanuit hetmidden

@@ -196,7 +196,7 @@ Generates samples by integrating the learned velocity field from `t=0` to `t=1`.
 
 Uses **forward Euler** integration with `n_steps` steps.
 
-**Note on the `method` parameter.** `method` is accepted but currently inactive. The torchdiffeq adaptive solver path (`dopri5`, `midpoint`, and others) was used in an earlier version and is preserved as commented-out code behind an `if True:` guard at the top of the integration loop. Only forward Euler is active. The `solve_method` config key flows into `model.evaluate()` (which passes it to `integrate_path`), but it has no effect on the solver actually used during test or inference.
+**Note on the `method` parameter.** `method` is accepted but currently inactive. The torchdiffeq adaptive solver path (`dopri5`, `midpoint`, and others) was used in an earlier version, but were found to cause buggy generation results. These methods are preserved as commented-out code behind an `if True:` guard at the top of the integration loop. Only forward Euler is active. The `solve_method` config key flows into `model.evaluate()` (which passes it to `integrate_path`), but it has no effect on the solver actually used during test or inference.
 
 ## Callback epoch schedule
 
