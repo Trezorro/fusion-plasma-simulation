@@ -164,6 +164,29 @@ Additionally, per window:
 
 **Integration steps:** `evaluate_window_set()` uses `n_steps=120` when a GPU is available and `n_steps=5` on CPU. These values are hardcoded inside `evaluate_window_set()` and are not exposed in config.
 
+### Animated window-set figure
+
+Alongside the static PDFs, `animate_window_set()` runs right after `evaluate_window_set()` (also driven by `config.window_set`) and produces a single interactive HTML animation. It keeps the flow animation of `animated_trajectory_plotly` but adds the context of the window-set plots: static history and ground-truth overlays plus filters over every curated window.
+
+**What it shows:** one single-panel Plotly figure spanning all windows and channels, containing:
+
+- The history window (`Wh`), drawn left of `x=0` in the yellow-shaded region, as a static overlay.
+- The true observed future (the target), as a static overlay.
+- The generated future trajectories (`repeat=4` stochastic samples per window), as dotted lines. These are the only traces that animate.
+
+**Animation axis:** the integration step, not time. Pressing Play sweeps the generated (dotted) traces across the integration `trajectories`, flowing from prior noise toward the sample; the history and target overlays stay fixed across every frame.
+
+**Controls:**
+
+- Shot dropdown: isolate a single window (or "All windows").
+- Signal dropdown: isolate a single channel (or "All signals").
+- Samples toggle: switch between `1 sample` and `{repeat} samples`; it only touches the extra-sample traces, so it composes with the active dropdown.
+- Legend clicks: every trace is its own legend entry (no shared legend group), so clicking entries isolates down to a single `(channel, sample, window)` trace. The dropdowns coarse-filter; the legend composes on top. Note that the two dropdowns themselves do not compose with each other (each overwrites the full visibility state), which is exactly why per-trace isolation lives in the legend.
+
+**Output path:** `output/htmlplots/{run_name}/animated_window_set.html`, and logged to wandb under `val/animated_window_set`.
+
+**Integration steps:** same rule as `evaluate_window_set`: `n_steps=120` on GPU, `n_steps=5` on CPU, hardcoded.
+
 ## Error handling
 
 Every plot function call in the dispatch system is wrapped in a try/except inside `call_plot_functions()` (`src/evaluation.py`). If a plot raises, the error is logged and the run continues rather than crashing. The log line reports the original exception followed by:

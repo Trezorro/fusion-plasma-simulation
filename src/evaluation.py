@@ -2,11 +2,13 @@
 #%%
 import logging
 import time
+from pathlib import Path
 from typing import Any, Callable, Mapping
 from venv import logger
 
 import lightning as L
 import plotly.graph_objects as go
+import plotly.io as pio
 import torch
 from matplotlib import pyplot as plt
 from torch.utils import data
@@ -285,3 +287,38 @@ def evaluate_window_set(model: FlowModule, data_module: FusionShotDataModule, sh
             logger.exception(e)
         else:
             logger.info("Created pdfs for shot window %s : %s", shot, t)
+
+
+def animate_window_set(model: FlowModule, data_module: FusionShotDataModule, shot_t: list[tuple], repeat=4):
+    """Animate the integration flow for the curated window_set and write an interactive HTML.
+
+    Companion to evaluate_window_set: builds one batch spanning every window in
+    config.window_set (each repeated `repeat` times for stochastic sample diversity),
+    evaluates the model, and renders animated_window_set_plotly. Logs the figure to wandb
+    and writes a standalone HTML under output/htmlplots/{run_name}/, paralleling the
+    output/pdfplots/{run_name}/ convention used by evaluate_window_set.
+
+    Wrapped in try/except so a failure here never crashes the run.
+
+    Args:
+        model: FlowModule instance (must already be on the target device).
+        data_module: FusionShotDataModule with a prepared test_dataset.
+        shot_t: List of [shot_number, time_seconds] pairs from config.window_set.
+        repeat: Number of stochastic samples per window to animate.
+    """
+    logger.info("Running animate_window_set for %s shot windows", len(shot_t))
+    try:
+        batch = data_module.test_dataset.window_set_batch(shot_t, repeat=repeat)
+        output = model.evaluate(batch, data_module=data_module, n_steps=120 if torch.cuda.is_available() else 5)
+        fig = src.plotters.plot_animations.animated_window_set_plotly(
+            **output, repeat=repeat, title_base="Window set flow"
+        )
+        wandb.log({"val/animated_window_set": wandb.Html(pio.to_html(fig))})
+        out_dir = Path(f"output/htmlplots/{get_current_config().run_name}")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        pio.write_html(fig, out_dir / "animated_window_set.html")
+        logger.info("Wrote animated window set html to %s", out_dir / "animated_window_set.html")
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as e:
+        logger.exception(e)

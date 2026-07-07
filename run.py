@@ -169,6 +169,7 @@ logger.info("Starting model validation...")
 trainer.validate(model=model, datamodule=fusion_data_module)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 src.evaluation.evaluate_window_set(model.to(device), fusion_data_module, C.window_set)
+src.evaluation.animate_window_set(model.to(device), fusion_data_module, C.window_set)
 logger.info("Starting final testing...")
 trainer.test(model=model, datamodule=fusion_data_module)
 logger.info("Finished testing.")

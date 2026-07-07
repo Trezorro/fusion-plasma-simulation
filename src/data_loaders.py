@@ -367,6 +367,35 @@ class FusionShotDataset(data.Dataset):
         sample = self.get_shot_window(shot_number, start_idx)
         return default_collate([sample] * repeat)
 
+    def window_set_batch(self, shot_t, repeat=4):
+        """Build a single collated batch from every window in a window_set.
+
+        For each [shot, time] pair, resolves the nearest available index (same logic
+        as quick_window) and appends the resolved window `repeat` times. Missing shots
+        are skipped (mirrors quick_window's None behaviour). The `repeat` copies share
+        conditioning but get different stochastic priors at evaluation time, so their
+        generated samples / trajectories differ; window `w` occupies collated rows
+        [w*repeat : (w+1)*repeat].
+
+        Args:
+            shot_t: Iterable of [shot_number, time_seconds] pairs (e.g. config.window_set).
+            repeat: Number of copies per window (stochastic samples to animate).
+
+        Returns:
+            A collated batch (meta, conditioning_input, target_samples) over all windows.
+        """
+        samples = []
+        for shot, t in shot_t:
+            shot_data_index = self.data[self.data['ShotNum'] == shot].index
+            if len(shot_data_index) == 0:
+                logger.warning("Shot %s not present in dataset, skipping in window_set_batch", shot)
+                continue
+            start_idx = shot_data_index.get_indexer([t], method='nearest')[0]
+            logger.info("Window set: shot %s at t=%s is at start index %s", shot, t, start_idx)
+            sample = self.get_shot_window(shot, start_idx)
+            samples.extend([sample] * repeat)
+        return default_collate(samples)
+
 
 class FusionShotDataModule(L.LightningDataModule):
     """
