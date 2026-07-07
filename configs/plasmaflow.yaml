@@ -86,13 +86,13 @@ evaluation:
 model:
   Class: FlowModule
   params:
-    prior: "normal" # normal, copy, brownian, levy, resample, constant
+    prior: "brownian" # normal, copy, brownian, levy, resample, constant
     # prior_sigma: std of the prior (source) distribution in the normalized [0,1] space.
     # Meaning is per-prior: normal -> constant per-step std; brownian -> terminal std
     # (its time-averaged std is prior_sigma/sqrt(2)). At 0.3 every prior lands in the
     # 0.2-0.3 band that spans the normalized data range, so one default serves all priors:
     # normal keeps ~90% of mass in [0,1], brownian gets terminal std 0.30 / avg 0.21.
-    prior_sigma: 0.4
+    prior_sigma: 1
     ot_method: null # null to disable
     ot_replace: true # Default false
     batch_rematch_factor: 10 # Default 1
