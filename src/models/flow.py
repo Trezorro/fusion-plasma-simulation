@@ -467,7 +467,7 @@ class FlowModule(L.LightningModule):
         peak_dfs = []
         for sub_metric in self.peak_metrics.children():
             peak_dfs.append(sub_metric.extract_df_all(self.test_cache))
-            sub_metric.export_2d_NBI_distributions()
+            # sub_metric.export_2d_NBI_distributions() only works with normal NBI column
         logger.info("Peak metrics saved to cache. Generating histograms...")
         sub_metric.make_histograms(peak_dfs)
         logger.info("Histograms done! Testing Done. Resetting metrics.")
