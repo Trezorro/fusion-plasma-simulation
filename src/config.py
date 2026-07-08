@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 # TODO: define generalized includes, instead of just looking for model with string. Include data too.
 # TODO: Need to decide how to specify data and model in the config structure.
 
-PROJECT = "flowtoy"
-ENTITY = "tresoor"
-MAIN_CONFIG_FILE = "fm_toy"
+PROJECT = "plasmaflow"
+ENTITY = "deep-learning-course-team"
+MAIN_CONFIG_FILE = "plasmaflow"
 
 
 def print_types(value, level=0):
@@ -151,7 +151,7 @@ def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.
                 logger.warning("Run ID: %s  Date: %s", r.id, r.created_at)
             raise ValueError(
                 f"Multiple runs found with name '{find_run}'. Please specify a unique run ID or name."
-            )
+            ) from e
         else:
             logger.error("No runs found with name %s", find_run)
             return

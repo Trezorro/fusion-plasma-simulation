@@ -46,6 +46,7 @@ window_set: # for evaluation plots
 
 evaluation:
   n_steps: 100 # enough for rk4
+  flow_rho: 3.0 # must be between 1.0 and 3.0
   solve_method: simple # dopri5, euler, midpoint
   max_n: 64
   val_every_n_epochs: 5
@@ -100,6 +101,7 @@ model:
     gradient_clip_val: ${ gradient_clip_val }
     solve_method: ${ evaluation.solve_method }
     flow_steps: ${ evaluation.n_steps }
+    flow_rho: ${ evaluation.flow_rho }
     model: ConditionalUNet # Must accept x, t inputs
     model_params:
       conditioning: ["x_history", "c"] # TODO will affect architecture

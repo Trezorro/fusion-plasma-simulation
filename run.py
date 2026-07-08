@@ -21,7 +21,7 @@ logger.debug(
 PROJECT = "plasmaflow"
 if is_reeval_run(): # Based on cli arguments
     logger.info("Re-evaluating previous run, consolidating configs.")
-    base_run, conf = consolidate_base_reeval_configs()
+    base_run, conf = consolidate_base_reeval_configs(project=PROJECT)
     base_checkpoint_path = find_and_download_model(base_run, prefer_alias=conf.get('prefer_model_alias', 'latest'))
 else:
     conf = load_config_from_file('plasmaflow')
@@ -97,7 +97,8 @@ else:
 if 'test_cache_name' in C:
     model.set_cache(C.test_cache_name, C.test_cache_mode)
 if 'evaluation' in C:
-    model.set_integration_method(C.evaluation.n_steps, C.evaluation.get("solve_method", None))
+    # overwrite original model parameters for reeval runs that reuse trained models
+    model.set_integration_method(C.evaluation.n_steps, C.evaluation.flow_rho, C.evaluation.get("solve_method", None))
 if "skip_log_summary" not in C or not C["skip_log_summary"]:
     logger.info("Model loaded, summary:")
     model.log_summary(C)
@@ -128,7 +129,7 @@ trainer = L.Trainer(
     limit_train_batches=C.limit_train_batches,
     limit_val_batches=C.limit_val_batches,
     limit_test_batches=C.get("limit_test_batches", None),
-    max_time={"hours": 10},
+    max_time={"hours": 12},
     benchmark=True,
     # num_sanity_val_steps=1,
     log_every_n_steps=1,

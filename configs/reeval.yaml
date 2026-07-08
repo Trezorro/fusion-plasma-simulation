@@ -1,6 +1,6 @@
 # This will be merged into the inherited config from the base run
 
-base_run: seq_brown_smC_BIG # ID or unique name
+base_run: NormalMidAttSig03_anim # ID or unique name
 prefer_model_alias: best # null just takes the one with latest, can be best or latest.
 
 test_cache_name: ${ run_name } #test_tinyhistory # test_cache_unflow #  # tinyhistory_seq_normal_smC_BIG #
@@ -11,7 +11,8 @@ data:
   batch_size: 512
 
 evaluation:
-  n_steps: 100 # enough for rk4
+  n_steps: 120 # enough for rk4
+  flow_rho: 3.0
   solve_method: simple # dopri5, euler, midpoint
   plot_functions:
   # every item has to have a 'key' key.
@@ -39,13 +40,16 @@ window_set:
   - [73368, 0.38] # All low and boring
   - [77604, 0.72]
   - [77604, 0.77]
-  - [77409,1.32]
-  - [73631, 1.03]
+  - [77409, 1.32]
   - [69514, 0.51]
   - [69514, 0.51]
   - [64770, 0.17] # L Mode boringness
   - [64770, 1.09] # H Mode boringness, middenhoog NBI
+  - [64770, 1.52] # H mode shit gets loose
+  - [61237, 0.89] # 75% BIG peaks
   - [61028, 0.98] # 75%
   - [61028, 1.12] # 78%
+  - [60813, 1.00] # NBI ramping up
+  - [60813, 1.42] # ramped up to 75%
   - [77595, 0.94] # High NBI
   - [76702, 1.14] # high NBI

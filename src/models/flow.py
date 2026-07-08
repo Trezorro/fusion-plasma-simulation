@@ -65,6 +65,7 @@ class FlowModule(L.LightningModule):
         step_every_nth_match: Optional[int] = None,  # if None, step only after all matches.
         gradient_clip_val: float = 1.0,
         flow_steps=100,
+        flow_rho=1.0,
         solve_method='simple',
         **kwargs: Any
     ):
@@ -104,6 +105,7 @@ class FlowModule(L.LightningModule):
         self.batch_rematch_factor = batch_rematch_factor
         self.step_every_nth_match = step_every_nth_match or batch_rematch_factor
         self.flow_steps = flow_steps
+        self.flow_rho = flow_rho
         self.solve_method = solve_method
         self._validate_configuration()
         self.automatic_optimization = False
@@ -129,16 +131,17 @@ class FlowModule(L.LightningModule):
         self.test_cache_mode = mode
         self.test_cache = TestStepHDFCache(name, 'a')
 
-    def set_integration_method(self, n_steps=None, method=None):
+    def set_integration_method(self, n_steps=None, flow_rho=None, method=None):
         """Update self.flow_steps and self.solve_method (used by inference/test, not training)."""
         self.flow_steps = n_steps or self.flow_steps
+        self.flow_rho = flow_rho or self.flow_rho
         self.solve_method = method or self.solve_method
-        logger.debug("Integration method set to %s with %s steps", self.solve_method, self.flow_steps)
+        logger.debug("Integration method set to %s with %s steps with rho %.2f for evaluation", 
+                     self.solve_method, self.flow_steps, self.flow_rho)
 
     def _validate_configuration(self):
-        assert self.batch_rematch_factor > 0 and type(
-            self.batch_rematch_factor
-        ) == int, "batch_rematch_factor must be positive integer"
+        assert (self.batch_rematch_factor > 0 
+                and isinstance(self.batch_rematch_factor, int)), "batch_rematch_factor must be positive integer"
         assert self.batch_rematch_factor % self.step_every_nth_match == 0, (
             "batch_rematch_factor must be divisible by step_every_nth_match, or"
             " step_every_nth_match must be None. Otherwise, optimizer steps will"
@@ -153,6 +156,7 @@ class FlowModule(L.LightningModule):
         assert ('position_sequence' in self.model_params.conditioning
                ) == (self.model_params["positional_encoding"]
                      is not None), ("Positional encoding must be configured for position_sequence conditioning")
+        assert 1.0 <= self.flow_rho <= 3.0, "The power rho used for the inference schedule should be between 1.0 and 3.0."
 
     def forward(self, x, t, conditioning=None):
         return self.model(x, t, conditioning=conditioning)
@@ -615,7 +619,9 @@ class FlowModule(L.LightningModule):
             def ode_func(t, x):  # just swap around for torchdiffeq
                 return self.model(x=x.to(torch.float32), t=t.to(torch.float32))
 
-        time_grid = torch.linspace(0, 1, n_steps, device=self.device, dtype=torch.float64)
+        u = torch.linspace(0, 1, n_steps, device=self.device, dtype=torch.float64)
+        rho = 3.0
+        time_grid = 1 - (1 - u).pow(rho)  # denser steps as t -> 1
 
         logger.debug(f"Integrating path with {n_steps} steps with method {method}")
         # logger.debug(

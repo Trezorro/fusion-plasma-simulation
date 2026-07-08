@@ -61,6 +61,12 @@
         "type": "shell",
         "command": "rsync -avzv mtresoor@snellius.surf.nl:/home/mtresoor/fusion-plasma-simulation/output/pdfplots/ output/pdfplots/",
         "problemMatcher": []
+      },
+      {
+        "label": "Sync html plots",
+        "type": "shell",
+        "command": "rsync -avzv mtresoor@snellius.surf.nl:/home/mtresoor/fusion-plasma-simulation/output/htmlplots/ output/htmlplots/",
+        "problemMatcher": []
       }
     ],
   "inputs": [
