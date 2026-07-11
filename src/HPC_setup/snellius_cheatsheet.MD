@@ -9,18 +9,25 @@ Then provide your password.
 
 You can make login easier by generating ssh keys and adding them to the SURF portal. You can also add a host name to your ssh config file to make the login easier.
 
+- [Guide for generating ssh keys.]](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent?platform=windows)
+  - Generating one with the default name (id_ed25519) and no passphrase makes things easiest
+- Add it in the surf portal at https://portal.cua.surf.nl/user/keys
+- 
+
 > Add to `~/.ssh/config`:
 ```bash
 Host snellius
     HostName snellius.surf.nl
     User mtresoor
+    IdentityFile ~/.ssh/id_ed25519
+    VerifyHostKeyDNS yes
 ```
-Then you can login with `ssh snellius`.
+Then you can try login with `ssh snellius`.
 
-Copy your ssh key to the server with
+If it asks for your password still, add your ssh key to the server with
 ```bash
-ssh-copy-id 
-
+ssh-copy-id ssh-copy-id -i ~/.ssh/id_ed25519.pub snellius
+```
 # Snellius file transfer
 
 # Installing packages
