@@ -1,0 +1,48 @@
+limit_train_batches: 100
+limit_val_batches: 20
+patience: 20
+
+# Deterministic baseline: iTransformer. Covariate-aware (attention across variates).
+# Control covariates in data.cols.c enter as extra variate-tokens over the full
+# [history|horizon] window; the timing-oracle experiment is run by choosing which
+# covariates go in data.cols.c (e.g. adding timing-bearing signals). No masking flag.
+# Select by setting `model: configs/itransformer.yaml` in configs/plasmaflow.yaml.
+model:
+  Class: UnFlowModule
+  params:
+    prior: 'constant'  # deterministic fixed input (ignored by the backbone)
+    prior_sigma: 0.3
+    ot_method: null
+    ot_replace: true
+    batch_rematch_factor: 1
+    step_every_nth_match: 1
+    gradient_clip_val: ${ gradient_clip_val }
+    solve_method: ${ evaluation.solve_method }
+    flow_steps: ${ evaluation.n_steps }
+    model: ITransformer  # backbone selected from FlowModule.MODEL_OPTIONS
+    model_params:
+      input_channels: 5  # auto-synced from len(data.cols.x) by config.update_model_input_channels
+      c_channels: 3      # auto-synced from len(data.cols.c); drives the oracle experiment
+      seq_len: 512   # history + horizon = data.history_length + data.seq_length
+      pred_len: 256  # horizon = data.seq_length
+      use_norm: false  # disable TSlib inline instance-norm for comparability with the flow model
+      d_model: 128
+      n_heads: 8
+      e_layers: 2
+      d_ff: 256
+      dropout: 0.1
+      factor: 1
+      activation: gelu
+      embed: timeF
+      freq: h
+      # conditioning documents what the adapter reads from conditioning_input (x_history AND c;
+      # covariate-aware). It does NOT gate the data: x_history/c are provided whenever
+      # data.history_length > 0 / data.cols.c is non-empty. positional_encoding: null keeps
+      # _validate_configuration happy (position_sequence not used).
+      conditioning: ["x_history", "c"]
+      positional_encoding: null
+    loss: MSELoss
+    optimizer_params:
+      lr: 0.00005
+      weight_decay: 0
+      amsgrad: false

@@ -11,6 +11,9 @@ from torchdiffeq import odeint
 
 from src.hdf_cache import get_cache_dir
 from src.models.unet_conditional import ConditionalUNet
+from src.models.dlinear import DLinear
+from src.models.patchtst import PatchTST
+from src.models.itransformer import ITransformer
 from src.optimal_transport import OTPlanSampler
 import src.metrics.metrics as metrics
 from src.metrics.evaluate_modes import generate_surrogate_labels, generate_surrogate_labels_batched
@@ -46,6 +49,10 @@ class FlowModule(L.LightningModule):
         # VelocityNet=VelocityNet,  # TODO needs to support channels, t, and conditioning
         # UNetModern=UNetModern,
         ConditionalUNet=ConditionalUNet,
+        # Deterministic point-forecast baselines (used via UnFlowModule):
+        DLinear=DLinear,
+        PatchTST=PatchTST,
+        ITransformer=ITransformer,
     )
     SAMPLE_RATE = 10_000  # Hz
     PRIOR_OPTIONS = ["normal", "levy", "resample", "brownian", "copy", "constant"]

@@ -6,6 +6,8 @@ Flow Matching model for data-driven simulation of plasma confinement diagnostics
 **PlasmaFlow** learns a conditional flow matching model over plasma diagnostic time-series windows. Given a history of signals, it generates plausible future trajectories. The model is trained on real shot data from TCV and evaluated against ground-truth using mode transition metrics, peak metrics, and SoftDTW.
 
 ## Key files
+Everything in `docs/` plus:
+
 | File | Role |
 |---|---|
 | `run.py` | Entry point — training + evaluation, driven by wandb + OmegaConf config |
