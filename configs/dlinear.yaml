@@ -38,7 +38,6 @@ model:
       # happy (position_sequence not used).
       conditioning_method: sequence
       conditioning: ["x_history"]
-      positional_encoding: null
     loss: MSELoss
     optimizer_params:
       lr: 0.00005
