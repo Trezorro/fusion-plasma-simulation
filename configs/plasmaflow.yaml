@@ -82,8 +82,8 @@ evaluation:
     #   n: 64
 
 # model: model.yaml # To be replaced by respective yaml file content
-# model: configs/unflow.yaml
-model: configs/itransformer.yaml       # or configs/patchtst.yaml / configs/itransformer.yaml
+model: configs/unflow.yaml
+# model: configs/itransformer.yaml       # or configs/patchtst.yaml / configs/itransformer.yaml
 
 # model:
 #   Class: FlowModule
@@ -157,13 +157,14 @@ data:
     c:
       # - NBI-median
       # - ECRH-median
-      # - IPLA # The realized plasma current, measured in real time. This is the actual current flowing through the plasma, driven by the induction system.  Shows pulses at ELMS (leakage)
-      - IP # Current reference line
+      - IPLA # The realized plasma current, measured in real time. This is the actual current flowing through the plasma, driven by the induction system.  Shows pulses at ELMS (leakage)
+      # - IP # Current reference line
       # - gas_fringes  # Ingepompte gas
       - PNBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
       - PECRH  # magnetron.
       # - a_minor  # reel gemeten plasma shape a k d (horizontale radius
-      # - KAPPA
+      - KAPPA
+      - VOL
       # - DELTA  # linkerbovenhoek naar links vanuit hetmidden
     label: LHD_label
   val_shots: [
