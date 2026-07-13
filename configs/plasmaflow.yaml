@@ -157,8 +157,8 @@ data:
     c:
       # - NBI-median
       # - ECRH-median
-      - IPLA # The realized plasma current, measured in real time. This is the actual current flowing through the plasma, driven by the induction system.  Shows pulses at ELMS (leakage)
-      # - IP # Current reference line
+      # - IPLA # The realized plasma current, measured in real time. This is the actual current flowing through the plasma, driven by the induction system.  Shows pulses at ELMS (leakage)
+      - IP # Current reference line
       # - gas_fringes  # Ingepompte gas
       - PNBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
       - PECRH  # magnetron.
