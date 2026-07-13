@@ -14,9 +14,10 @@ model:
     gradient_clip_val: ${ gradient_clip_val }
     solve_method: ${ evaluation.solve_method }
     flow_steps: ${ evaluation.n_steps }
+    flow_rho: ${ evaluation.flow_rho }
     model: ConditionalUNet  # Must accept x, t inputs
     model_params:
-      conditioning: ['x_history', 'c', 'position_sequence'] # TODO will affect architecture
+      conditioning: ['x_history', 'c']
       conditioning_method: sequence # sequence, channels, mid-sequence, mid-channels
       spatial_dim: 1
       input_channels: 5 # Default 3
@@ -25,11 +26,11 @@ model:
       # activation: GELU  # Default GELU # TODO implement configurable activation
       time_embedding: sinusoidal  # default: sinusoidal, with optional +mlp, other: dummy
       time_embedding_d: 4  # Default 32 
-      positional_encoding: sinusoidal+mlp  # Default sinusoidal, other: sinusoidal+mlp, dummy
-      positional_encoding_d: 32
-      positional_encoding_c: 4  # Only used if using +mlp
+      positional_encoding: null  # Default sinusoidal, other: sinusoidal+mlp, dummy
+      positional_encoding_d: 0
+      positional_encoding_c: 0  # Only used if using +mlp
       ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
-      is_attn: [true, false, false, false] # Default [false, false, false, false]
+      is_attn: [false, false, false, false] # Default [false, false, false, false]
       mid_attn: true # Default false
       attn_heads: 2  # Default 1
       n_blocks: 2 # Default 2. Number of residual blocks

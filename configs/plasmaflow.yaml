@@ -46,7 +46,7 @@ window_set: # for evaluation plots
 
 evaluation:
   n_steps: 100 # enough for rk4
-  flow_rho: 3.0 # must be between 1.0 and 3.0
+  flow_rho: 2.0 # must be between 1.0 and 3.0
   solve_method: simple # dopri5, euler, midpoint
   max_n: 64
   val_every_n_epochs: 5
@@ -83,7 +83,7 @@ evaluation:
 
 # model: model.yaml # To be replaced by respective yaml file content
 # model: configs/unflow.yaml
-model: configs/dlinear.yaml       # or configs/patchtst.yaml / configs/itransformer.yaml
+model: configs/unflow.yaml       # or configs/patchtst.yaml / configs/itransformer.yaml
 
 # model:
 #   Class: FlowModule
@@ -157,7 +157,8 @@ data:
     c:
       # - NBI-median
       # - ECRH-median
-      - IP # Current reference line
+      - IPLA # The realized plasma current, measured in real time. This is the actual current flowing through the plasma, driven by the induction system.  Shows pulses at ELMS (leakage)
+      # - IP # Current reference line
       # - gas_fringes  # Ingepompte gas
       - PNBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
       - PECRH  # magnetron.
@@ -200,7 +201,9 @@ data:
   test_shots: [
         57094, 57732, 60814, 64365, 67112, 72929, 75264, 76702, 77409, 77595, 53623, 57013, 60813, 61028, 61056, 61237, 63306, 63878, 64386, 64393, 64678, 64686, 64770, 64857, 65469, 65481, 68631, 68697, 69514, 71344, 73368, 73631, 73935, 76304, 77089, 77193, 77196, 77598, 77599, 77602, 77604, 78069, 79825, 83049
     ] # ???? viable samples
-  train_shots: [ 26386, 29511, 30043, 30197, 30225, 30262, 30268, 30290, 30310, 31211, 31554, 31650, 31718, 31807, 31839, 32191, 32195, 32592, 32716, 32911, 33188, 33271, 33281, 33459, 33567, 33942, 34010, 34309, 42197, 42514, 43454, 45103, 45105, 46853, 47962, 48580, 53601, 53625, 53627, 53629, 57000, 57024, 57026, 57077, 57081, 57093, 57095, 57103, 57218, 57622, 57623, 57624, 57706, 57715, 57751, 58182, 59061, 59064, 59065, 59066, 59073, 59076, 59825, 60097, 60275, 60992, 60995, 61000, 61005, 61009, 61010, 61021, 61038, 61039, 61042, 61043, 61044, 61055, 61057, 61058, 61242, 61246, 61254, 61260, 61608, 61609, 61630, 61631, 61711, 61712, 61713, 61714, 61716, 61719, 62744, 63229, 63230, 63232, 63234, 63236, 63238, 63240, 63242, 63244, 63246, 63250, 63298, 63300, 63302, 63308, 63310, 63843, 63847, 63848, 63849, 63853, 63877, 63879, 63880, 63882, 63887, 63888, 63920, 63923, 63943, 63944, 63945, 64327, 64335, 64336, 64338, 64340, 64342, 64363, 64364, 64366, 64367, 64368, 64369, 64370, 64371, 64372, 64373, 64374, 64376, 64378, 64389, 64392, 64647, 64648, 64658, 64659, 64662, 64666, 64670, 64675, 64680, 64774, 64820, 64855, 64858, 64859, 64911, 64912, 64913, 64914, 64915, 64916, 64917, 64918, 64919, 64923, 64924, 65253, 65280, 65281, 65282, 65283, 65285, 65288, 65317, 65318, 65319, 65320, 65321, 65322, 65336, 65391, 65468, 65474, 65482, 65487, 65488, 65527, 65557, 65561, 65564, 65566, 68268, 68628, 68643, 68693, 68699, 68919, 68984, 68987, 69113, 69115, 69127, 69129, 69133, 70777, 71208, 72828, 73632, 74498, 74916, 75263, 75265, 76322, 77092, 77330, 77411, 77426, 79815, 79826, 79827, 82610 ] # 1963980 viable samples
+  train_shots: [
+     26386, 29511, 30043, 30197, 30225, 30262, 30268, 30290, 30310, 31211, 31554, 31650, 31718, 31807, 31839, 32191, 32195, 32592, 32716, 32911, 33188, 33271, 33281, 33459, 33567, 33942, 34010, 34309, 42197, 42514, 43454, 45103, 45105, 46853, 47962, 48580, 53601, 53625, 53627, 53629, 57000, 57024, 57026, 57077, 57081, 57093, 57095, 57103, 57218, 57622, 57623, 57624, 57706, 57715, 57751, 58182, 59061, 59064, 59065, 59066, 59073, 59076, 59825, 60097, 60275, 60992, 60995, 61000, 61005, 61009, 61010, 61021, 61038, 61039, 61042, 61043, 61044, 61055, 61057, 61058, 61242, 61246, 61254, 61260, 61608, 61609, 61630, 61631, 61711, 61712, 61713, 61714, 61716, 61719, 62744, 63229, 63230, 63232, 63234, 63236, 63238, 63240, 63242, 63244, 63246, 63250, 63298, 63300, 63302, 63308, 63310, 63843, 63847, 63848, 63849, 63853, 63877, 63879, 63880, 63882, 63887, 63888, 63920, 63923, 63943, 63944, 63945, 64327, 64335, 64336, 64338, 64340, 64342, 64363, 64364, 64366, 64367, 64368, 64369, 64370, 64371, 64372, 64373, 64374, 64376, 64378, 64389, 64392, 64647, 64648, 64658, 64659, 64662, 64666, 64670, 64675, 64680, 64774, 64820, 64855, 64858, 64859, 64911, 64912, 64913, 64914, 64915, 64916, 64917, 64918, 64919, 64923, 64924, 65253, 65280, 65281, 65282, 65283, 65285, 65288, 65317, 65318, 65319, 65320, 65321, 65322, 65336, 65391, 65468, 65474, 65482, 65487, 65488, 65527, 65557, 65561, 65564, 65566, 68268, 68628, 68643, 68693, 68699, 68919, 68984, 68987, 69113, 69115, 69127, 69129, 69133, 70777, 71208, 72828, 73632, 74498, 74916, 75263, 75265, 76322, 77092, 77330, 77411, 77426, 79815, 79826, 79827, 82610 
+  ] # 1963980 viable samples
 
 # Shorthands for important parameters for wandb
 Prior: ${ model.params.prior }
@@ -223,139 +226,3 @@ Cols: ${ data.cols.x }
 Learning_rate: ${ model.params.optimizer_params.lr }
 Rematches:
   ${ model.params.batch_rematch_factor }
-
-  # Prominence histograms
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/dml_energy_delta
-  #   channel_name: DML
-  #   measure: energy_delta
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/dml_pd_prominence
-  #   channel_name: DML
-  #   measure: pd_prominence
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/dml_pd_ratio
-  #   channel_name: DML
-  #   measure: energy_ratio
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/FIR_core_count
-  #   channel_name: FIR_core
-  #   measure: count
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/DML_count
-  #   channel_name: DML
-  #   measure: count
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/POHM_count
-  #   channel_name: POHM
-  #   measure: count
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/Z_axis_count
-  #   channel_name: Z_axis
-  #   measure: count
-  #   n: 64
-  # # Peak Prominence histograms
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/PD_prominence
-  #   channel_name: PD
-  #   measure: prominence
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/DML_prominence
-  #   channel_name: DML
-  #   measure: prominence
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/POHM_prominence
-  #   channel_name: POHM
-  #   measure: prominence
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/Z_axis_prominence
-  #   channel_name: Z_axis
-  #   measure: prominence
-  #   n: 64
-  # # Peak Width histograms
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/FIR_core_width
-  #   channel_name: FIR_core
-  #   measure: width
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/PD_width
-  #   channel_name: PD
-  #   measure: width
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/DML_width
-  #   channel_name: DML
-  #   measure: width
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/POHM_width
-  #   channel_name: POHM
-  #   measure: width
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/Z_axis_width
-  #   channel_name: Z_axis
-  #   measure: width
-  #   n: 64
-  # # Peak Height histograms
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/FIR_core_height
-  #   channel_name: FIR_core
-  #   measure: height
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/PD_height
-  #   channel_name: PD
-  #   measure: height
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/DML_height
-  #   channel_name: DML
-  #   measure: height
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/POHM_height
-  #   channel_name: POHM
-  #   measure: height
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/Z_axis_height
-  #   channel_name: Z_axis
-  #   measure: height
-  #   n: 64
-  # # Peak Base histograms
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/FIR_core_base
-  #   channel_name: FIR_core
-  #   measure: base
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/PD_base
-  #   channel_name: PD
-  #   measure: base
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/DML_base
-  #   channel_name: DML
-  #   measure: base
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/POHM_base
-  #   channel_name: POHM
-  #   measure: base
-  #   n: 64
-  # - key: histogram  # see histograms.py
-  #   log_key: peak_histogram/Z_axis_base
-  #   channel_name: Z_axis
-  #   measure: base
-  #   n: 64
