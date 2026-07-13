@@ -82,8 +82,8 @@ evaluation:
     #   n: 64
 
 # model: model.yaml # To be replaced by respective yaml file content
-model: configs/unflow.yaml
-# model: configs/itransformer.yaml       # or configs/patchtst.yaml / configs/itransformer.yaml
+# model: configs/unflow.yaml
+model: configs/itransformer.yaml       # or configs/patchtst.yaml / configs/itransformer.yaml
 
 # model:
 #   Class: FlowModule
