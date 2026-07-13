@@ -39,8 +39,19 @@ model:
       # covariate-aware). It does NOT gate the data: x_history/c are provided whenever
       # data.history_length > 0 / data.cols.c is non-empty. positional_encoding: null keeps
       # _validate_configuration happy (position_sequence not used).
+      conditioning_method: sequence
       conditioning: ["x_history", "c"]
       positional_encoding: null
+      # for tracking references
+      apex_hidden_channels: null
+      time_embedding: null
+      time_embedding_d: null
+      positional_encoding_d: null
+      positional_encoding_c: null
+      is_attn: null
+      mid_attn: null
+      attn_heads: null
+      norm_groups: null
     loss: MSELoss
     optimizer_params:
       lr: 0.00005
