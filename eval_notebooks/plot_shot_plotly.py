@@ -30,7 +30,7 @@ PQ_TEMPLATE = "TCV_confstate_{shot}.parquet"
 
 # Which shot to plot, and whether to normalise each signal (z-score) so that
 # variables with very different magnitudes share a row legibly.
-SHOT = None 
+SHOT = None
 SHOTS = [# sourced from test shots in config/plasmaflow.yaml
         57094, 57732, 60814, 64365, 67112, 72929, 75264, 76702, 77409, 77595, 53623, 57013, 60813, 61028, 61056, 61237, 63306, 63878, 64386, 64393, 64678, 64686, 64770, 64857, 65469, 65481, 68631, 68697, 69514, 71344, 73368, 73631, 73935, 76304, 77089, 77193, 77196, 77598, 77599, 77602, 77604, 78069, 79825, 83049
     ]
@@ -119,7 +119,7 @@ def plot_shot(shot, normalise=NORMALISE, label_column=LABEL_COLUMN):
                 y = (y - y.mean()) / std if std and np.isfinite(std) else y - y.mean()
             fig.add_trace(
                 go.Scatter(
-                    x=time, y=y, mode="lines", name=latex_to_name(tex),
+                    x=time, y=y, mode="lines", name=tex,
                     legendgroup=category,
                     legendgrouptitle_text=category,
                     hovertemplate=f"{col}<br>t=%{{x:.4f}}s<br>y=%{{y:.3g}}<extra></extra>",
@@ -135,7 +135,11 @@ def plot_shot(shot, normalise=NORMALISE, label_column=LABEL_COLUMN):
     fig.update_layout(
         height=260 * len(categories),
         title=f"TCV #{shot}: scoped signals over confinement state ({'normalised' if normalise else 'raw'})",
-        legend=dict(groupclick="togglegroup"),
+        legend=dict(
+            groupclick="togglegroup",
+            font=dict(size=15),  # larger legend labels (LaTeX renders via MathJax)
+            grouptitlefont=dict(size=16),
+        ),
         hovermode="x unified",
         template="plotly_white",
     )
@@ -159,7 +163,12 @@ if SHOTS:
             print(f"skip #{shot}: no parquet in {DATA_DIR}")
             continue
         out = OUT_DIR / f"shot_{shot}_overview.html"
-        plot_shot(shot).write_html(out, auto_open=False)
+        plot_shot(shot).write_html(
+            out,
+            auto_open=False,
+            include_plotlyjs="cdn",  # or True
+            include_mathjax="cdn",  # enable MathJax
+        )
         print("wrote", out)
 
 # %%
