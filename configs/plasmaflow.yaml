@@ -133,7 +133,7 @@ model: configs/unflow.yaml       # or configs/patchtst.yaml / configs/itransform
 data:
   Class: FusionShotDataModule
   dir: ./data/
-  file: 2026_06_29-TCV_shots_V2.parquet
+  file: 2026_07_13-TCV_shots_V2.parquet
   batch_size: ${ batch_size }
   seq_length: 256
   history_length: ${ data.seq_length } # default null / 0, if positive int, will include x_history in the conditioning_inputs

@@ -65,10 +65,16 @@ COLS_DATA = [
 ##### New data set ######
 COLS_CONTROL = [
     "IP",          # I_p,ref: reference current (or swap for IPLA)
-    # gas_fringes missing; consider GWfr as partial proxy
+    "BZERO",
     "PNBI",        # replaces NBI (beam 1)
     "PNBI2",       # new: beam 2 now separated
     "PECRH",       # replaces ECRH
+    # For Leakage (bad control:)
+    "IPLA",  
+    "GAP_in",
+    "GAP_out",
+    "VOL",
+    # gas_fringes missing; consider GWfr as partial proxy
     "MINRAD",      # replaces a_minor
     "KAPPA",       # same
     "DELTA_TOP",   # replaces DELTA (now split)
