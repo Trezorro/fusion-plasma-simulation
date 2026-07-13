@@ -26,6 +26,7 @@ A third, softer input is the **wandb run table** exported by hand to `output/X2.
 | `eval_notebooks/peaks_tables.py` | Canonical peak-property and window-metric LaTeX/Excel tables (Wasserstein marginal/pairwise, MSE) | `*.json` via `parse_metrics_json` | `output/tables/peak_props_{channel}.xlsx`, `peaks_overview[_split]_{channel}.tex` (6 channels) | Robust, self-contained (run last) |
 | `eval_notebooks/moments.py` | None. Wandb run renaming + cache-to-human-name mapping | wandb runs (tag `final_reeval`), CSV | Renames wandb runs in place (`.update()`); no files | Housekeeping; misnamed (see gotchas) |
 | `eval_notebooks/model_cache_overview.py` | None. Cache inventory + rsync from Snellius | `output/X2.csv` / `XR-overview.csv`, hardcoded cache list | Console tables; a guarded `rsync` command | Very fragile (stale list, buggy cell) |
+| `eval_notebooks/plot_shot_plotly.py` | Interactive single-shot overview: all scoped signals over the L/D/H background | `data/public_data_set/` parquet + `column_to_latex.json` (no caches, no wandb) | `eval_notebooks/shot_{SHOT}_overview.html` | Self-contained; reads the public dataset, not run artifacts |
 
 ## End-to-end workflow
 
@@ -79,6 +80,18 @@ Housekeeping. Pulls wandb runs (tag `final_reeval`), maps cache names to human n
 ### model_cache_overview.py
 Cache inventory and sync. The one genuinely useful cell builds a selective `rsync` include-pattern command to pull named caches from Snellius into `output/test_cache/`. The rest (existence check against a hardcoded list, config audit) is stale.
 
+### plot_shot_plotly.py
+The odd one out in `eval_notebooks/`: it reads the **public confstate dataset** (`data/public_data_set/`), not run caches or wandb, so it needs no finished run. It is the interactive plotly counterpart of `plot_discharge()` (matplotlib, 3 signals) in `giants/TCV-confstate-data/utils/overview.py`. Cell-marked (`# %%`); run it directly to write `shot_{SHOT}_overview.html` next to the script, or step through the cells.
+
+What it draws: one shot, all 46 scoped variables from `column_to_latex.json`, as a tall stack of `make_subplots` rows (one row per category: shaping, magnetics, density, temperature, power, ...), sharing the time x-axis, over the L/D/H confinement-state background.
+
+Design decisions worth knowing:
+- **Category = subplot row.** Iterating `column_to_latex` keeps the paper's variable grouping and ordering; a missing parquet column is skipped rather than erroring (e.g. `Halpha_fft` is absent from the parquet).
+- **`NORMALISE` (default on)** z-scores each signal independently so variables with wildly different magnitudes stay legible on one shared row; y-axis title switches between "z-scored" and "raw value". Flip to `False` for physical units.
+- **State background via contiguous runs.** `add_state_background()` scans the label array, coalesces equal-label runs into a single `add_vrect` span (`layer="below"`), instead of one rect per timestep, keeping the figure light. Colours match `plot_discharge` (L/D/H, plus QCE-H). Because vrects carry no legend, one dummy `Scatter` per present state is added purely for a legend swatch.
+- **Legends and hover.** Traces are grouped by category (`legendgroup` + `groupclick="togglegroup"`) so a whole category toggles at once; `hovermode="x unified"` with a per-trace `hovertemplate` shows raw column name, time, and value. `latex_to_name()` strips `$...$`/LaTeX escapes down to a readable legend label.
+- **Config at the top:** `SHOT`, `NORMALISE`, `LABEL_COLUMN` (`label_conf`, or `label_conf_qce` for the four QCE shots `[61056, 71344, 78069, 83049]`). Excludes `time`/`label_conf` (axis + background) and the 30 derived Halpha FFT-window columns, which are engineered features, not raw diagnostics.
+
 ## Reusable snippets worth extracting
 
 Real functionality currently stuck in notebooks that could move into `src/`:
@@ -114,5 +127,12 @@ Jupyter `.ipynb` (not edited):
 - `FlowModels_colab.ipynb`: external Colab flow-matching tutorial (Scott H. Hawley), reference only, not TCV-specific.
 - `preview_proposal_april.ipynb`: early shot/label exploration from the proposal stage.
 - `peaks.ipynb`: develops the peak-based ELM metric algorithms later formalized in `src/metrics/peak_metric.py`.
+
+## Public confstate dataset tooling
+
+Standalone helpers that read the public TCV confstate dataset (`data/public_data_set/`: parquet-per-shot, `column_to_latex.json`, `data_splits.json`); they do not touch the model, wandb, or the eval caches.
+
+- `giants/TCV-confstate-data/data_overview.ipynb`: the dataset walkthrough. Prints the split/experiment/variable metadata and calls `utils/overview.py::plot_discharge` (matplotlib) to show one shot as 3 signals on twinned axes over an L/D/H-shaded background.
+- `eval_notebooks/plot_shot_plotly.py`: its interactive plotly counterpart, plotting all 46 scoped variables at once. Detailed under [Per-notebook detail](#plot_shot_plotlypy) above.
 
 There is also a `flowmodels_colab.py` export in that directory, left untouched.
