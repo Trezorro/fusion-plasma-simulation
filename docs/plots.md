@@ -146,7 +146,7 @@ Separate from the dispatch system, `evaluate_window_set()` runs after every `tra
 - The history window (`Wh`, the conditioning context).
 - Multiple generated future trajectories (4 samples, since `repeat=4`).
 - The true observed future (the target).
-- Color-coded mode labels from two sources: the FNOLSTM classifier (the surrogate) and the ground-truth `LHD_label`.
+- Color-coded mode labels from two sources: the FNOLSTM classifier (the surrogate) and the ground-truth `LHD_label`. `add_mode_bars` indexes `["Unknown","L","D","H"]` by label value, i.e. the `+1`-shifted `LHD_label` convention. Surrogate labels are unshifted (`0=L,1=D,2=H`), so callers add `+1` first (`printing_plots.py:554`). Wrong convention = silently mislabelled modes. See [evaluation-metrics.md](evaluation-metrics.md).
 
 **Output path:** `output/pdfplots/{run_name}/qualitative_samples/`. The layout underneath is:
 
