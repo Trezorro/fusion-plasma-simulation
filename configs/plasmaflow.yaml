@@ -48,7 +48,7 @@ window_set: # for evaluation plots
 # MARK:
 evaluation:
   n_steps: 100 # enough for rk4
-  flow_rho: 2.0 # must be between 1.0 and 3.0
+  flow_rho: 3.0 # must be between 1.0 and 3.0
   solve_method: simple # dopri5, euler, midpoint
   max_n: 64
   peaks:

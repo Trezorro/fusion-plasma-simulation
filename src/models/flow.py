@@ -629,7 +629,7 @@ class FlowModule(L.LightningModule):
                 return self.model(x=x.to(torch.float32), t=t.to(torch.float32))
 
         u = torch.linspace(0, 1, n_steps, device=self.device, dtype=torch.float64)
-        rho = 3.0
+        rho = self.flow_rho
         time_grid = 1 - (1 - u).pow(rho)  # denser steps as t -> 1
 
         logger.debug(f"Integrating path with {n_steps} steps with method {method}")
