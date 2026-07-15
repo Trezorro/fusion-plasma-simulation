@@ -7,7 +7,7 @@ import pandas as pd
 
 class DummyConfig:
     class data:
-        cols = types.SimpleNamespace(x=["DML", "PD"])
+        cols = types.SimpleNamespace(x=["DML", "PD"], c=[])
         history_length = 2
         seq_length = 3
     run_name = "testrun"
@@ -79,8 +79,8 @@ def test_update_and_compute(monkeypatch):
         energy_ratio = 7.0
 
     def dummy_batch_get_peakprops(x, **kwargs):
-        # Return shape (B, C)
-        B, C = x.shape[0], 2
+        # Return shape (B, C), C = len(cols.x) + len(SYNTHETIC_CHANNELS), matching CHANNEL_NAMES.
+        B, C = x.shape[0], len(metric.CHANNEL_NAMES)
         return [[DummyPeak() for _ in range(C)] for _ in range(B)]
 
     monkeypatch.setattr("src.metrics.peak_metric.batch_get_peakprops", dummy_batch_get_peakprops)
@@ -89,7 +89,8 @@ def test_update_and_compute(monkeypatch):
     pred = torch.ones(2, 2, 3)
     target = torch.ones(2, 2, 3)
     labels = torch.zeros(2, 2, dtype=torch.long)
-    metric.update(pred, target, labels)
+    c_W = torch.zeros(2, 1, 3)  # nbi_channel_index is None for DummyConfig (cols.c=[]), so content is unused
+    metric.update(pred, target, labels, c_W)
     out = metric.compute()
     assert isinstance(out, dict)
     assert "total_hits" in out
@@ -123,10 +124,14 @@ def test_save_histogram(monkeypatch, tmp_path):
     # Patch plotly express and fig.write_image
     class DummyFig:
         def update_layout(self, **kwargs): return None
+        def for_each_trace(self, selector=None, fn=None): return None
         def for_each_annotation(self, fn): return None
         def update_xaxes(self, **kwargs): return None
         def update_yaxes(self, **kwargs): return None
         def write_image(self, *a, **k): return None
     monkeypatch.setattr("plotly.express.histogram", lambda *a, **k: DummyFig())
+    # dump_figure_to_pdfs writes real PDFs via kaleido and reads the real (unpatched) config for
+    # run_name; neither belongs in this unit test, so replace it with a no-op.
+    monkeypatch.setattr("src.metrics.peak_metric.dump_figure_to_pdfs", lambda *a, **k: None)
     metric.C.run_name = "testrun"
     metric.save_histogram("DML", "count", df=df)

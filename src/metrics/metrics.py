@@ -14,6 +14,32 @@ import wandb
 from src.config import get_current_config
 
 logger = logging.getLogger(__name__)
+
+# Historical defaults, kept as the fallback so callers without an evaluation.peaks config block
+# (older configs, ad-hoc notebook use) behave as before.
+PEAK_PROMINENCE_DEFAULT = 0.001
+ELM_PD_PROMINENCE_DEFAULT = 0.1
+
+# Synthetic channels appended by batch_get_peakprops, after the real cols.x traces.
+# PeakMetric.CHANNEL_NAMES must list these in exactly this order.
+SYNTHETIC_CHANNELS = ["PD large peaks", "DML ELM peaks"]
+
+
+def get_peak_thresholds(C=None):
+    """Return (prominence, elm_pd_prominence) from evaluation.peaks, falling back to the defaults.
+
+    Plain getattr rather than OmegaConf.select, so a non-DictConfig config object (the test's
+    DummyConfig, and any ad-hoc namespace) resolves the same way a real config does.
+    """
+    if C is None:
+        C = get_current_config()
+    peaks = getattr(getattr(C, "evaluation", None), "peaks", None)
+    if peaks is None:
+        return PEAK_PROMINENCE_DEFAULT, ELM_PD_PROMINENCE_DEFAULT
+    return (
+        getattr(peaks, "prominence", PEAK_PROMINENCE_DEFAULT),
+        getattr(peaks, "elm_pd_prominence", ELM_PD_PROMINENCE_DEFAULT),
+    )
 """
 ## Absolute metrics (targets and predicted are both viable inputs on their own)
 - moments:
@@ -363,10 +389,20 @@ class PeakProps(
 
     @classmethod
     def from_find_peaks(
-        cls, trace, prominence=0.001, width=0, rel_height=1.0, pd_trace: Optional[torch.Tensor] = None
+        cls,
+        trace,
+        prominence=PEAK_PROMINENCE_DEFAULT,
+        width=0,
+        rel_height=1.0,
+        pd_trace: Optional[torch.Tensor] = None,
+        elm_pd_prominence=ELM_PD_PROMINENCE_DEFAULT,
     ) -> "PeakProps":
-        """
-        Factory method to create a PeakProps instance from the output of scipy's find_peaks.
+        """Create a PeakProps from scipy's find_peaks.
+
+        Passing `pd_trace` switches this into ELM-gate mode, which is only meaningful for the DML
+        trace: peaks are kept only where an ELM-scale H-alpha (PD) burst coincides, and the
+        DML-PD energy properties are attached. This is a *filtering* factory, so the result is the
+        'DML ELM peaks' channel, not the raw DML channel. Call it without `pd_trace` for the raw view.
         """
         if isinstance(trace, torch.Tensor):
             trace = trace.cpu().numpy()
@@ -412,7 +448,9 @@ class PeakProps(
             )
             energy_delta = (trace[peak_positions] - trace[energy_base_pos])
             # get peaks from the pd_trace
-            pd_peak_positions, pd_props = find_peaks(pd_trace, prominence=0.15, width=width, rel_height=rel_height)
+            pd_peak_positions, pd_props = find_peaks(
+                pd_trace, prominence=elm_pd_prominence, width=width, rel_height=rel_height
+            )
             pd_prominence_window_sums = []
             # sum up the PD prominences of peaks in the same window
             for window in zip(window_l, extended_window_r): # as many as there are DML peaks
@@ -421,7 +459,9 @@ class PeakProps(
                 # sum up the prominences of the peaks in the window
                 pd_prominence_window_sums.append(np.sum(pd_props["prominences"][pd_peaks_in_window], axis=0))
             pd_prominence_window_sums = np.array(pd_prominence_window_sums)
-            fulfilled_dml_peaks = (pd_prominence_window_sums > 0.15)
+            # The PD peaks were already found at elm_pd_prominence, so this keeps any DML peak whose
+            # window holds at least one ELM-scale PD burst.
+            fulfilled_dml_peaks = (pd_prominence_window_sums >= elm_pd_prominence)
             return cls(
                 X=peak_positions[fulfilled_dml_peaks],
                 Y=trace[peak_positions[fulfilled_dml_peaks]],
@@ -513,56 +553,57 @@ class PeakProps(
 
 def batch_get_peakprops(
     batch: torch.Tensor,
-    prominence=0.001,
+    prominence=PEAK_PROMINENCE_DEFAULT,
     width=0,
     rel_height=1.0,
     dml_channel_index=None,
-    pd_channel_index=None
+    pd_channel_index=None,
+    elm_pd_prominence=ELM_PD_PROMINENCE_DEFAULT,
 ) -> list[list[PeakProps]]:
     """Find peaks in a batch of time series data.
+
+    Every real channel is analysed for peaks with at least `prominence` in the same way.
+    When both channel indices are given, the two SYNTHETIC_CHANNELS are appended after the
+    real ones, in SYNTHETIC_CHANNELS order:
+
+      'PD large peaks': the PD trace at `elm_pd_prominence` (ELM-scale H-alpha bursts only).
+      'DML ELM peaks' : the DML trace gated on a coincident ELM-scale PD burst, carrying the
+                        DML-PD energy properties.
 
     Args:
         batch (torch.Tensor): A batch of time series data with shape (B, C, T).
 
     Returns:
-        list: A  list of PeakProps namedtuples for each time series in the batch. ( B, C)
+        list: PeakProps per sample per channel, (B, C) or (B, C + len(SYNTHETIC_CHANNELS)).
     """
     if isinstance(batch, torch.Tensor):
         batch = batch.cpu().numpy()
     # logger.debug(f"Finding peaks in batch of shape {batch.shape}")
-    if dml_channel_index is None or pd_channel_index is None:
-        peak_results = [
-            [
-                PeakProps.from_find_peaks(channel_trace, prominence=prominence, width=width, rel_height=rel_height)
-                for channel_trace in sample  # Iterate over the channel dimension (C)  
-            ]
-            for sample in batch  # Iterate over the batch dimension (B)
+    peak_results = [
+        [
+            PeakProps.from_find_peaks(channel_trace, prominence=prominence, width=width, rel_height=rel_height)
+            for channel_trace in sample  # Iterate over the channel dimension (C)
         ]
-    else:
-        peak_results = []
-        for sample in batch:  # Iterate over the batch dimension (B)
-            sample_channel_results = []
-            peak_results.append(sample_channel_results)
-            for channel_i, trace in enumerate(sample):
-                if channel_i == dml_channel_index:  # For dml channel, we want to calculate the energy delta
-                    sample_channel_results.append(
-                        PeakProps.from_find_peaks(
-                            trace,
-                            prominence=prominence,
-                            width=width,
-                            rel_height=rel_height,
-                            pd_trace=sample[pd_channel_index]
-                        )
-                    )
-                else:
-                    sample_channel_results.append(
-                        PeakProps.from_find_peaks(trace, prominence=prominence, width=width, rel_height=rel_height)
-                    )
-            sample_channel_results.append(
-                PeakProps.from_find_peaks( # BIG PD peaks for elms
-                    sample[pd_channel_index], prominence=0.1, width=width, rel_height=rel_height
-                )
+        for sample in batch  # Iterate over the batch dimension (B)
+    ]
+    if dml_channel_index is None or pd_channel_index is None:
+        return peak_results
+    for sample, sample_channel_results in zip(batch, peak_results):
+        sample_channel_results.append(
+            PeakProps.from_find_peaks(  # BIG PD peaks for elms
+                sample[pd_channel_index], prominence=elm_pd_prominence, width=width, rel_height=rel_height
             )
+        )
+        sample_channel_results.append(
+            PeakProps.from_find_peaks(  # DML peaks coincident with one of those PD bursts
+                sample[dml_channel_index],
+                prominence=prominence,
+                width=width,
+                rel_height=rel_height,
+                pd_trace=sample[pd_channel_index],
+                elm_pd_prominence=elm_pd_prominence,
+            )
+        )
     return peak_results
 
 
@@ -582,15 +623,26 @@ def cpu_batch_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[di
         "width",
     ]  # + count with pairwise mse and marginal wasserstein
     C = get_current_config()
-    CHANNEL_NAMES = C.data.cols.x
+    prominence, elm_pd_prominence = get_peak_thresholds(C)
+    # The synthetic channels are appended by batch_get_peakprops, so name them here too, in the same
+    # order, otherwise the enumerate below pairs a name with the wrong channel.
+    CHANNEL_NAMES = list(C.data.cols.x) + list(SYNTHETIC_CHANNELS)
     dml_channel_index = CHANNEL_NAMES.index("DML") if "DML" in CHANNEL_NAMES else None
     pd_channel_index = CHANNEL_NAMES.index("PD") if "PD" in CHANNEL_NAMES else None
     pred_peaks_batch = batch_get_peakprops(
-        pred, dml_channel_index=dml_channel_index, pd_channel_index=pd_channel_index
-    )  # (B, C)
+        pred,
+        prominence=prominence,
+        dml_channel_index=dml_channel_index,
+        pd_channel_index=pd_channel_index,
+        elm_pd_prominence=elm_pd_prominence,
+    )  # (B, C + len(SYNTHETIC_CHANNELS))
     target_peaks_batch = batch_get_peakprops(
-        target, dml_channel_index=dml_channel_index, pd_channel_index=pd_channel_index
-    )  # (B, C)
+        target,
+        prominence=prominence,
+        dml_channel_index=dml_channel_index,
+        pd_channel_index=pd_channel_index,
+        elm_pd_prominence=elm_pd_prominence,
+    )  # (B, C + len(SYNTHETIC_CHANNELS))
     BATCH_SIZE = len(target_peaks_batch)
 
     # plot results of dml delta vs pd prominence
@@ -601,7 +653,7 @@ def cpu_batch_peak_metrics(pred: torch.Tensor, target: torch.Tensor) -> Tuple[di
     metrics_out = {}
     for channel_i, channel_name in enumerate(CHANNEL_NAMES):
         measures = BASE_MEASURES
-        if channel_name == "DML":
+        if channel_name == "DML ELM peaks":
             measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
         pairwise_distances = {f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}": 0. for measure in measures}
         counts_target = []

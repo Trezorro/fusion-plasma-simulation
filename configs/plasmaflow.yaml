@@ -51,6 +51,15 @@ evaluation:
   flow_rho: 2.0 # must be between 1.0 and 3.0
   solve_method: simple # dopri5, euler, midpoint
   max_n: 64
+  peaks:
+    # scipy.signal.find_peaks prominence on the [0,1]-normalized signal, for every channel.
+    # Deliberately at noise level: PD and FIR hold tens to hundreds of peaks per window at this value.
+    prominence: 0.001
+    # What counts as an ELM-scale H-alpha (PD) burst. Used in two places, and it must be the same
+    # number in both: the 'PD large peaks' channel, and the coincidence gate that defines the
+    # 'DML ELM peaks' channel. Was historically split (0.1 for the former, 0.15 for the latter);
+    # unified here. See docs/evaluation-metrics.md.
+    elm_pd_prominence: 0.1
   val_every_n_epochs: 5
   train_every_n_epochs: 20
   scrutinize_epochs: 3 # Epochs equal or lower than this will always be fully evaluated. -1 to disable

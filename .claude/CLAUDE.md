@@ -27,7 +27,7 @@ Physics is context, not the contribution. CFM+UNet is an established backbone; n
 - Generate by integrating learned velocity field from prior (τ=0) to data (τ=1). Flow time τ∈[0,1] ≠ physical time t.
 - Interpolation: `x_τ=(1-τ)x0+τx1`, target velocity `v=x1-x0`. Forward Euler only (see quirks).
 - Windows: seq_length(future)=256, history_length=256 @ 10kHz. Sample rate hardcoded 10000Hz in FlowModule.
-- Modes: L, D(dithering), H → `LHD_label` ints 0/1/2. Raw source is 1-indexed, shifted -1 in PeakMetric (off-by-one risk).
+- Modes: L, D(dithering), H. **Two label conventions coexist; always check which one you hold** (see quirks).
 - ELMs (edge-localized modes) = key stochastic transient of interest.
 
 ## Key files
@@ -78,6 +78,12 @@ No single scalar. Groups answer different questions:
 - All eval denormalizes with train-derived min/max first.
 
 ## Known quirks (DO NOT "fix" without checking git history)
+- **Mode labels: two conventions. Verify before indexing a colour/name list.**
+  - `LHD_label` col / `conditioning_input['label']`: **+1 shifted** in `prepare_data` (`data_loaders.py:478`) → `0=Unknown,1=L,2=D,3=H`. Consumers undo it: `flow.py:443` passes `label - 1` to PeakMetric (`test_condition` map = L0/D1/H2).
+  - `surr_labels_gen`/`surr_labels_target` (FNOLSTM argmax, what's in the HDF5 cache): **unshifted** `0=L,1=D,2=H`. Never Unknown (3 classes only). Fed to mode metrics unshifted (`flow.py:448`).
+  - `add_mode_bars` (`flow_plots.py`) speaks the **shifted** convention (`["Unknown","L","D","H"]`); callers add +1 to surrogate labels first (`printing_plots.py:554`). May be due to old dataset with different convention.
+- `eval_notebooks/*.py` are Jupytext cells assuming VSCode workspace root on `sys.path`. As a script: `PYTHONPATH=. python eval_notebooks/x.py`, else `ModuleNotFoundError: src`. Shell is already inside the pipenv venv.
+- `TEST_DF`/`self.data` index = **physical time in seconds**, not positional. So `quick_window`'s `index.get_indexer([t],'nearest')` returns a *positional* offset → `.iloc[start_idx:]` is correct.
 - `solve_method` / integration config key is **inert**. Forward Euler always. Adaptive solver path is dead/commented.
 - Spectral entropy uses `sf=100`, not real 10kHz. Legacy; fine for relative comparisons.
 - SoftDTW needs numba≥0.61 on cluster; Pipfile pins older numba for local `ydata-profiling`. Per-env mismatch is intentional.

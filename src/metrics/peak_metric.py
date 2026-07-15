@@ -7,13 +7,19 @@ import torch
 import torchmetrics
 from src.config import get_current_config
 from src.to_pdf import dump_figure_to_pdfs
-from src.metrics.metrics import batch_get_peakprops, prefix_metrics
+from src.metrics.metrics import SYNTHETIC_CHANNELS, batch_get_peakprops, get_peak_thresholds, prefix_metrics
 from scipy.stats import wasserstein_distance
 import pandas as pd
 from pathlib import Path
 import ot
 
 logger = logging.getLogger(__name__)
+
+# The energy properties only exist for DML peaks that coincide with an ELM-scale PD burst, which is
+# exactly the synthetic 'DML ELM peaks' channel. The raw 'DML' channel carries the base measures only,
+# like every other channel.
+ELM_CHANNEL = "DML ELM peaks"
+ELM_MEASURES = ["energy_delta", "pd_prominence", "energy_ratio"]
 
 
 #%%
@@ -23,7 +29,7 @@ class PeakMetric(torchmetrics.Metric):
 
     - `data_set` ∈ {`train`, `val`, `test`}
     - `on_condition`: Logical condition on the history window Wh, e.g. `L_only_Wh`, `mixed`, `H_not_in_Wh` or 'any_Wh'
-    - `statistic` ∈ {`mean_pairwise_wasserstein`, `marginal_wasserstein`} — 
+    - `statistic` ∈ {`mean_pairwise_wasserstein`, `marginal_wasserstein`}
     - `view` ∈ {`target`, `pred`, `error`} — indicates whether the value is computed from the ground truth, model prediction, or their difference
 
     Instead of statistic and view, we may see the divergence as wasserstein or kl divergence.
@@ -49,9 +55,9 @@ class PeakMetric(torchmetrics.Metric):
         super().__init__()
         self.condition = condition_history
         self.C = get_current_config()
-        self.CHANNEL_NAMES = self.C.data.cols.x + [
-            'PD large peaks'
-        ]  # NOTE: hack together with batch_get_peakprops for type 1 ELMS
+        # Order must match the append order in batch_get_peakprops.
+        self.CHANNEL_NAMES = self.C.data.cols.x + list(SYNTHETIC_CHANNELS)
+        self.prominence, self.elm_pd_prominence = get_peak_thresholds(self.C)
         self.dml_channel_index = self.CHANNEL_NAMES.index("DML") if "DML" in self.CHANNEL_NAMES else None
         self.pd_channel_index = self.CHANNEL_NAMES.index("PD") if "PD" in self.CHANNEL_NAMES else None
         if "NBI-median" in self.C.data.cols.c:
@@ -64,8 +70,8 @@ class PeakMetric(torchmetrics.Metric):
         self.future_length = self.C.data.seq_length
         for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
             measures = self.BASE_MEASURES
-            if channel_name == "DML":
-                measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
+            if channel_name == ELM_CHANNEL:
+                measures = measures + ELM_MEASURES
             # pairwise_distances = {f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}": 0. for measure in measures}
             if self.nbi_channel_index is not None and channel_name == 'PD large peaks':
                 self.add_state(f"prop_list_pred:PD large peaks/NBI", default=torch.zeros(0), dist_reduce_fx="cat")
@@ -151,16 +157,24 @@ class PeakMetric(torchmetrics.Metric):
             self.cat_with_state(f"list:NBI/window_means", nbi_window_means)
 
         pred_peaks_batch = batch_get_peakprops(
-            pred[sample_mask], dml_channel_index=self.dml_channel_index, pd_channel_index=self.pd_channel_index
-        )  # (B, C)
+            pred[sample_mask],
+            prominence=self.prominence,
+            dml_channel_index=self.dml_channel_index,
+            pd_channel_index=self.pd_channel_index,
+            elm_pd_prominence=self.elm_pd_prominence,
+        )  # (B, C + len(SYNTHETIC_CHANNELS))
         target_peaks_batch = batch_get_peakprops(
-            target[sample_mask], dml_channel_index=self.dml_channel_index, pd_channel_index=self.pd_channel_index
-        )  # (B, C)
+            target[sample_mask],
+            prominence=self.prominence,
+            dml_channel_index=self.dml_channel_index,
+            pd_channel_index=self.pd_channel_index,
+            elm_pd_prominence=self.elm_pd_prominence,
+        )  # (B, C + len(SYNTHETIC_CHANNELS))
         logger.debug("Done. Updating state.")
         for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
             measures = self.BASE_MEASURES
-            if channel_name == "DML":
-                measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
+            if channel_name == ELM_CHANNEL:
+                measures = measures + ELM_MEASURES
 
             # pairwise_distances = {f"/error/peak_{measure}/pairwise_wasserstein/{channel_name}": 0. for measure in measures}
             # counts_target = []
@@ -223,8 +237,8 @@ class PeakMetric(torchmetrics.Metric):
 
         for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
             measures = self.BASE_MEASURES  # + count done manually
-            if channel_name == "DML":
-                measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
+            if channel_name == ELM_CHANNEL:
+                measures = measures + ELM_MEASURES
             #  overal distribution of peak counts in windows:
             counts_pred = getattr(self, f"list:{channel_name}/counts_pred").cpu().numpy()
             counts_target = getattr(self, f"list:{channel_name}/counts_target").cpu().numpy()
@@ -328,8 +342,8 @@ class PeakMetric(torchmetrics.Metric):
         dfs = []
         for channel_i, channel_name in enumerate(self.CHANNEL_NAMES):
             measures = ['count'] + self.BASE_MEASURES
-            if channel_name == "DML":
-                measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
+            if channel_name == ELM_CHANNEL:
+                measures = measures + ELM_MEASURES
             for measure in measures:
                 dfs.append(self.extract_df(channel_name, measure))
         base_df = pd.concat(dfs, ignore_index=True)
@@ -377,8 +391,8 @@ class PeakMetric(torchmetrics.Metric):
         all_condition_df = df.query("condition=='any_Wh'")
         for channel_i, channel_name in enumerate(['all'] + self.CHANNEL_NAMES):
             measures = self.BASE_MEASURES + ['count']
-            if channel_name == "DML":
-                measures = measures + ["energy_delta", "pd_prominence", "energy_ratio"]
+            if channel_name == ELM_CHANNEL:
+                measures = measures + ELM_MEASURES
             for measure in measures:
                 self.save_histogram(channel_name, measure, subgroups_df)
                 if len(all_condition_df) > 0:

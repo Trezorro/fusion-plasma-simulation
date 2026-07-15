@@ -74,7 +74,26 @@ The MSD is signed, so it tells you the *direction* of the error: whether the mod
 
 Computed in `src/metrics/peak_metric.py`. This measures whether the model produces the right number, shape, and energy of peaks in each channel. Peaks matter physically because many of the events we care about (ELMs, mode transitions, bursts) show up as peaks in the diagnostic signals, so a model can have good moments and good entropy while still getting the *event structure* wrong.
 
-Peak detection uses `scipy.signal.find_peaks` on each sequence independently.
+### Detection, and the two synthetic channels
+
+Every channel is analyzed independently with `scipy.signal.find_peaks` at `evaluation.peaks.prominence` (0.001), `width=0`, `rel_height=1.0` (`batch_get_peakprops`, `metrics.py`). On a [0,1]-normalized signal that prominence is deliberately at noise level, so PD and FIR windows hold tens to hundreds of peaks. Thresholds come from config via `get_peak_thresholds`, with the historical values as fallback.
+
+`PeakMetric.CHANNEL_NAMES` is `data.cols.x` plus two **synthetic** channels appended by `batch_get_peakprops` in `SYNTHETIC_CHANNELS` order. Both are ELM-focused views of a real channel, and both are *additive*: the raw `PD` and `DML` channels keep every peak.
+
+| Channel | What it is | Peaks/window (test set) |
+|---|---|---|
+| `PD` | raw, at `prominence` | ~113 |
+| `DML` | raw, at `prominence` | ~58 |
+| `PD large peaks` | the PD trace at `elm_pd_prominence` (0.1): ELM-scale H-alpha bursts only | ~7.5 |
+| `DML ELM peaks` | DML peaks that coincide with one of those PD bursts | ~7.9 |
+
+**The `DML ELM peaks` gate.** ELMs show up as H-alpha (photodiode) bursts, so a DML excursion is treated as an ELM candidate only if a large PD burst happens at the same time. PD peaks are found at `elm_pd_prominence`, their prominences are summed over a window spanning each DML peak's width (extended to the next DML peak), and the DML peak is kept only if that sum clears `elm_pd_prominence`. The energy properties are attached to the survivors, and only to them.
+
+This gate is why the channel is sparse: it removes ~87% of DML peaks. So `DML ELM peaks` count is not "peaks in DML", it is "DML peaks coincident with an ELM-scale PD burst". Zero in a window is normal, including in ground truth.
+
+A consequence worth holding onto: a model scores on `DML ELM peaks` only if it generates **both** a DML excursion and a coincident ELM-scale PD burst. A model whose PD output is too smooth to clear `elm_pd_prominence` scores zero by construction, whatever its DML channel does. Deterministic baselines do exactly this, so their whole `DML ELM peaks` column can collapse to the zero-peak sentinel path (see the sentinel caveat below), and two unrelated baselines can then produce bit-identical scores.
+
+> **Changed 2026-07.** The gate used to be applied to the DML channel *in place*, so `count`/`prominence`/`width`/`base` for DML silently described only the ~13% of peaks that survived it, and meant something different from the same measures on every other channel. The raw DML view was not recorded anywhere. It is now a separate channel, mirroring how `PD large peaks` had always been done additively. The ELM-burst threshold was also split across two call sites (0.1 for `PD large peaks`, 0.15 for the gate) and is now the single `elm_pd_prominence` key. **Caches written before this change are not comparable on DML**, and their DML numbers are the gated subset despite the label.
 
 **Measured properties for each peak:**
 
@@ -83,29 +102,64 @@ Peak detection uses `scipy.signal.find_peaks` on each sequence independently.
 - `base`: signal value at the base of the peak.
 - `width`: peak width at half prominence.
 
-**DML-specific properties** (computed when peaks are detected in the DML channel):
+**ELM properties**, on `DML ELM peaks` only (they are undefined without a coincident PD burst):
 
-- `energy_delta`: energy change in the DML signal around the peak.
-- `pd_prominence`: concurrent H-alpha (PD channel) prominence at the time of the DML peak.
-- `energy_ratio`: ratio of energy before and after the peak (related to ELM characterization).
+- `energy_delta`: DML value at the peak minus the minimum in its window (the assumed base energy).
+- `pd_prominence`: summed prominence of the coincident PD burst.
+- `energy_ratio`: `pd_prominence / energy_delta`.
 
-**Conditions:** peaks are analyzed separately for three L/H/D mode conditions in the history window:
+### Conditions, and how much data backs each one
 
-- `L_only_Wh`: history is entirely L-mode.
-- `D_only_Wh`: history is entirely D-mode (dithering).
-- `H_only_Wh`: history is entirely H-mode.
+Peaks are scored separately per mode composition of the **history** window: `L_only_Wh`, `D_only_Wh`, `H_only_Wh` (history entirely in one mode), `mixed` (more than one mode), and `any_Wh` (everything). The four disjoint conditions partition `any_Wh` exactly.
 
-Splitting by history mode matters because the peak behavior the model *should* produce depends heavily on the confinement regime it is starting from.
+Splitting this way matters because the peak behavior a model *should* produce depends on the regime it starts from. But the conditions are wildly unbalanced, and **`D_only_Wh` is thin enough that it must not be read like the others**:
+
+| Condition | Windows | Share |
+|---|---|---|
+| `any_Wh` | 61459 | 100% |
+| `L_only_Wh` | 39015 | 63.5% |
+| `H_only_Wh` | 16460 | 26.8% |
+| `mixed` | 4717 | 7.7% |
+| `D_only_Wh` | **1267** | **2.1%** |
+
+Pure-dithering history windows are rare in the data: a D box in a boxplot, or a D row in a table, rests on ~2% of the test set and its tails are far less trustworthy than L or H. Treat single-model D differences as suggestive, not decisive.
+
+It compounds on DML. In those 1267 D windows the ground truth has **zero** `DML ELM peaks` in 78.6% of windows (mean 1.80), because D mode has few ELMs, so the effective sample carrying any DML ELM information is only a few hundred windows. A DML/D cell is close to uninformative, and when models also produce nothing there it degenerates entirely into the sentinel.
+
+Read these counts off the `total_hits` keys in a run's JSON friend. They are a property of the test split rather than the model, and are stable across the 2026-07 dataset update (which added covariate columns, not shots): every cache reports the same 61459/39015/16460/4717/1267.
+
+Note the mode-transition metrics report *different* counts for the same-named conditions (`D_only_Wh` 858, 1.4%), because `PeakMetric` conditions on the **true** `LHD_label` (`flow.py` passes `conditioning_input['label'] - 1`) while `ModeTransitionMetric` conditions on **surrogate** classifier labels. Both partition 61459; they disagree on which windows are pure.
 
 **Statistics per property per condition:**
 
-- `mean_pairwise_wasserstein`: average pairwise Wasserstein distance between generated and target peak distributions.
-- `marginal_wasserstein`: Wasserstein distance between the marginal distributions.
+- `mean_pairwise_wasserstein`: average pairwise Wasserstein distance between generated and target peak distributions, window by window.
+- `marginal_wasserstein`: Wasserstein distance between the marginal distributions, pooled over all windows.
 - `count_mse`: MSE of peak count between generated and target.
 
 **Wandb key pattern:** `{prefix}/peak_{measure}_{stat}/{channel}`
 
-**Note on label indexing:** `PeakMetric` depends on the condition labels from `cols.label` (the LHD_label). The mode indices used internally are `0=L, 1=D, 2=H`. The label column itself uses 1-indexed modes, so it is shifted by `-1` before use in `update_metrics()`. If you ever touch this code, that off-by-one shift is the thing to be careful about.
+### Caveat: the zero-peak sentinel
+
+`PeakProps.__sub__` (`metrics.py`) is the overloaded subtraction that produces every pairwise distance. When **either** side has no peaks in a window, it does not return a distance between prediction and target. It returns the mean of the *other* side's property, a sentinel:
+
+- both empty: `0.0` for every property.
+- prediction empty: `np.mean(target.<prop>)`, a value derived **only from the ground truth**.
+- target empty: `np.mean(prediction.<prop>)`.
+
+So a model that predicts nothing in a window is not scored against its prediction, and any two models that predict nothing in the same windows receive mathematically identical scores. That is not a hypothetical: on `DML ELM peaks` in the D condition, deterministic baselines can predict zero in 100% of windows, making their scores a ground-truth constant, bit-identical across unrelated architectures.
+
+This mostly bites the sparse ELM channels. Raw `PD`, `FIR_LIDs_core` and `DML` hold tens of peaks per window for every model, so their pairwise numbers are genuine comparisons. When reading a `DML ELM peaks` or `PD large peaks` cell, check the peak counts before believing the ranking.
+
+Boxplots of raw per-peak values do not suffer from this, since they plot the distributions directly and an empty prediction simply contributes nothing.
+
+**Note on label indexing:** two conventions coexist. Check which one you hold before indexing anything by label value.
+
+| Source | Values | Shift |
+|---|---|---|
+| `LHD_label` col / `conditioning_input['label']` | `0=Unknown, 1=L, 2=D, 3=H` | `+1` applied in `prepare_data` (`data_loaders.py:478`) |
+| `surr_labels_gen` / `surr_labels_target` (HDF5 cache) | `0=L, 1=D, 2=H` | none; raw FNOLSTM `argmax`, 3 classes, never Unknown |
+
+`PeakMetric.test_condition` uses `0=L, 1=D, 2=H`, so `flow.py:443` passes `conditioning_input['label'] - 1`. Mode/transition metrics take surrogate labels unshifted (`flow.py:448`). `add_mode_bars` expects the *shifted* convention, so plotters add `+1` to surrogate labels (`printing_plots.py:554`). That off-by-one is the thing to be careful about.
 
 ---
 
