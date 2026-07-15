@@ -24,6 +24,7 @@ skip_log_summary: false
 test_cache_name: ${ run_name }
 test_cache_mode: create # create or use
 
+# MARK:
 window_set: # for evaluation plots
   - [57013, 0.94]
   - [57013, 1.08]
@@ -44,6 +45,7 @@ window_set: # for evaluation plots
   - [77595, 0.94] # High NBI
   - [76702, 1.14] # high NBI
 
+# MARK:
 evaluation:
   n_steps: 100 # enough for rk4
   flow_rho: 2.0 # must be between 1.0 and 3.0
@@ -83,6 +85,7 @@ evaluation:
 
 # model: model.yaml # To be replaced by respective yaml file content
 # model: configs/unflow.yaml
+# MARK:
 model: configs/tide.yaml       # or configs/patchtst.yaml / configs/itransformer.yaml
 
 # model:
@@ -129,7 +132,7 @@ model: configs/tide.yaml       # or configs/patchtst.yaml / configs/itransformer
 #       lr: 0.00005
 #       weight_decay: 0 # Default 0
 #       amsgrad: false # Default false
-
+# MARK:
 data:
   Class: FusionShotDataModule
   dir: ./data/
@@ -157,14 +160,14 @@ data:
     c:
       # - NBI-median
       # - ECRH-median
-      - IPLA # The realized plasma current, measured in real time. This is the actual current flowing through the plasma, driven by the induction system.  Shows pulses at ELMS (leakage)
-      # - IP # Current reference line
+      # - IPLA # The realized plasma current, measured in real time. This is the actual current flowing through the plasma, driven by the induction system.  Shows pulses at ELMS (leakage)
+      - IP # Current reference line
       # - gas_fringes  # Ingepompte gas
-      - PNBI  # manieren om te verhitten: colliding Neutral beam injection. 0 tenzij ze hem aanzetten. Echt gestepped.
+      - PNBI  # Heating technique: colliding Neutral beam injection. 0 unless turned on
       - PECRH  # magnetron.
       # - a_minor  # reel gemeten plasma shape a k d (horizontale radius
-      - KAPPA
-      - VOL
+      # - KAPPA
+      # - VOL
       # - DELTA  # linkerbovenhoek naar links vanuit hetmidden
     label: LHD_label
   val_shots: [
