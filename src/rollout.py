@@ -378,13 +378,22 @@ def _run_rollouts_inner(model, data_module: FusionShotDataModule, rollout_conf):
     step = rollout_conf.get('step') or dataset.seq_length
     cache_mode = rollout_conf.get('cache_mode', 'create')
     n_samples = rollout_conf.get('n_samples', 1)
+    cache_name = rollout_conf.cache_name
+    test_cache = getattr(model, 'test_cache', None)
+    if test_cache is not None and test_cache.cache_filename == cache_name:
+        # Same file would mix the window schema ({shot}/{start}: datasets) with the rollout
+        # schema ({shot}/{start}/{sample}: group), breaking readers of both.
+        cache_name = cache_name + '_rollout'
+        logger.warning(
+            "rollout.cache_name equals test_cache_name; using '%s' instead to keep the schemas apart.", cache_name
+        )
     specs, skipped = compute_rollout_specs(dataset, rollout_conf.start_fractions, n_samples, step)
 
     if cache_mode == 'use':
-        cache = RolloutHDFCache(rollout_conf.cache_name, mode='r')
+        cache = RolloutHDFCache(cache_name, mode='r')
         results = _load_results_from_cache(cache, specs)
     else:
-        cache = RolloutHDFCache(rollout_conf.cache_name, mode='a')
+        cache = RolloutHDFCache(cache_name, mode='a')
         todo = [s for s in specs if not cache.has(s.shot_number, s.start_i, s.sample_idx)]
         cached = [s for s in specs if s not in todo]
         logger.info("Generating %d rollouts (%d already cached).", len(todo), len(cached))
@@ -409,7 +418,7 @@ def _run_rollouts_inner(model, data_module: FusionShotDataModule, rollout_conf):
             run_name=str(wandb.run.name) if wandb.run is not None else '',
         )
         if cached:  # pull previously cached rollouts back in for metrics/plots
-            results += _load_results_from_cache(RolloutHDFCache(rollout_conf.cache_name, mode='r'), cached)
+            results += _load_results_from_cache(RolloutHDFCache(cache_name, mode='r'), cached)
 
     if results:
         summary = summarize_rollouts(results, data_module, skipped)
