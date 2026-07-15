@@ -14,6 +14,7 @@ from src.models.unet_conditional import ConditionalUNet
 from src.models.dlinear import DLinear
 from src.models.patchtst import PatchTST
 from src.models.itransformer import ITransformer
+from src.models.tide import TiDE
 from src.optimal_transport import OTPlanSampler
 import src.metrics.metrics as metrics
 from src.metrics.evaluate_modes import generate_surrogate_labels, generate_surrogate_labels_batched
@@ -53,6 +54,7 @@ class FlowModule(L.LightningModule):
         DLinear=DLinear,
         PatchTST=PatchTST,
         ITransformer=ITransformer,
+        TiDE=TiDE,
     )
     SAMPLE_RATE = 10_000  # Hz
     PRIOR_OPTIONS = ["normal", "levy", "resample", "brownian", "copy", "constant"]

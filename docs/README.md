@@ -80,7 +80,7 @@ bash src/HPC_setup/submit_remote_job_snellius.sh my_experiment
 | [configuration.md](configuration.md) | All config keys in plasmaflow.yaml explained |
 | [data-pipeline.md](data-pipeline.md) | From raw TCV shots to training batches |
 | [evaluation-metrics.md](evaluation-metrics.md) | Every metric computed: definition, wandb key, timing |
-| [baselines.md](baselines.md) | Deterministic baselines (DLinear, PatchTST, iTransformer): approach, integrity, how to run |
+| [baselines.md](baselines.md) | Deterministic baselines (DLinear, PatchTST, iTransformer, TiDE): approach, integrity, how to run |
 | [plots.md](plots.md) | All plot types: what they show, how to configure |
 | [hpc-snellius.md](hpc-snellius.md) | Snellius HPC: submit, sync, debug, venv setup |
 | [notebooks.md](notebooks.md) | Analysis notebooks: which one makes which thesis figure/table, inputs/outputs, run order |

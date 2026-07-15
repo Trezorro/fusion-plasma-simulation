@@ -1,7 +1,7 @@
 # Deterministic forecasting baselines
 
 This document explains the deterministic (point-forecast) baselines added to PlasmaFlow:
-**DLinear**, **PatchTST**, and **iTransformer**. It is written for reproducibility and
+**DLinear**, **PatchTST**, **iTransformer**, and **TiDE**. It is written for reproducibility and
 integrity first: every place where our conventions had to be reconciled with the original
 models is stated explicitly, including the decisions we made and why, so a reader (or
 reviewer) can check that the comparison is fair and that nothing about the published models
@@ -29,7 +29,7 @@ this constraint.
 
 ## 2. The three models and the channel-independence caveat
 
-The three span the dominant design axis in current long-horizon multivariate forecasting, and
+These span the dominant design axes in current long-horizon multivariate forecasting, and
 our window length (history 256 + horizon 256 by default) sits inside the 96 to 720 band these
 models were designed for.
 
@@ -37,7 +37,8 @@ models were designed for.
 |---|---|---|---|
 | DLinear | Zeng et al., AAAI 2023 (arXiv:2205.13504) | Trend+remainder decomposition, per-channel linear map. The floor: simple enough that it has embarrassed many transformers, so it protects the comparison against the objection that the baselines were weak. | No (channel-independent) |
 | PatchTST | Nie et al., ICLR 2023 (arXiv:2211.14730) | Patches each channel into tokens, processes channels independently with shared weights. Strong and stable. | No (channel-independent) |
-| iTransformer | Liu et al., ICLR 2024 (arXiv:2310.06625) | Tokenises each variate as a whole and attends *across variates* rather than across time. | Yes |
+| iTransformer | Liu et al., ICLR 2024 (arXiv:2310.06625) | Tokenises each variate as a whole and attends *across variates* rather than across time. | Yes (variate-collapsed) |
+| TiDE | Das et al., TMLR 2023 (arXiv:2304.08424) | MLP encoder-decoder with a *temporal decoder* that feeds each horizon step's future covariate to the aligned prediction step. Time-aligned covariate handling. | Yes (time-aligned) |
 
 **Honesty point that must survive into the writeup.** DLinear and PatchTST are
 *channel-independent*: the covariate channels cannot inform the X channels. So a covariate
@@ -101,6 +102,7 @@ Adapter files (thin wrappers around the vendored TSlib `Model`):
 | DLinear | [src/models/dlinear.py](../src/models/dlinear.py) | `tslib/DLinear.py` |
 | PatchTST | [src/models/patchtst.py](../src/models/patchtst.py) | `tslib/PatchTST.py` |
 | iTransformer | [src/models/itransformer.py](../src/models/itransformer.py) | `tslib/iTransformer.py` |
+| TiDE | [src/models/tide.py](../src/models/tide.py) | `tslib/TiDE.py` |
 
 ## 5. Input representation, and how it was reconciled with the UNet
 
@@ -152,6 +154,51 @@ We mirror the UNet's *information access*, adapted to each model's native conven
   zero-padding of the X future already marks the boundary. It can be added later if it ever
   measurably matters.
 
+- **TiDE** is fed in its native lookback-to-horizon form, with no spanning-window hack. The
+  target lookback is `x_history` `[B, 5, 256]` and the horizon is the 256-step forecast. The
+  control covariates enter through TiDE's *mark* channel (see below), carrying real values over
+  the full `[history | horizon]` window. Because TiDE forecasts each target channel
+  independently, all 5 X channels share the same covariate context and are stacked to
+  `[B, 5, 256]` on output.
+
+### TiDE covariate routing and the temporal decoder (method summary)
+
+This is the property that makes TiDE the covariate-aware baseline worth running, so it is
+stated at method-section altitude.
+
+TiDE (Das et al., 2023) is an MLP encoder-decoder. A dense encoder maps the target lookback
+together with the projected dynamic covariates over the whole `[history | horizon]` span into a
+latent vector; a dense decoder expands it to one vector per horizon step; and a *temporal
+decoder* combines each horizon step's decoded vector with the projected covariate of that same
+step to produce the prediction. A global linear residual maps the lookback directly to the
+horizon and is added on top. The temporal decoder is a direct path from the covariate at
+horizon step `t` to the prediction at step `t`: the deterministic counterpart of the flow
+UNet's time-aligned covariate channels, delivered by a standard long-horizon model.
+
+In the Time-Series-Library, TiDE ingests dynamic covariates through the model's *mark* tensors,
+which upstream carry calendar features (hour, weekday, ...). PlasmaFlow has no meaningful
+calendar time, so we route the real control covariates `c` through that same slot:
+
+```
+x_mark_enc   = c over history                 [B, Wh, c_channels]
+batch_y_mark = c over [history | horizon]      [B, Wh+Wf, c_channels]
+```
+
+TiDE's forward reconstructs the full covariate span and passes its future portion
+(`batch_y_mark[:, -Wf:]`) to the temporal decoder. There is no separate "oracle" switch and no
+masking: as everywhere in these baselines, whichever covariates are listed in `data.cols.c` are
+fed in full, over both history and horizon (§6). Supplying a timing-bearing covariate (e.g.
+IPLA) therefore lets the temporal decoder recover the event at the aligned step; withholding it
+leaves the estimator to average over plausible event times. TiDE's own paper demonstrates this
+directly: on a semi-synthetic series with injected event features, the model with the temporal
+decoder recovers the events after a single epoch and the model without it misses them.
+
+One vendored edit makes this possible. Upstream fixes the mark width to a calendar-frequency
+map (`feature_dim = freq_map[freq]`); we free it to follow the configured covariate count
+(`feature_dim = c_channels`), so any number of control covariates can pass through the temporal
+decoder (§7, edit 4). When no covariates are configured (`c_channels == 0`) the model falls
+back to the upstream zero-filled calendar-width mark, degrading to plain TiDE.
+
 Rationale for the split: comparability within PlasmaFlow matters more than matching TSlib's
 defaults, but where a model is natively a lookback-to-horizon forecaster (DLinear, PatchTST)
 we respect that so we do not misrepresent what the published model does.
@@ -189,6 +236,7 @@ Vendored subset under [src/models/tslib/](../src/models/tslib/):
 | `DLinear.py` | DLinear `Model` | `models/DLinear.py` |
 | `PatchTST.py` | PatchTST `Model` | `models/PatchTST.py` |
 | `iTransformer.py` | iTransformer `Model` | `models/iTransformer.py` |
+| `TiDE.py` | TiDE `Model` (self-contained, no layer deps) | `models/TiDE.py` |
 | `Autoformer_EncDec.py` | `series_decomp` (DLinear dep) | `layers/Autoformer_EncDec.py` |
 | `Transformer_EncDec.py` | `Encoder`, `EncoderLayer` | `layers/Transformer_EncDec.py` |
 | `SelfAttention_Family.py` | `FullAttention`, `AttentionLayer` | `layers/SelfAttention_Family.py` |
@@ -199,18 +247,26 @@ Vendored subset under [src/models/tslib/](../src/models/tslib/):
 
 1. **Import paths.** `from layers.X` / `from utils.masking` rewritten to package-relative
    imports (`from .X` / `from .masking`). No logic change.
-2. **`use_norm` gate (PatchTST and iTransformer).** See §8. Upstream *this port* hardcodes an
-   always-on instance normalization with no flag; we wrapped the normalize/de-normalize blocks
-   in `if self.use_norm:` and read `self.use_norm = getattr(configs, 'use_norm', True)`. Default
-   preserves upstream behavior; the config turns it off.
+2. **`use_norm` gate (PatchTST, iTransformer, TiDE).** See §8. Upstream *these ports* hardcode
+   an always-on instance normalization with no flag; we wrapped the normalize/de-normalize
+   blocks in `if self.use_norm:` and read `self.use_norm = getattr(configs, 'use_norm', True)`.
+   Default preserves upstream behavior; the config turns it off. For TiDE this matters extra:
+   the inline norm interacts with the global linear residual, so we disable it (§8).
 3. **Trim in `SelfAttention_Family.py`.** Removed the `ReformerLayer` and
    `TwoStageAttentionLayer` classes and their two module-level imports (`reformer_pytorch`,
    `einops`). Neither class is used by PatchTST/iTransformer (which only use `FullAttention`
    and `AttentionLayer`), and the imports would otherwise force two extra pip dependencies on
    the cluster. After the trim the vendored set needs only `torch` and `numpy`.
 
-Everything else (the model math, the attention, the embeddings, the decomposition) is copied
-verbatim.
+4. **Covariate mark width (TiDE only).** Upstream fixes TiDE's dynamic-covariate ("mark")
+   width to a calendar-frequency map (`feature_dim = freq_map[freq]`, e.g. 4 for hourly). We
+   changed it to `feature_dim = getattr(configs, 'c_channels', 0) or freq_map[freq]`, so the
+   temporal decoder accepts an arbitrary number of PlasmaFlow control covariates. This is the
+   edit that lets real covariates flow through TiDE's temporal decoder (§5). No math changed;
+   only the width of an existing projection.
+
+Everything else (the model math, the attention, the embeddings, the decomposition, the TiDE
+temporal decoder) is copied verbatim.
 
 ### Adapter details worth knowing
 
@@ -226,9 +282,11 @@ verbatim.
 ## 8. Instance normalization (RevIN) decision
 
 The data module already min-max normalizes signals to roughly `[0, 1]` using train-split
-statistics. PatchTST and iTransformer in TSlib apply an additional per-window "non-stationary"
-normalization (subtract the window mean, divide by std, then de-normalize the output back to
-scale).
+statistics. PatchTST, iTransformer, and TiDE in TSlib apply an additional per-window
+"non-stationary" normalization (subtract the window mean, divide by std, then de-normalize the
+output back to scale). For TiDE there is an extra reason to disable it: the inline norm and the
+model's global linear residual (lookback-to-horizon) can work against each other, so we keep
+`use_norm: false` and let the single train-split normalization stand.
 
 **Decision: disable it by default** (`use_norm: false` in the baseline configs), for
 comparability with the flow model, which has no such internal normalization. Keeping it would
@@ -283,7 +341,8 @@ Shipped baseline configs:
 |---|---|---|
 | [configs/dlinear.yaml](../configs/dlinear.yaml) | DLinear | X-history only; `moving_avg` kernel is the only structural knob |
 | [configs/patchtst.yaml](../configs/patchtst.yaml) | PatchTST | X-history only; `patch_len`/`stride`, `d_model`, `n_heads`, `e_layers`, `use_norm: false` |
-| [configs/itransformer.yaml](../configs/itransformer.yaml) | iTransformer | covariate-aware; `seq_len: 512`, `use_norm: false`; oracle driven by `data.cols.c` |
+| [configs/itransformer.yaml](../configs/itransformer.yaml) | iTransformer | covariate-aware (variate-collapsed); `seq_len: 512`, `use_norm: false`; oracle driven by `data.cols.c` |
+| [configs/tide.yaml](../configs/tide.yaml) | TiDE | covariate-aware (time-aligned); native `seq_len: 256`, `use_norm: false`; oracle driven by `data.cols.c` |
 
 Each config keeps `Class: UnFlowModule`, `prior: 'constant'`, `loss: MSELoss`, and the same
 optimizer block as `configs/unflow.yaml`.
@@ -296,6 +355,7 @@ Each adapter has a `__main__` that runs a synthetic forward pass and asserts the
 python -m src.models.dlinear
 python -m src.models.patchtst
 python -m src.models.itransformer
+python -m src.models.tide
 ```
 
 ## 12. Known couplings and caveats
@@ -329,8 +389,9 @@ python -m src.models.itransformer
 | # | Topic | Decision | Where |
 |---|---|---|---|
 | 1 | Covariates for DLinear/PatchTST | X-history only (channel-independent) | §2, §5 |
-| 2 | Oracle mechanism | Driven by `data.cols.c`; no masking flag; iTransformer only | §6 |
-| 3 | Instance norm | Disabled by default (`use_norm: false`); flag re-added on top of the port | §8 |
+| 2 | Oracle mechanism | Driven by `data.cols.c`; no masking flag; covariate-aware models (iTransformer, TiDE) | §6 |
+| 3 | Instance norm | Disabled by default (`use_norm: false`); flag re-added on top of the port; TiDE also fights its linear residual | §8 |
 | 4 | Loss | MSE | §9 |
 | 5 | Single-sample plots | Expected zero-spread; no code change | §10 |
-| 6 | Sourcing | Vendored from TSlib `4e938a1`, three enumerated edits | §7 |
+| 6 | Sourcing | Vendored from TSlib `4e938a1`, four enumerated edits | §7 |
+| 7 | TiDE covariate path | Routed through the mark slot; mark width freed to `c_channels`; native lookback/horizon | §5, §7 |
