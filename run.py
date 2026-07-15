@@ -175,6 +175,12 @@ logger.info("Starting final testing...")
 trainer.test(model=model, datamodule=fusion_data_module)
 logger.info("Finished testing.")
 
+if 'rollout' in C:  # Autoregressive rollout evaluation; off when the config block is absent
+    logger.info("Starting autoregressive rollout evaluation...")
+    import src.rollout
+    src.rollout.run_rollouts(model.to(device), fusion_data_module, C.rollout)
+    logger.info("Finished rollout evaluation.")
+
 
 
 logger.info("Run finished, deleting redundant artifacts.")

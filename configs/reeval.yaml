@@ -6,6 +6,19 @@ prefer_model_alias: best # null just takes the one with latest, can be best or l
 test_cache_name: ${ run_name } #test_tinyhistory # test_cache_unflow #  # tinyhistory_seq_normal_smC_BIG #
 test_cache_mode: create # create or use
 
+# Autoregressive rollout evaluation after trainer.test. Base runs predate this
+# feature, so it only runs when this block is present here. Comment out to disable.
+rollout:
+  start_fractions: [0.10, 0.25, 0.50, 0.75, 0.90] # rollout start points as fraction of shot length
+  step: ${ data.seq_length } # samples to advance per generation; < seq_length gives overlapped chaining
+  n_samples: 1 # stochastic samples per start point
+  n_steps: ${ evaluation.n_steps }
+  max_batch: 128 # rollouts advance in lockstep; batches shrink as rollouts finish
+  clamp_history: false # clamp fed-back generated history to [0,1]
+  cache_name: ${ test_cache_name }_rollout
+  cache_mode: create # create or use (use: read cache, skip generation)
+  html_shots: [57013, 61237, 64770, 77604] # window_set shots for the interactive rollout browser
+
 batch_size: 512
 data:
   batch_size: 512
