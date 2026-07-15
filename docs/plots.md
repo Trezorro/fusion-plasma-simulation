@@ -187,6 +187,22 @@ Alongside the static PDFs, `animate_window_set()` runs right after `evaluate_win
 
 **Integration steps:** same rule as `evaluate_window_set`: `n_steps=120` on GPU, `n_steps=5` on CPU, hardcoded.
 
+### Rollout browser
+
+`rollout_browser_plotly()` (`src/plotters/rollout_plots.py`) is the interactive companion of the rollout evaluation stage (see [run-lifecycle.md](run-lifecycle.md)). Written by `run_rollouts()` when a `rollout:` block is in the config; rebuildable locally from a cache with `eval_notebooks/rollout_browser.py`.
+
+**What it shows:** one rollout at a time, in stacked shared-x rows: one row per observable channel (generated in vermillion vs real in black, real history in the yellow-shaded region), a controls row (real `c`), and a mode row with the surrogate labels of the generated and real traces as step-lines (unshifted 0=L, 1=D, 2=H).
+
+**Controls:**
+
+- Rollout dropdown: one entry per (shot, start fraction) over the `rollout.html_shots` subset. Each button swaps trace visibility AND the per-rollout layout shapes: the yellow `W_H` rect, the goldenrod rollout-start line, dotted window-boundary lines, and the x range.
+- Rangeslider minimap on the bottom axis: the label step-lines double as an overview of the mode structure; drag to scroll through the shot. The signal rows are Scattergl (for the 10 kHz point counts) and do not render inside the rangeslider preview; the SVG label traces do, which is why they live on that axis.
+- x axis is actual shot time in seconds, so positions match the shot overview plots.
+
+**Output path:** `output/htmlplots/{run_name}/rollouts.html`, and logged to wandb under `rollout/browser`. Expect tens of MB for 20 full-length rollouts; trace y values are rounded to 4 decimals and share `x0`/`dx` instead of explicit x arrays to keep it manageable.
+
+**Printable counterpart:** `eval_notebooks/paper_rollout.py` renders one PDF per rollout (all X channels + C + gen/real mode bars) in the `paper_single_variate.py` style; see [notebooks.md](notebooks.md).
+
 ## Error handling
 
 Every plot function call in the dispatch system is wrapped in a try/except inside `call_plot_functions()` (`src/evaluation.py`). If a plot raises, the error is logged and the run continues rather than crashing. The log line reports the original exception followed by:

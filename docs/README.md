@@ -48,6 +48,7 @@ bash src/HPC_setup/submit_remote_job_snellius.sh my_experiment
 │ │  - trainer.validate()                                         │   │
 │ │  evaluate_window_set() ────────────────────────► output/pdfplots/ │
 │ │  trainer.test()        ──────────────► HDF5 cache (if configured) │
+│ │  run_rollouts()        ───► rollout cache + html (if configured)  │
 │ │  - prune_online_checkpoints()                                 │   │
 │ └───────────────────────────┬───────────────────────────────────┘   │
 │                             │                                       │
@@ -92,6 +93,7 @@ bash src/HPC_setup/submit_remote_job_snellius.sh my_experiment
 | Model checkpoints | `output/models/{date}-{run_name}/*.ckpt` | Every epoch (best + last kept) | `patience`, `epochs` |
 | PDF qualitative plots | `output/pdfplots/{run_name}/qualitative_samples/` | After every validate() | `window_set` entries |
 | HDF5 test cache | `$TEST_CACHE_DIR/{test_cache_name}.h5` | trainer.test() if cache enabled | `test_cache_name` in config |
+| HDF5 rollout cache + browser | `$TEST_CACHE_DIR/{name}_rollout.h5`, `output/htmlplots/{run_name}/rollouts.html` | run_rollouts() after trainer.test() | `rollout:` block (absent = off) |
 | Wandb metrics | wandb cloud | During training/val/test | `plot_functions`, `val_every_n_epochs` |
 | Slurm logs | `output/snellius/slurms/gpujob-*.out` | Cluster run (auto-rsynced) | n/a |
 
@@ -107,6 +109,7 @@ bash src/HPC_setup/submit_remote_job_snellius.sh my_experiment
 | Eval frequency | `evaluation.val_every_n_epochs` | 5 | Full evaluation fires at epoch % 5 == 1 |
 | Test cache | `test_cache_name` | (absent) | Set to enable HDF5 caching of test outputs |
 | Window-set plots | `window_set` | 18 shot windows | List of [shot, time] pairs for PDF plot generation |
+| Rollout evaluation | `rollout` | (present) | Autoregressive rollouts over test shots; remove the block to disable |
 
 ## Repo structure
 
@@ -131,8 +134,9 @@ experiments/
     plotters/                     # all plotting code
     data_loaders.py               # FusionShotDataModule + FusionShotDataset
     evaluation.py                 # PlotsCallback + evaluate_window_set
+    rollout.py                    # autoregressive rollout evaluation
     config.py                     # OmegaConf + wandb config loading
-    hdf_cache.py                  # HDF5 test result cache
+    hdf_cache.py                  # HDF5 test result cache + rollout cache
     to_pdf.py                     # dump figures to PDF at multiple sizes
     run_processing.py             # preprocessing: raw shots -> parquet
     HPC_setup/                    # cluster submission scripts

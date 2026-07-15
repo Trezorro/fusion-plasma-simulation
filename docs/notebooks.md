@@ -28,6 +28,9 @@ A third, softer input is the **wandb run table** exported by hand to `output/X2.
 | `eval_notebooks/moments.py` | None. Wandb run renaming + cache-to-human-name mapping | wandb runs (tag `final_reeval`), CSV | Renames wandb runs in place (`.update()`); no files | Housekeeping; misnamed (see gotchas) |
 | `eval_notebooks/model_cache_overview.py` | None. Cache inventory + rsync from Snellius | `output/X2.csv` / `XR-overview.csv`, hardcoded cache list | Console tables; a guarded `rsync` command | Very fragile (stale list, buggy cell) |
 | `eval_notebooks/plot_shot_plotly.py` | Interactive single-shot overview: all scoped signals over the L/D/H background | `data/public_data_set/` parquet + `column_to_latex.json` (no caches, no wandb) | `eval_notebooks/shot_{SHOT}_overview.html` | Self-contained; reads the public dataset, not run artifacts |
+| `eval_notebooks/paper_rollout.py` | Paper rollout figures: all X + C + gen/real surrogate mode bars, one PDF per rollout | rollout cache `{name}_rollout.h5` (autofetched), data module for real traces | `output/pdfplots/paper_rollout/{WxH}/{shot}_{frac}.pdf` | Robust; env-overridable (`ROLLOUT_CACHE_NAME`, `ROLLOUT_PDF_DIR`) |
+| `eval_notebooks/rollout_analysis.py` | Horizon-resolved rollout metrics: moment gaps, label agreement, ELM peak rates vs autoregressive depth k | rollout cache (autofetched), data module | `output/tables/rollout_horizon_{cache}.{csv,tex}`, `output/pdfplots/rollout_analysis/*.pdf` | Robust; env-overridable |
+| `eval_notebooks/rollout_browser.py` | Interactive rollout browser HTML, rebuilt locally from a cache | rollout cache (autofetched), data module | `output/htmlplots/local/rollouts_{cache}.html` | Thin wrapper around `src/plotters/rollout_plots.py` |
 
 ## End-to-end workflow
 
@@ -46,6 +49,7 @@ From a finished run to thesis figures:
    | Peak/ELM boxplots | `peak_analysis.py` | Boxplot half runs before the `exit()`. |
    | Peak and window-metric tables (canonical) | `peaks_tables.py` | Run this last: it is the source of truth for `peak_props_*` and `peaks_overview_*`. |
    | Cache inventory / sync | `model_cache_overview.py` | Bookkeeping and rsync only. |
+   | Rollout paper figures / horizon metrics / browser | `paper_rollout.py`, `rollout_analysis.py`, `rollout_browser.py` | Need the `{name}_rollout.h5` cache from a run with a `rollout:` block; each autofetches it. |
 
 ### Gotchas
 

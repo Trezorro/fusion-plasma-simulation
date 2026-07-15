@@ -26,6 +26,7 @@ run.py
 ├── trainer.validate()     [always]
 ├── evaluate_window_set()  [always]
 ├── trainer.test()         [always]
+├── run_rollouts()         [only if a rollout: block is in the config]
 ├── prune_online_checkpoints
 └── run.finish()
 ```
@@ -50,8 +51,9 @@ The sequence is:
 10. **Validate.** `trainer.validate()` runs one final validation pass.
 11. **Window set.** `evaluate_window_set(model, data_module, C.window_set)` always runs (see [evaluate_window_set](#evaluate_window_set)).
 12. **Test.** `trainer.test()` runs the final test pass (see [Test loop](#test-loop-trainertest)).
-13. **Prune.** `prune_online_checkpoints(run)` deletes wandb artifacts that carry neither the `best` nor the `latest` alias.
-14. **Finish.** `run.finish()` closes the wandb run.
+13. **Rollouts.** If the config has a `rollout:` block, `src.rollout.run_rollouts()` performs autoregressive rollout evaluation (see [Rollout evaluation](#rollout-evaluation)). No block, no rollouts.
+14. **Prune.** `prune_online_checkpoints(run)` deletes wandb artifacts that carry neither the `best` nor the `latest` alias.
+15. **Finish.** `run.finish()` closes the wandb run.
 
 ## Path 2: Resume training
 
@@ -166,6 +168,19 @@ output/pdfplots/{run_name}/qualitative_samples/{full|nolegend}/{WxH}/{shot}_{t}s
 - For each `ModeTransitionMetric`: `extract_df_all(cache)` appends DataFrames to the HDF5 file.
 - For each `PeakMetric`: `extract_df_all(cache)`, then `export_2d_NBI_distributions()`, then `make_histograms(peak_dfs)`.
 - Resets all metrics.
+
+## Rollout evaluation (`src/rollout.py`)
+
+Runs after `trainer.test()` only when the config contains a `rollout:` block (see [configuration.md](configuration.md)); removing the block disables the feature entirely. The whole stage is wrapped in try/except like `animate_window_set`, so a failure here cannot kill a finished run.
+
+1. **Plan.** `compute_rollout_specs()` turns `rollout.start_fractions` into per-shot start indices, clamped to `[crop_margin, shot_len - crop_margin - seq_length]`. On short shots multiple fractions can clamp onto the same index; duplicates are dropped and recorded as skipped.
+2. **Generate.** `_generate_rollouts()` chains windows: the real history at the start point conditions the first generation, after which each generated window becomes the next `x_history` while `c` and `position_sequence` keep coming from the real shot data (`label` is carried too, but it is not a model input). All rollouts advance in lockstep; window k of every unfinished rollout is batched together (up to `rollout.max_batch`), and finished rollouts drop out. The advance per generation is `rollout.step` (default `seq_length`, i.e. non-overlapping).
+3. **Label.** `label_rollout()` runs the FNOLSTM surrogate classifier over each full generated trace and over the real trace of the same span (full real pre-rollout history prepended, PD channel, denormalized). One rollout per call: padding different-length rollouts into one batch would leak garbage labels into the shorter ones. Labels stay in the unshifted 0=L, 1=D, 2=H convention.
+4. **Cache.** Each rollout is written to `{rollout.cache_name}.h5` (see [outputs.md](outputs.md)). `cache_mode: create` is resumable (existing rollouts are skipped); `cache_mode: use` reads the cache back and skips generation, so metrics and plots can be redone without a GPU.
+5. **Summarize.** `summarize_rollouts()` logs a small `rollout/final/*` summary to wandb and writes it as the cache's `.json` sidecar. The horizon-resolved analysis lives in `eval_notebooks/rollout_analysis.py`, computed from the cache.
+6. **Browser.** The interactive rollout browser HTML is written for the `rollout.html_shots` subset (see [plots.md](plots.md)).
+
+Standalone smoke test (untrained model, two shots, CPU): `PYTHONPATH=. python src/rollout.py`.
 
 ## interpolate_samples in detail
 

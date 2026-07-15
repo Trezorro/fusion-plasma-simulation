@@ -87,6 +87,45 @@ Additional files in each subgroup directory:
 | Contents | Aggregated `test/final/*` metrics for the run, JSON-serializable (Tensors converted to scalars) |
 | Trigger | `on_test_epoch_end()` when the cache is configured |
 
+### HDF5 rollout cache
+
+| Property | Value |
+|---|---|
+| Path (local) | `output/test_cache/{rollout.cache_name}.h5`, by default `{test_cache_name}_rollout.h5` |
+| Path (cluster) | `$TEST_CACHE_DIR/{rollout.cache_name}.h5` if the env var is set |
+| Trigger | `run_rollouts()` after `trainer.test()`, only when a `rollout:` block is in the config |
+
+A separate file from the window test cache on purpose: rollout traces have variable length, and the window-cache readers iterate `{shot}/{start_idx}` groups assuming fixed `(5, seq_length)` shapes.
+
+**HDF5 structure** (per rollout; T = total generated samples, variable per rollout):
+
+| Dataset | Dtype | Shape |
+|---|---|---|
+| `/{shot_number}/{start_idx}/{sample_idx}/generated_x` | float32 | channels x T (normalized [0,1]) |
+| `/{shot_number}/{start_idx}/{sample_idx}/surr_labels_gen` | int16 | history_length + T |
+| `/{shot_number}/{start_idx}/{sample_idx}/surr_labels_real` | int16 | history_length + T |
+
+Leaf group attrs: `start_frac`, `start_i`, `t_start`, `t_end`, `n_windows`, `seq_length`, `history_length`, `step`. Root attrs: `start_fractions`, `n_samples`, `cols_x`, `run_name`. Labels use the unshifted surrogate convention (0=L, 1=D, 2=H). Real observables, controls, and true labels are NOT stored; notebooks re-derive them positionally from the parquet at `start_i`. Read via `RolloutHDFCache` / `src.rollout.load_results_from_cache`.
+
+A `{rollout.cache_name}.json` sidecar holds the small in-run summary (`rollout/final/*`) plus the skipped shot/fraction combinations.
+
+### Rollout browser HTML
+
+| Property | Value |
+|---|---|
+| Path | `output/htmlplots/{run_name}/rollouts.html` |
+| Contents | Interactive per-rollout browser (see [plots.md](plots.md)) over the `rollout.html_shots` subset |
+| Trigger | `run_rollouts()`; also logged to wandb as `rollout/browser` |
+
+Rebuild locally from a cache with `eval_notebooks/rollout_browser.py` (writes to `output/htmlplots/local/`).
+
+### Rollout paper PDFs and horizon tables (notebooks, local)
+
+| Property | Value |
+|---|---|
+| Paths | `output/pdfplots/paper_rollout/{WxH}/{shot}_{frac}.pdf`, `output/pdfplots/rollout_analysis/*.pdf`, `output/tables/rollout_horizon_{cache}.csv` and `.tex` |
+| Trigger | Manual: `eval_notebooks/paper_rollout.py` and `eval_notebooks/rollout_analysis.py` against a fetched rollout cache |
+
 ### Slurm output logs (cluster, rsynced back)
 
 | Property | Value |

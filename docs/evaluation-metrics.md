@@ -234,6 +234,18 @@ Soft dynamic time warping between generated and target sequences. Unlike the mom
 
 ---
 
+## 7. Rollout metrics (autoregressive)
+
+Produced by the rollout evaluation stage (see [run-lifecycle.md](run-lifecycle.md)), not by `trainer.test()`. Two layers:
+
+**In-run summary** (`summarize_rollouts()` in `src/rollout.py`, logged as `rollout/final/*` and written to the `{rollout.cache_name}.json` sidecar): rollout counts, per-channel |mean/std| gaps between the pooled generated and real traces, overall surrogate label agreement and per-mode dice over the generated spans, and the fraction of generated samples outside the [0,1] data range (feedback drift). Deliberately small; it is a sanity signal, not the analysis.
+
+**Horizon-resolved analysis** (`eval_notebooks/rollout_analysis.py`, from the cache): every metric as a function of the autoregressive window index k, i.e. how far the rollout has run from its real starting history. Median + IQR over all rollouts of per-channel moment gaps, surrogate label agreement, and ELM-scale PD peak counts (scipy `find_peaks` with `evaluation.peaks.elm_pd_prominence`, on the normalized signal like the window PeakMetric's `PD large peaks` channel). Exported as horizon curves and a LaTeX table.
+
+The window metrics (PeakMetric, ModeTransitionMetric, dice) are deliberately NOT applied to rollout windows: they condition on the true mode of a *real* history window, and after the first window a rollout's history is generated, so the bucketing semantics would silently change. Rollout surrogate labels come from the same FNOLSTM path as the window labels (one classifier pass over the full trace, LSTM state carried) and use the same unshifted `0=L, 1=D, 2=H` convention in the cache.
+
+---
+
 ## Metric computation flow
 
 ```
