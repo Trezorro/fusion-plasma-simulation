@@ -203,6 +203,19 @@ Alongside the static PDFs, `animate_window_set()` runs right after `evaluate_win
 
 **Printable counterpart:** `eval_notebooks/paper_rollout.py` renders one PDF per rollout (all X channels + C + gen/real mode bars) in the `paper_single_variate.py` style; see [notebooks.md](notebooks.md).
 
+### Rollout horizon curves
+
+Produced by `eval_notebooks/rollout_analysis.py` from a rollout cache; written to `output/pdfplots/rollout_analysis/{WxH}/{metric}.pdf` at several sizes. Where the rollout browser and paper figures answer "what does a rollout look like", these curves answer "how fast does it go wrong, and in what way". Each figure tracks one failure mode as a function of the autoregressive depth k (how many windows of its own output the model has consumed):
+
+| Figure | Question it answers |
+|---|---|
+| `abs_mean_err_{ch}` | Does the generated signal drift away from the real level as the model feeds on its own output, or collapse toward a constant? (First place feedback drift shows up.) |
+| `abs_std_err_{ch}` | Does the generated signal keep the right amount of variability, or does it flatten/blow up with depth? |
+| `label_agreement` | Does the rollout stay in the same confinement mode as reality, according to the FNOLSTM surrogate classifier? (Horizon cousin of the dice score.) |
+| `elm_peaks` | Does the model keep producing ELM-scale PD bursts at the real rate, or does the transient activity die out with depth? (The paper's central concern.) |
+
+**How to read them:** panels = start fractions, deliberately never pooled: at the same depth k, a rollout started at 10% of the shot is in ramp-up while one started at 75% is deep in H-mode, so pooling would confound depth with shot phase. Within a panel: line = median over that start fraction's rollouts at depth k, one line per model (`MODELS` list in the notebook), band = IQR over the same rollouts (spread across rollouts, not uncertainty of the median), black dashed = the model-independent real reference where applicable (ELM peak rate). The grey step on the right axis is n(k), the number of rollouts still running at depth k: deep k is only reached by long shots, so a bend at large k can be a population change rather than model behaviour. Metric definitions: [evaluation-metrics.md](evaluation-metrics.md) section 7.
+
 ## Error handling
 
 Every plot function call in the dispatch system is wrapped in a try/except inside `call_plot_functions()` (`src/evaluation.py`). If a plot raises, the error is logged and the run continues rather than crashing. The log line reports the original exception followed by:

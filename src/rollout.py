@@ -283,8 +283,11 @@ def summarize_rollouts(results: list[RolloutResult], data_module: FusionShotData
         'frac_outside_01': float(((gen_all < 0) | (gen_all > 1)).mean()),
     }
     for ch, name in enumerate(cols_x):
-        metrics[f'mean_gap/{name}'] = float(abs(gen_all[ch].mean() - real_all[ch].mean()))
-        metrics[f'std_gap/{name}'] = float(abs(gen_all[ch].std() - real_all[ch].std()))
+        # Absolute moment errors |mu_gen - mu_real| and |sigma_gen - sigma_real| over the
+        # pooled generated vs real samples, in normalized [0,1] units. Same idea as the
+        # window moment errors, but pooled over whole rollouts.
+        metrics[f'abs_mean_err/{name}'] = float(abs(gen_all[ch].mean() - real_all[ch].mean()))
+        metrics[f'abs_std_err/{name}'] = float(abs(gen_all[ch].std() - real_all[ch].std()))
     # Surrogate label agreement over the generated span only (labels also cover W_H)
     gen_labels = np.concatenate([r.surr_labels_gen[-r.generated_x.shape[-1]:] for r in results])
     real_labels = np.concatenate([r.surr_labels_real[-r.generated_x.shape[-1]:] for r in results])
