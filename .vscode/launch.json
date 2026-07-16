@@ -79,7 +79,39 @@
                 "data.batch_size=16"
             ],
             "justMyCode": true
-            
+
+        },
+        {
+            // Quick end-to-end test of the autoregressive rollout pipeline on the paper
+            // CFM model (base_run from reeval.yaml, ckpt fetched from wandb). Two test
+            // shots, light integration; rollout stage runs after trainer.test and writes
+            // {run_name}_rollout.h5 + rollouts.html. Wandb stays ON so the summary and
+            // browser land in the run.
+            "name": "Reeval Rollout Test",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "run",
+            "env": {
+                "WANDB_NOTES": "rollout pipeline test",
+            },
+            "args": [
+                "reeval=true",
+                "run_name=rollout_pipeline_test",
+                "epochs=1",
+                "evaluation.n_steps=8",
+                "evaluation.plot_functions=null",
+                "skip_log_summary=True",
+                "batch_size=16",
+                "data.batch_size=16",
+                "limit_val_batches=1",
+                "limit_test_batches=2",
+                "model.params.batch_rematch_factor=1",
+                "model.params.step_every_nth_match=null",
+                "data.test_shots=[73368,64770]",
+                "window_set=[[73368,0.38],[64770,1.09]]",
+                "rollout.max_batch=8",
+            ],
+            "justMyCode": true
         },
         {
             "name": "Run sweep agent",
