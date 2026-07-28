@@ -104,6 +104,7 @@ Autoregressive rollout evaluation, run after `trainer.test()` (see [run-lifecycl
 | `cache_name` | str | `${test_cache_name}_rollout` | HDF5 rollout cache name (see [outputs.md](outputs.md)) |
 | `cache_mode` | str | `create` | `create` generates and caches (resumable: cached rollouts are skipped); `use` reads the cache and skips generation, so plots/metrics rebuild without a GPU |
 | `html_shots` | list | 4 window_set shots | Shots included in the interactive rollout browser HTML (all test shots are still rolled out and cached) |
+| `analysis` | bool | true | Also export the horizon figures/tables in-run to `output/pdfplots/{run_name}/rollout_analysis/` (same code as `eval_notebooks/rollout_analysis.py`, which can redo them from the cache) |
 
 ## model
 

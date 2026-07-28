@@ -179,6 +179,7 @@ Runs after `trainer.test()` only when the config contains a `rollout:` block (se
 4. **Cache.** Each rollout is written to `{rollout.cache_name}.h5` (see [outputs.md](outputs.md)). `cache_mode: create` is resumable (existing rollouts are skipped); `cache_mode: use` reads the cache back and skips generation, so metrics and plots can be redone without a GPU.
 5. **Summarize.** `summarize_rollouts()` logs a small `rollout/final/*` summary to wandb and writes it as the cache's `.json` sidecar. The horizon-resolved analysis lives in `eval_notebooks/rollout_analysis.py`, computed from the cache.
 6. **Browser.** The interactive rollout browser HTML is written for the `rollout.html_shots` subset (see [plots.md](plots.md)).
+7. **Horizon analysis.** Unless `rollout.analysis` is false, the horizon figures and tables are exported to `output/pdfplots/{run_name}/rollout_analysis/` and logged to wandb (`rollout/horizon/*`). Same code as `eval_notebooks/rollout_analysis.py` (shared module `src/plotters/rollout_horizon.py`), so they can be redone or extended from the cache later.
 
 Standalone smoke test (untrained model, two shots, CPU): `PYTHONPATH=. python src/rollout.py`.
 

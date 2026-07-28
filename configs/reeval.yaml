@@ -18,6 +18,7 @@ rollout:
   cache_name: ${ test_cache_name }_rollout
   cache_mode: create # create or use (use: read cache, skip generation)
   html_shots: [57013, 61237, 64770, 77604] # window_set shots for the interactive rollout browser
+  analysis: true # also export the horizon figures/tables in-run (redo/tweak later via eval_notebooks/rollout_analysis.py)
 
 batch_size: 512
 data:
@@ -25,7 +26,7 @@ data:
 
 evaluation:
   n_steps: 120 # enough for rk4
-  flow_rho: 3.0
+  flow_rho: 2.0
   solve_method: simple # dopri5, euler, midpoint
   plot_functions:
   # every item has to have a 'key' key.

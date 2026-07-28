@@ -431,8 +431,33 @@ def _run_rollouts_inner(model, data_module: FusionShotDataModule, rollout_conf):
         summary['skipped'] = list(skipped)
         cache.save_json_friend(summary)
         _write_rollout_browser(results, data_module, rollout_conf, step)
+        if rollout_conf.get('analysis', True):
+            _write_horizon_analysis(results, data_module, step)
     logger.info("Rollout evaluation done: %d rollouts, %d skipped combinations.", len(results), len(skipped))
     return results, skipped
+
+
+def _write_horizon_analysis(results, data_module, step):
+    """Export the horizon figures/tables in-run, so a finished run comes back with them.
+
+    Same code path as eval_notebooks/rollout_analysis.py (which can redo or extend them
+    from the cache later); output mirrors the evaluate_window_set convention of
+    output/pdfplots/{run_name}/.
+    """
+    from src.config import get_current_config
+    from src.plotters.rollout_horizon import export_horizon_analysis
+    C = get_current_config()
+    cols_x = list(data_module.cols.x)
+    run_name = C.get('run_name', None) or (wandb.run.name if wandb.run is not None else 'standalone')
+    records = build_rollout_records(results, data_module, step)
+    export_horizon_analysis(
+        [(str(run_name), records)],
+        channel_names=cols_x,
+        pd_index=cols_x.index("PD"),
+        elm_prominence=float(C.evaluation.peaks.elm_pd_prominence),
+        pdf_dir=Path(f"output/pdfplots/{run_name}/rollout_analysis"),
+        wandb_prefix="rollout/horizon",
+    )
 
 
 def _write_rollout_browser(results, data_module, rollout_conf, step):

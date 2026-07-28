@@ -205,7 +205,7 @@ Alongside the static PDFs, `animate_window_set()` runs right after `evaluate_win
 
 ### Rollout horizon curves
 
-Produced by `eval_notebooks/rollout_analysis.py` from a rollout cache; written to `output/pdfplots/rollout_analysis/{WxH}/{metric}.pdf` at several sizes. Where the rollout browser and paper figures answer "what does a rollout look like", these curves answer "how fast does it go wrong, and in what way". Each figure tracks one failure mode as a function of the autoregressive depth k (how many windows of its own output the model has consumed):
+Produced twice from the same code (`src/plotters/rollout_horizon.py`): in-run by `run_rollouts` when `rollout.analysis` is true (written to `output/pdfplots/{run_name}/rollout_analysis/{WxH}/{metric}.pdf` and logged to wandb under `rollout/horizon/*`), and post-hoc by `eval_notebooks/rollout_analysis.py` from a rollout cache (written to `output/pdfplots/rollout_analysis/{WxH}/{metric}.pdf`), which is also where model overlays and re-slicing happen. Where the rollout browser and paper figures answer "what does a rollout look like", these curves answer "how fast does it go wrong, and in what way". Each figure tracks one failure mode as a function of the autoregressive depth k (how many windows of its own output the model has consumed):
 
 | Figure | Question it answers |
 |---|---|
