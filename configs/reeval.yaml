@@ -9,15 +9,28 @@ test_cache_mode: create # create or use
 # Autoregressive rollout evaluation after trainer.test. Base runs predate this
 # feature, so it only runs when this block is present here. Comment out to disable.
 rollout:
-  start_fractions: [0.10, 0.25, 0.50, 0.75, 0.90] # rollout start points as fraction of shot length
+  start_fractions: [0.05, 0.10, 0.25, 0.50, 0.75] # rollout start points as fraction of shot length
   step: ${ data.seq_length } # samples to advance per generation; < seq_length gives overlapped chaining
-  n_samples: 1 # stochastic samples per start point
+  # Full test set (44 shots) x 5 fractions x 15 samples = 3300 rollouts, for good
+  # per-(start_fraction, depth) sample sizes in the horizon analysis. Sized against the
+  # planning-time estimate of 10-25 min for 220 rollouts (n_samples=1): 15x that is
+  # ~2.5-6.3h, leaving margin inside the 6-8h budget. That baseline was never actually
+  # measured on GPU, so time a short run first (e.g. n_samples=2 on the full shot set)
+  # and rescale linearly before trusting this number on the cluster. Labeling no longer
+  # scales with n_samples (batched per (shot,start_i) in src.rollout.label_rollout_group),
+  # so generation is the only real driver of wall time here.
+  n_samples: 15
   n_steps: ${ evaluation.n_steps }
   max_batch: 128 # rollouts advance in lockstep; batches shrink as rollouts finish
   clamp_history: false # clamp fed-back generated history to [0,1]
   cache_name: ${ test_cache_name }_rollout
   cache_mode: create # create or use (use: read cache, skip generation)
-  html_shots: [57013, 61237, 64770, 77604] # window_set shots for the interactive rollout browser
+  # 5 window_set shots spanning distinct regimes: 57013/77604 general paper picks,
+  # 61237 has big ELM peaks at 75%, 64770 alone covers L/H/ELM-chaos across its own
+  # start fractions, 73368 is the calm/boring baseline for contrast. The cache itself
+  # holds all 44 shots; this only limits what the interactive browser renders.
+  html_shots: [57013, 61237, 64770, 73368, 77604]
+  plot_samples: 3 # stochastic samples overlaid per starting point in the browser (see todo.md)
   analysis: true # also export the horizon figures/tables in-run (redo/tweak later via eval_notebooks/rollout_analysis.py)
 
 batch_size: 512

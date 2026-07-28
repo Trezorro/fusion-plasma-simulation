@@ -151,12 +151,21 @@ def clean_labels_series(label_t, surr_labels, history_length, seq_length):
 
 
 def clean_labels_series_batched(label_t_batch, surr_labels_batch, history_length, seq_length):
-    """Batched version: Resample the labels for each batch element such that we have a label for every step from -history to +seq_length."""
-    batch_size = len(label_t_batch)
-    resampled = []
+    """Batched version: Resample the labels for each batch element such that we have a label for every step from -history to +seq_length.
+
+    label_t_batch's own batch dim is not always the real one: pred_sample_slidingwindow
+    indexes its `t` argument on axis 0 only, so a caller sharing one timeline across the
+    whole batch (a (T, 1) array, e.g. every rollout at the same start point) gets back
+    label_t_batch with batch size 1 regardless of how large surr_labels_batch's actual
+    batch is. The true batch size always comes from surr_labels_batch; a size-1
+    label_t_batch is broadcast to every row instead of indexed per row.
+    """
     surr_labels_batch = surr_labels_batch.cpu().numpy()
+    batch_size = surr_labels_batch.shape[0]
+    shared_time = len(label_t_batch) == 1 and batch_size != 1
+    resampled = []
     for i in range(batch_size):
-        label_t = label_t_batch[i]
+        label_t = label_t_batch[0] if shared_time else label_t_batch[i]
         surr_labels = surr_labels_batch[i]
         series = pd.Series(data=surr_labels, index=label_t)
         resampled_series = series.reindex(range(-history_length - STRIDE, seq_length)

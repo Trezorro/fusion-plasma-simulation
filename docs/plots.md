@@ -191,15 +191,16 @@ Alongside the static PDFs, `animate_window_set()` runs right after `evaluate_win
 
 `rollout_browser_plotly()` (`src/plotters/rollout_plots.py`) is the interactive companion of the rollout evaluation stage (see [run-lifecycle.md](run-lifecycle.md)). Written by `run_rollouts()` when a `rollout:` block is in the config; rebuildable locally from a cache with `eval_notebooks/rollout_browser.py`.
 
-**What it shows:** one rollout at a time, in stacked shared-x rows: one row per observable channel (generated in vermillion vs real in black, real history in the yellow-shaded region), a controls row (real `c`), and a mode row with the surrogate labels of the generated and real traces as step-lines (unshifted 0=L, 1=D, 2=H).
+**What it shows:** one starting point (shot, start fraction) at a time, in stacked shared-x rows: one row per observable channel (real history in grey, real future "ground truth" in black, up to `rollout.plot_samples` stochastic samples overlaid in distinct colors, real history in the yellow-shaded region), a controls row (real `c`), and a mode row with the surrogate labels of every sample and the real trace as step-lines (unshifted 0=L, 1=D, 2=H). Samples are grouped by `src.rollout.build_rollout_groups`, which is why several stochastic rollouts from the same start point (`rollout.n_samples > 1`) share one dropdown entry instead of getting one each.
 
 **Controls:**
 
 - Rollout dropdown: one entry per (shot, start fraction) over the `rollout.html_shots` subset. Each button swaps trace visibility AND the per-rollout layout shapes: the yellow `W_H` rect, the goldenrod rollout-start line, dotted window-boundary lines, and the x range.
+- Legend: one toggle group per sample plus one for "Ground truth", each spanning all its channel traces and its label-row trace at once, so a single click isolates or hides an entire sample or the real trace. The real history left of the rollout start is not part of any group and always renders.
 - Rangeslider minimap on the bottom axis: the label step-lines double as an overview of the mode structure; drag to scroll through the shot. The signal rows are Scattergl (for the 10 kHz point counts) and do not render inside the rangeslider preview; the SVG label traces do, which is why they live on that axis.
 - x axis is actual shot time in seconds, so positions match the shot overview plots.
 
-**Output path:** `output/htmlplots/{run_name}/rollouts.html`, and logged to wandb under `rollout/browser`. Expect tens of MB for 20 full-length rollouts; trace y values are rounded to 4 decimals and share `x0`/`dx` instead of explicit x arrays to keep it manageable.
+**Output path:** `output/htmlplots/{run_name}/rollouts.html`, and logged to wandb under `rollout/browser`. Expect tens of MB for 20 starting points at `plot_samples=3`; trace y values are rounded to 4 decimals and share `x0`/`dx` instead of explicit x arrays to keep it manageable. `rollout.n_samples` (generation/cache scale) and `rollout.plot_samples` (browser overlay cap) are independent knobs; a run can cache hundreds of samples per start point while the browser only ever shows a handful.
 
 **Printable counterpart:** `eval_notebooks/paper_rollout.py` renders one PDF per rollout (all X channels + C + gen/real mode bars) in the `paper_single_variate.py` style; see [notebooks.md](notebooks.md).
 

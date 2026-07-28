@@ -25,7 +25,7 @@ import plotly.io as pio
 from src.config import load_config_from_file
 import src.data_loaders
 from src.hdf_cache import RolloutHDFCache
-from src.rollout import build_rollout_records, load_results_from_cache
+from src.rollout import build_rollout_groups, load_results_from_cache
 from src.plotters.rollout_plots import rollout_browser_plotly
 
 # %% Config + data
@@ -38,6 +38,7 @@ data_module.setup()
 
 CACHE_NAME = os.environ.get("ROLLOUT_CACHE_NAME", "R-NormalMidAttSig03_anim_rollout")
 SHOTS = list(C.rollout.html_shots) if "rollout" in C else None  # None = every cached rollout
+MAX_SAMPLES = int(C.rollout.plot_samples) if "rollout" in C else 3  # samples overlaid per start point
 HTML_DIR = Path(os.environ.get("ROLLOUT_HTML_DIR", "output/htmlplots/local"))
 
 # %% Fetch the cache from Snellius if missing (set AUTO_FETCH=False to only print the command)
@@ -55,9 +56,9 @@ if not (Path("output/test_cache") / f"{CACHE_NAME}.h5").exists():
 cache = RolloutHDFCache(CACHE_NAME, mode="r")
 results = load_results_from_cache(cache)
 step = cache.get_rollout(*cache.list_rollouts()[0])["step"]
-records = build_rollout_records(results, data_module, step=step, shots=SHOTS)
-print(f"{len(records)} rollouts in the browser")
-fig = rollout_browser_plotly(records, list(data_module.cols.x), list(data_module.cols.get("c", [])))
+groups = build_rollout_groups(results, data_module, step=step, shots=SHOTS, max_samples=MAX_SAMPLES)
+print(f"{len(groups)} starting points in the browser ({MAX_SAMPLES} samples each, max)")
+fig = rollout_browser_plotly(groups, list(data_module.cols.x), list(data_module.cols.get("c", [])))
 HTML_DIR.mkdir(parents=True, exist_ok=True)
 out = HTML_DIR / f"rollouts_{CACHE_NAME}.html"
 pio.write_html(fig, out)

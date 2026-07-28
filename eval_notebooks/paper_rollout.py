@@ -9,7 +9,7 @@ history window W_H sits left of it, and thin dotted lines mark the chained windo
 Inputs:  CACHE_NAME = the rollout cache in output/test_cache/ ({test_cache_name}_rollout.h5,
          written by src/rollout.py during the test phase). Real traces are re-derived from the
          parquet via the data module; the cache stores only generated data and labels.
-Outputs: output/pdfplots/paper_rollout/{WxH}/{shot}_{frac}.pdf
+Outputs: output/pdfplots/paper_rollout/{WxH}/{shot}_{frac}_s{sample_idx}.pdf
          (override the directory with the ROLLOUT_PDF_DIR env var, e.g. output/testplots/...).
 Style:   mirrors eval_notebooks/paper_single_variate.py (serif, thin, minimal).
 
@@ -125,10 +125,12 @@ def _add_mode_bar(ax, labels, times, name, xlim, t_start):
         ax.spines[s].set_visible(False)
 
 
-def _export(fig, shot, frac, sizes):
+def _export(fig, shot, frac, sample_idx, sizes):
     for w, h in sizes:
         fig.set_size_inches(w, h)
-        out = PDF_DIR / f"{w:.0f}x{h:.0f}" / f"{shot}_{frac:.2f}.pdf"
+        # sample_idx in the filename: with n_samples > 1 several rollouts share
+        # (shot, frac) and would otherwise overwrite each other's PDF.
+        out = PDF_DIR / f"{w:.0f}x{h:.0f}" / f"{shot}_{frac:.2f}_s{sample_idx}.pdf"
         out.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out, bbox_inches="tight")
         print("Succesfully exported", out)
@@ -195,16 +197,20 @@ def plot_rollout(record, sizes=((9, 11), (7, 9), (12, 14))):
     fig.legend(handles=handles, loc="center left", bbox_to_anchor=(1.0, 0.5), frameon=False)
     fig.suptitle(
         f"Shot {record['shot_number']}, rollout from {record['start_frac']:.0%} "
-        f"(t={t_start:.2f}s, {record['n_windows']} windows)", y=0.91
+        f"(t={t_start:.2f}s, {record['n_windows']} windows, sample {record['sample_idx']})", y=0.91
     )
     fig.align_ylabels(axes)
-    _export(fig, record["shot_number"], record["start_frac"], sizes)
+    _export(fig, record["shot_number"], record["start_frac"], record["sample_idx"], sizes)
     plt.close(fig)
 
 
 # %% Run: pick the rollout cache and which rollouts to print
 CACHE_NAME = os.environ.get("ROLLOUT_CACHE_NAME", "R-NormalMidAttSig03_anim_rollout")
 SHOTS = None  # None = all cached rollouts; or a list like [57013, 61237, 64770, 77604]
+# With n_samples > 1 every (shot, frac) has several sample_idx; None prints all of them
+# (44 shots x 5 fractions x n_samples PDFs per size at production scale). Set an int to
+# cap how many samples per starting point get printed.
+MAX_SAMPLES_PER_START = None
 
 # %% Fetch the cache from Snellius if missing (set AUTO_FETCH=False to only print the command)
 AUTO_FETCH = True
@@ -224,6 +230,8 @@ if __name__ == "__main__":
     results = load_results_from_cache(cache)
     step = cache.get_rollout(*cache.list_rollouts()[0])["step"]
     records = build_rollout_records(results, data_module, step=step, shots=SHOTS)
+    if MAX_SAMPLES_PER_START is not None:
+        records = [r for r in records if r["sample_idx"] < MAX_SAMPLES_PER_START]
     print(f"{len(records)} rollouts to plot from {CACHE_NAME}")
     for record in records:
         plot_rollout(record)

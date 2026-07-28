@@ -27,15 +27,20 @@ test_cache_mode: create # create or use
 # Autoregressive rollout evaluation after trainer.test. Remove/comment this whole
 # block to turn the feature off; nothing else references it.
 rollout:
-  start_fractions: [0.10, 0.25, 0.50, 0.75, 0.90] # rollout start points as fraction of shot length
+  start_fractions: [0.10, 0.25, 0.50, 0.75] # rollout start points as fraction of shot length
   step: ${ data.seq_length } # samples to advance per generation; < seq_length gives overlapped chaining
-  n_samples: 1 # stochastic samples per start point
+  n_samples: 1 # stochastic samples per start point; kept low here since every training run
+  # pays this cost. configs/reeval.yaml raises it for dedicated post-hoc evaluation campaigns.
   n_steps: ${ evaluation.n_steps }
   max_batch: 128 # rollouts advance in lockstep; batches shrink as rollouts finish
   clamp_history: false # clamp fed-back generated history to [0,1]
   cache_name: ${ test_cache_name }_rollout
   cache_mode: create # create or use (use: read cache, skip generation)
-  html_shots: [57013, 61237, 64770, 77604] # window_set shots for the interactive rollout browser
+  # 5 window_set shots spanning distinct regimes: 57013/77604 general paper picks,
+  # 61237 has big ELM peaks at 75%, 64770 alone covers L/H/ELM-chaos across its own
+  # start fractions, 73368 is the calm/boring baseline for contrast.
+  html_shots: [57013, 61237, 64770, 73368, 77604]
+  plot_samples: 3 # stochastic samples overlaid per starting point in the browser (see todo.md)
   analysis: true # also export the horizon figures/tables in-run (redo/tweak later via eval_notebooks/rollout_analysis.py)
 
 # MARK:

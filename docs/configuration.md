@@ -97,14 +97,17 @@ Autoregressive rollout evaluation, run after `trainer.test()` (see [run-lifecycl
 |---|---|---|---|
 | `start_fractions` | list | `[0.10, 0.25, 0.50, 0.75, 0.90]` | Rollout start points as fractions of each test shot's length; clamped to the viable window range, duplicates after clamping are dropped |
 | `step` | int | `${data.seq_length}` | Samples to advance per generation. Equal to `seq_length` = non-overlapping chaining; smaller values enable overlapped chaining (the first `step` samples of each generated window are kept) |
-| `n_samples` | int | 1 | Stochastic samples per start point; cache keys gain a sample index |
+| `n_samples` | int | 1 | Stochastic samples per start point (applied across every test shot); cache keys gain a sample index. Labeling is batched per `(shot, start_i)` (`src.rollout.label_rollout_group`), so it does not scale with this; generation time still scales roughly linearly with it |
 | `n_steps` | int | `${evaluation.n_steps}` | ODE integration steps per generated window |
 | `max_batch` | int | 128 | Rollouts advance in lockstep; window k of every unfinished rollout is batched together up to this size |
 | `clamp_history` | bool | false | Clamp the fed-back generated history to [0,1] before conditioning on it |
 | `cache_name` | str | `${test_cache_name}_rollout` | HDF5 rollout cache name (see [outputs.md](outputs.md)) |
 | `cache_mode` | str | `create` | `create` generates and caches (resumable: cached rollouts are skipped); `use` reads the cache and skips generation, so plots/metrics rebuild without a GPU |
-| `html_shots` | list | 4 window_set shots | Shots included in the interactive rollout browser HTML (all test shots are still rolled out and cached) |
+| `html_shots` | list | 5 window_set shots | Shots included in the interactive rollout browser HTML (all test shots are still rolled out and cached; this only restricts what gets rendered) |
+| `plot_samples` | int | 3 | Stochastic samples overlaid per starting point in the browser (`src.rollout.build_rollout_groups` caps and groups samples by `(shot, start_i)`; `n_samples` can be much larger than this) |
 | `analysis` | bool | true | Also export the horizon figures/tables in-run to `output/pdfplots/{run_name}/rollout_analysis/` (same code as `eval_notebooks/rollout_analysis.py`, which can redo them from the cache) |
+
+`configs/reeval.yaml` sets `n_samples` much higher than `configs/plasmaflow.yaml` (15 vs 1): the main config's rollout block runs after every training run, so it stays cheap by default, while `reeval.yaml` is for dedicated post-hoc evaluation campaigns where more samples per start point give better statistical power in the horizon analysis. See the comment above `n_samples` in `reeval.yaml` for the time-budget derivation.
 
 ## model
 

@@ -16,6 +16,7 @@ Label conventions (important): surrogate labels produced here are UNSHIFTED
 0=L, 1=D, 2=H (never Unknown), same as the window test cache. The in-memory
 LHD_label / conditioning_input['label'] convention is +1-shifted; do not mix them.
 """
+import itertools
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -243,6 +244,59 @@ def label_rollout(data_module: FusionShotDataModule, result: RolloutResult):
     result.surr_labels_real = surr_real[0].astype(np.int16)
 
 
+def label_rollout_group(data_module: FusionShotDataModule, results: list[RolloutResult]):
+    """Label a whole group of rollouts sharing (shot_number, start_i) in one FNOLSTM call.
+
+    All samples at the same start point have identical length and real trace (only
+    sample_idx differs), so the real trace is computed once and the generated traces
+    are batched together, instead of calling label_rollout per rollout. The real trace
+    is replicated across the batch so the existing (pred, target) equal-batch call can
+    be reused as-is; FNOLSTM is cheap next to the flow model's Euler integration, so
+    the redundant real-trace passes are worth it against the per-call Python/tensor
+    overhead of labeling one rollout at a time. This is what keeps a high n_samples
+    rollout evaluation from making labeling (rather than generation) the bottleneck.
+
+    Fills surr_labels_gen / surr_labels_real (both (history_length + T,), UNSHIFTED
+    0=L,1=D,2=H) on every result in the group, in place.
+    """
+    cols_x = list(data_module.cols.x)
+    pd_index = cols_x.index("PD")
+    history_length = data_module.history_length
+    spec0 = results[0].spec
+    T = results[0].generated_x.shape[-1]
+    assert all(
+        r.spec.shot_number == spec0.shot_number and r.spec.start_i == spec0.start_i
+        and r.generated_x.shape[-1] == T for r in results
+    ), "label_rollout_group requires every result to share (shot_number, start_i) and length"
+
+    full_history = data_module.get_full_history(int(spec0.shot_number), int(spec0.start_i))
+    full_history = data_module.denormalize(full_history, to_device=evaluate_modes.DEVICE)
+    shot_data = data_module.data[data_module.data['ShotNum'] == spec0.shot_number]
+    real_future = shot_data[cols_x].iloc[spec0.start_i:spec0.start_i + T].values.T
+    real_future = data_module.denormalize(real_future, to_device=evaluate_modes.DEVICE)
+    real_pd = torch.cat((full_history, real_future), dim=-1)[pd_index].float()
+
+    gen_pd_batch = torch.stack([
+        torch.cat(
+            (full_history, data_module.denormalize(r.generated_x, to_device=evaluate_modes.DEVICE)), dim=-1
+        )[pd_index].float()
+        for r in results
+    ])
+    real_pd_batch = real_pd.unsqueeze(0).repeat(len(results), 1)
+    # 2-D timeline (T, batch=1): shared by every sample since they all start at the same index
+    timeline = np.arange(-spec0.start_i, T)[:, None]
+    surr_gen, surr_real = get_mode_predictions_batched_window(
+        pd_rollout_pred=gen_pd_batch,
+        pd_rollout_target=real_pd_batch,
+        timeline=timeline,
+        history_length=history_length,
+        seq_length=T,
+    )
+    for i, r in enumerate(results):
+        r.surr_labels_gen = surr_gen[i].astype(np.int16)
+        r.surr_labels_real = surr_real[i].astype(np.int16)
+
+
 def _result_attrs(result: RolloutResult, dataset: FusionShotDataset, step) -> dict:
     spec = result.spec
     return {
@@ -343,6 +397,67 @@ def build_rollout_records(
     return records
 
 
+def build_rollout_groups(
+    results: list[RolloutResult], data_module: FusionShotDataModule, step, shots=None, max_samples=None
+) -> list[dict]:
+    """Group rollouts by (shot, start point) for the interactive browser.
+
+    With n_samples > 1, several stochastic rollouts share the same shot and start
+    index; the browser overlays them in one dropdown entry instead of giving every
+    sample_idx its own entry. Real context (observables, controls, timeline) and the
+    real surrogate labels are identical across a group's samples, so they are computed
+    once. Samples are sorted by sample_idx and truncated to max_samples (None = all)
+    to keep the figure and the HTML file size in check when n_samples is large.
+
+    Args:
+        results: Rollouts to group (must be labeled).
+        data_module: Source of the real (normalized) traces.
+        step: Samples advanced per generation (for window boundary marks).
+        shots: Optional shot filter (e.g. rollout.html_shots).
+        max_samples: Cap on stochastic samples shown per (shot, start point).
+
+    Returns:
+        List of dicts: shared fields (shot_number, start_idx, start_frac, t_start,
+        t_end, n_windows, history_length, step, real_x, real_c, times,
+        surr_labels_real) plus 'samples': [{sample_idx, generated_x, surr_labels_gen}, ...].
+    """
+    cols_x = list(data_module.cols.x)
+    cols_c = list(data_module.cols.get('c', []))
+    history_length = data_module.history_length
+    filtered = [r for r in results if shots is None or r.spec.shot_number in list(shots)]
+    filtered.sort(key=lambda r: (r.spec.shot_number, r.spec.start_i, r.spec.sample_idx))
+    groups = []
+    for (shot_number, start_i), members in itertools.groupby(
+        filtered, key=lambda r: (r.spec.shot_number, r.spec.start_i)
+    ):
+        members = list(members)
+        if max_samples:
+            members = members[:max_samples]
+        r0 = members[0]
+        shot_data = data_module.data[data_module.data['ShotNum'] == shot_number]
+        T = r0.generated_x.shape[-1]
+        i0, i1 = start_i - history_length, start_i + T
+        groups.append({
+            'shot_number': shot_number,
+            'start_idx': start_i,
+            'start_frac': r0.spec.start_frac,
+            't_start': r0.t_start,
+            't_end': r0.t_end,
+            'n_windows': r0.spec.n_windows,
+            'history_length': history_length,
+            'step': step,
+            'real_x': shot_data[cols_x].iloc[i0:i1].values.T,
+            'real_c': shot_data[cols_c].iloc[i0:i1].values.T,
+            'times': shot_data.index[i0:i1].values,
+            'surr_labels_real': r0.surr_labels_real,
+            'samples': [
+                {'sample_idx': r.spec.sample_idx, 'generated_x': r.generated_x, 'surr_labels_gen': r.surr_labels_gen}
+                for r in members
+            ],
+        })
+    return groups
+
+
 def load_results_from_cache(cache: RolloutHDFCache) -> list[RolloutResult]:
     """Rebuild RolloutResults for every rollout in a cache (notebook entry point)."""
     results = []
@@ -407,13 +522,24 @@ def _run_rollouts_inner(model, data_module: FusionShotDataModule, rollout_conf):
             step=step,
             clamp_history=rollout_conf.get('clamp_history', False),
         ) if todo else []
-        for result in tqdm(results, desc="Labeling rollouts"):
-            label_rollout(data_module, result)
-            cache.set_rollout(
-                result.spec.shot_number, result.spec.start_i, result.spec.sample_idx,
-                result.generated_x, result.surr_labels_gen, result.surr_labels_real,
-                attrs=_result_attrs(result, dataset, step),
-            )
+        # Grouped by (shot, start_i): every sample at a start point shares length and
+        # real trace, so labeling batches per group instead of one FNOLSTM call per
+        # rollout (label_rollout_group). Group count = n_shots * n_fractions,
+        # independent of n_samples, which is what keeps labeling cheap when n_samples
+        # is large. `results` is contiguous per group because compute_rollout_specs
+        # emits sample_idx as the innermost loop.
+        grouped = [
+            list(members) for _, members in
+            itertools.groupby(results, key=lambda r: (r.spec.shot_number, r.spec.start_i))
+        ]
+        for group in tqdm(grouped, desc="Labeling rollout groups"):
+            label_rollout_group(data_module, group)
+            for result in group:
+                cache.set_rollout(
+                    result.spec.shot_number, result.spec.start_i, result.spec.sample_idx,
+                    result.generated_x, result.surr_labels_gen, result.surr_labels_real,
+                    attrs=_result_attrs(result, dataset, step),
+                )
         cache.set_root_attrs(
             start_fractions=list(rollout_conf.start_fractions),
             n_samples=n_samples,
@@ -461,18 +587,24 @@ def _write_horizon_analysis(results, data_module, step):
 
 
 def _write_rollout_browser(results, data_module, rollout_conf, step):
-    """Render the interactive rollout browser for the configured html_shots subset."""
+    """Render the interactive rollout browser for the configured html_shots subset.
+
+    Stochastic samples at the same (shot, start point) are overlaid in one dropdown
+    entry (build_rollout_groups), capped at rollout.plot_samples per group so the
+    figure and HTML file stay readable when n_samples is large.
+    """
     import plotly.io as pio
 
     from src.plotters.rollout_plots import rollout_browser_plotly
     html_shots = rollout_conf.get('html_shots')
     if not html_shots:
         return
-    records = build_rollout_records(results, data_module, step, shots=html_shots)
-    if not records:
+    max_samples = rollout_conf.get('plot_samples', 3)
+    groups = build_rollout_groups(results, data_module, step, shots=html_shots, max_samples=max_samples)
+    if not groups:
         logger.warning("No rollouts matched html_shots %s; browser not written.", list(html_shots))
         return
-    fig = rollout_browser_plotly(records, list(data_module.cols.x), list(data_module.cols.get('c', [])))
+    fig = rollout_browser_plotly(groups, list(data_module.cols.x), list(data_module.cols.get('c', [])))
     run_name = wandb.run.name if wandb.run is not None else 'standalone'
     out_dir = Path(rollout_conf.get('html_dir') or f"output/htmlplots/{run_name}")
     out_dir.mkdir(parents=True, exist_ok=True)
