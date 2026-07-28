@@ -104,12 +104,22 @@
                 "batch_size=16",
                 "data.batch_size=16",
                 "limit_val_batches=1",
-                "limit_test_batches=2",
+                "limit_test_batches=4",
                 "model.params.batch_rematch_factor=1",
                 "model.params.step_every_nth_match=null",
                 "data.test_shots=[73368,64770]",
                 "window_set=[[73368,0.38],[64770,1.09]]",
-                "rollout.max_batch=8",
+                "rollout.max_batch=16",
+                // Two starting points, multiple stochastic samples overlaid on each, own
+                // cache so it never reuses an older single-sample run; analysis off since
+                // this is just for eyeballing the browser, not the horizon PDFs/tables.
+                "rollout.start_fractions=[0.5,0.9]",
+                "rollout.n_samples=3",
+                "rollout.plot_samples=3",
+                "rollout.html_shots=[73368,64770]",
+                "rollout.cache_name=rollout_multisample_debug",
+                "rollout.cache_mode=create",
+                "rollout.analysis=false",
             ],
             "justMyCode": true
         },

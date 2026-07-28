@@ -19,7 +19,7 @@ rollout:
   # and rescale linearly before trusting this number on the cluster. Labeling no longer
   # scales with n_samples (batched per (shot,start_i) in src.rollout.label_rollout_group),
   # so generation is the only real driver of wall time here.
-  n_samples: 15
+  n_samples: 30
   n_steps: ${ evaluation.n_steps }
   max_batch: 128 # rollouts advance in lockstep; batches shrink as rollouts finish
   clamp_history: false # clamp fed-back generated history to [0,1]
@@ -30,7 +30,7 @@ rollout:
   # start fractions, 73368 is the calm/boring baseline for contrast. The cache itself
   # holds all 44 shots; this only limits what the interactive browser renders.
   html_shots: [57013, 61237, 64770, 73368, 77604]
-  plot_samples: 3 # stochastic samples overlaid per starting point in the browser (see todo.md)
+  plot_samples: 4 # stochastic samples overlaid per starting point in the browser (see todo.md)
   analysis: true # also export the horizon figures/tables in-run (redo/tweak later via eval_notebooks/rollout_analysis.py)
 
 batch_size: 512

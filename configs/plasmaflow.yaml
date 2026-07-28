@@ -27,9 +27,9 @@ test_cache_mode: create # create or use
 # Autoregressive rollout evaluation after trainer.test. Remove/comment this whole
 # block to turn the feature off; nothing else references it.
 rollout:
-  start_fractions: [0.10, 0.25, 0.50, 0.75] # rollout start points as fraction of shot length
+  start_fractions: [0.05, 0.10, 0.25, 0.50, 0.75] # rollout start points as fraction of shot length
   step: ${ data.seq_length } # samples to advance per generation; < seq_length gives overlapped chaining
-  n_samples: 1 # stochastic samples per start point; kept low here since every training run
+  n_samples: 50 # stochastic samples per start point; kept low here since every training run
   # pays this cost. configs/reeval.yaml raises it for dedicated post-hoc evaluation campaigns.
   n_steps: ${ evaluation.n_steps }
   max_batch: 128 # rollouts advance in lockstep; batches shrink as rollouts finish
@@ -93,19 +93,6 @@ evaluation:
     - key: multi_channel_lines
       n: 16
       buttons: true
-    - key: histogram # see histograms.py
-      log_key: peak_histogram/PD_count
-      channel_name: PD
-      measure: count
-      n: 64
-    - key: entropy_plot
-      method: app_entropy
-      log_key: approximate_entropy_plot
-      n: 64
-    - key: entropy_plot
-      method: spectral_entropy
-      log_key: spectral_entropy_plot
-      n: 64
     # - key: entropy_plot
     #   method: perm_entropy
     #   log_key: permutation_entropy_plot
