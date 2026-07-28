@@ -128,17 +128,17 @@ data:
         "POHM", # same
         "Z_axis", # same
       ]
-    c:
+    c: # triple leak (CF): IPLA + PNBI + PECRH + KAPPA + VOL, see docs/run_grid.md
       # - NBI-median
       # - ECRH-median
-      # - IPLA # The realized plasma current, measured in real time. This is the actual current flowing through the plasma, driven by the induction system.  Shows pulses at ELMS (leakage)
-      - IP # Current reference line
+      - IPLA # The realized plasma current, measured in real time. This is the actual current flowing through the plasma, driven by the induction system.  Shows pulses at ELMS (leakage)
+      # - IP # Current reference line
       # - gas_fringes  # Ingepompte gas
       - PNBI  # Heating technique: colliding Neutral beam injection. 0 unless turned on
       - PECRH  # magnetron.
       # - a_minor  # reel gemeten plasma shape a k d (horizontale radius
-      # - KAPPA
-      # - VOL
+      - KAPPA
+      - VOL
       # - DELTA  # linkerbovenhoek naar links vanuit hetmidden
     label: LHD_label
   val_shots: [

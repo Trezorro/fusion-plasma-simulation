@@ -5,12 +5,12 @@
 model:
   Class: FlowModule
   params:
-    prior: "brownian" # normal, brownian for this grid; see docs/run_grid.md
+    prior: "normal" # normal, brownian for this grid; see docs/run_grid.md
     # prior_sigma: std of the prior (source) distribution in the normalized [0,1] space.
     # Meaning is per-prior: normal -> constant per-step std; brownian -> terminal std
     # (its time-averaged std is prior_sigma/sqrt(2)). 0.5 (normal) / 0.7 (brownian) are
     # matched so both priors have the same ~0.5 time-averaged spread; see docs/run_grid.md.
-    prior_sigma: 0.7
+    prior_sigma: 0.5
     ot_method: null # null to disable
     ot_replace: true # Default false
     batch_rematch_factor: 10 # Default 1
@@ -34,7 +34,7 @@ model:
       positional_encoding_c: 8
       ch_mults: [2, 2, 2, 2]
       is_attn: [false, false, false, false] # attention stays bottleneck-only either way
-      mid_attn: false # CN/CNc/CF: true (attention on). CNb/CNd: false (attention off)
+      mid_attn: true # CN/CNc/CF: true (attention on). CNb/CNd: false (attention off)
       attn_heads: 2
       n_blocks: 2
       norm_groups: 4
