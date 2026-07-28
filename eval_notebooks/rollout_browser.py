@@ -54,7 +54,9 @@ if not (Path("output/test_cache") / f"{CACHE_NAME}.h5").exists():
 
 # %% Build + write
 cache = RolloutHDFCache(CACHE_NAME, mode="r")
-results = load_results_from_cache(cache)
+# Filtered at load time: with n_samples in the hundreds, the full cache can be far
+# bigger than the SHOTS/MAX_SAMPLES subset this notebook actually renders.
+results = load_results_from_cache(cache, shots=SHOTS, max_samples=MAX_SAMPLES)
 step = cache.get_rollout(*cache.list_rollouts()[0])["step"]
 groups = build_rollout_groups(results, data_module, step=step, shots=SHOTS, max_samples=MAX_SAMPLES)
 print(f"{len(groups)} starting points in the browser ({MAX_SAMPLES} samples each, max)")

@@ -458,10 +458,37 @@ def build_rollout_groups(
     return groups
 
 
-def load_results_from_cache(cache: RolloutHDFCache) -> list[RolloutResult]:
-    """Rebuild RolloutResults for every rollout in a cache (notebook entry point)."""
+def load_results_from_cache(cache: RolloutHDFCache, shots=None, max_samples=None) -> list[RolloutResult]:
+    """Rebuild RolloutResults from a cache (notebook entry point).
+
+    shots/max_samples filter the (shot, start_idx, sample_idx) key list before any
+    array is read from disk: cache.list_rollouts() only enumerates HDF5 group names
+    (cheap), while get_rollout reads the actual generated_x/label arrays (not cheap
+    at n_samples in the hundreds). Pass these whenever the caller only needs a subset
+    (e.g. the browser's html_shots/plot_samples) instead of loading everything and
+    filtering after, which is what build_rollout_groups/build_rollout_records still do
+    for callers (like the horizon analysis) that legitimately need every rollout.
+
+    Args:
+        cache: Rollout cache to read, in mode 'r' or 'a'.
+        shots: Optional shot filter.
+        max_samples: Optional cap on sample_idx kept per (shot, start_idx); keeps the
+            lowest sample_idx values first, matching build_rollout_groups' truncation.
+    """
+    keys = cache.list_rollouts()  # sorted (shot, start_idx, sample_idx), no array reads
+    if shots is not None:
+        shots = set(shots)
+        keys = [k for k in keys if k[0] in shots]
+    if max_samples:
+        kept, seen = [], {}
+        for key in keys:
+            group = key[:2]
+            if seen.get(group, 0) < max_samples:
+                kept.append(key)
+                seen[group] = seen.get(group, 0) + 1
+        keys = kept
     results = []
-    for shot_number, start_idx, sample_idx in cache.list_rollouts():
+    for shot_number, start_idx, sample_idx in keys:
         entry = cache.get_rollout(shot_number, start_idx, sample_idx)
         spec = RolloutSpec(
             shot_number, float(entry.get('start_frac', np.nan)), start_idx,

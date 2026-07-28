@@ -227,11 +227,11 @@ else:
 
 if __name__ == "__main__":
     cache = RolloutHDFCache(CACHE_NAME, mode="r")
-    results = load_results_from_cache(cache)
+    # Filtered at load time: with n_samples in the hundreds, the full cache can be far
+    # bigger than the SHOTS/MAX_SAMPLES_PER_START subset this notebook actually prints.
+    results = load_results_from_cache(cache, shots=SHOTS, max_samples=MAX_SAMPLES_PER_START)
     step = cache.get_rollout(*cache.list_rollouts()[0])["step"]
     records = build_rollout_records(results, data_module, step=step, shots=SHOTS)
-    if MAX_SAMPLES_PER_START is not None:
-        records = [r for r in records if r["sample_idx"] < MAX_SAMPLES_PER_START]
     print(f"{len(records)} rollouts to plot from {CACHE_NAME}")
     for record in records:
         plot_rollout(record)
