@@ -354,7 +354,7 @@ def summarize_rollouts(results: list[RolloutResult], data_module: FusionShotData
 
 
 def build_rollout_records(
-    results: list[RolloutResult], data_module: FusionShotDataModule, step, shots=None
+    results: list[RolloutResult], data_module: FusionShotDataModule, step, shots=None, max_samples=None
 ) -> list[dict]:
     """Attach the real context (observables, controls, timeline) to rollouts for plotting.
 
@@ -363,6 +363,10 @@ def build_rollout_records(
         data_module: Source of the real (normalized) traces.
         step: Samples advanced per generation (for window boundary marks).
         shots: Optional shot filter (e.g. rollout.html_shots).
+        max_samples: Optional cap on sample_idx kept per (shot, start point); keeps the
+            lowest sample_idx values first, matching build_rollout_groups' truncation.
+            Trades statistical power in downstream aggregation for a smaller result set;
+            None (default) keeps every rollout.
 
     Returns:
         List of record dicts as consumed by src.plotters.rollout_plots.
@@ -370,10 +374,18 @@ def build_rollout_records(
     cols_x = list(data_module.cols.x)
     cols_c = list(data_module.cols.get('c', []))
     history_length = data_module.history_length
+    filtered = [r for r in results if shots is None or r.spec.shot_number in list(shots)]
+    if max_samples:
+        filtered.sort(key=lambda r: (r.spec.shot_number, r.spec.start_i, r.spec.sample_idx))
+        kept, seen = [], {}
+        for r in filtered:
+            group = (r.spec.shot_number, r.spec.start_i)
+            if seen.get(group, 0) < max_samples:
+                kept.append(r)
+                seen[group] = seen.get(group, 0) + 1
+        filtered = kept
     records = []
-    for r in results:
-        if shots is not None and r.spec.shot_number not in list(shots):
-            continue
+    for r in filtered:
         shot_data = data_module.data[data_module.data['ShotNum'] == r.spec.shot_number]
         T = r.generated_x.shape[-1]
         i0, i1 = r.spec.start_i - history_length, r.spec.start_i + T
@@ -577,32 +589,62 @@ def _run_rollouts_inner(model, data_module: FusionShotDataModule, rollout_conf):
             results += _load_results_from_cache(RolloutHDFCache(cache_name, mode='r'), cached)
 
     if results:
-        summary = summarize_rollouts(results, data_module, skipped)
-        logger.info("Rollout summary: %s", summary)
-        if wandb.run is not None and not wandb.run.disabled:
-            wandb.log({f'rollout/final/{k}': v for k, v in summary.items()}, commit=True)
-        summary['skipped'] = list(skipped)
-        cache.save_json_friend(summary)
-        _write_rollout_browser(results, data_module, rollout_conf, step)
+        # Order matters here and each step is isolated: the interactive browser is what
+        # should come back no matter what, so it goes first and its own failure can't be
+        # caused by anything after it. Horizon analysis is the heaviest step (touches
+        # every requested rollout, unfiltered by default, unlike the browser's
+        # html_shots/plot_samples-limited subset) so it goes last, after everything
+        # cheaper has already succeeded, and a failure there (e.g. MemoryError at a
+        # large n_samples) is caught here rather than left to unwind past the browser
+        # and summary that already wrote successfully.
+        try:
+            _write_rollout_browser(results, data_module, rollout_conf, step)
+        except Exception:
+            logger.exception("Failed to write the rollout browser.")
+
+        try:
+            summary = summarize_rollouts(results, data_module, skipped)
+            logger.info("Rollout summary: %s", summary)
+            if wandb.run is not None and not wandb.run.disabled:
+                wandb.log({f'rollout/final/{k}': v for k, v in summary.items()}, commit=True)
+            summary['skipped'] = list(skipped)
+            cache.save_json_friend(summary)
+        except Exception:
+            logger.exception("Failed to compute/write the rollout summary.")
+
         if rollout_conf.get('analysis', True):
-            _write_horizon_analysis(results, data_module, step)
+            try:
+                _write_horizon_analysis(
+                    results, data_module, step, max_samples=rollout_conf.get('analysis_max_samples')
+                )
+            except Exception:
+                logger.exception("Failed to write the horizon analysis; browser/summary already written above.")
     logger.info("Rollout evaluation done: %d rollouts, %d skipped combinations.", len(results), len(skipped))
     return results, skipped
 
 
-def _write_horizon_analysis(results, data_module, step):
+def _write_horizon_analysis(results, data_module, step, max_samples=None):
     """Export the horizon figures/tables in-run, so a finished run comes back with them.
 
     Same code path as eval_notebooks/rollout_analysis.py (which can redo or extend them
     from the cache later); output mirrors the evaluate_window_set convention of
     output/pdfplots/{run_name}/.
+
+    max_samples (rollout.analysis_max_samples) optionally caps stochastic samples per
+    (shot, start point) fed into the dataframe/figures, the same knob as rollout.plot_samples
+    for the browser but for the statistics instead. This is the heaviest rollout
+    post-processing step (builds one dataframe/records set over every requested rollout,
+    unfiltered by default, unlike the browser's html_shots/plot_samples-limited subset),
+    so capping it is the lever if it runs out of memory at a large n_samples. None
+    (default) keeps every rollout, since more samples is the entire point of a large
+    n_samples run; only set this if a full run has actually failed on memory.
     """
     from src.config import get_current_config
     from src.plotters.rollout_horizon import export_horizon_analysis
     C = get_current_config()
     cols_x = list(data_module.cols.x)
     run_name = C.get('run_name', None) or (wandb.run.name if wandb.run is not None else 'standalone')
-    records = build_rollout_records(results, data_module, step)
+    records = build_rollout_records(results, data_module, step, max_samples=max_samples)
     export_horizon_analysis(
         [(str(run_name), records)],
         channel_names=cols_x,

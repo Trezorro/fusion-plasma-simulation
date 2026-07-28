@@ -29,8 +29,8 @@ test_cache_mode: create # create or use
 rollout:
   start_fractions: [0.05, 0.10, 0.25, 0.50, 0.75] # rollout start points as fraction of shot length
   step: ${ data.seq_length } # samples to advance per generation; < seq_length gives overlapped chaining
-  n_samples: 50 # stochastic samples per start point; kept low here since every training run
-  # pays this cost. configs/reeval.yaml raises it for dedicated post-hoc evaluation campaigns.
+  n_samples: 30 # stochastic samples per start point; this block fires after every training
+  # run (run.py gates on 'rollout' in C, nothing else), so this cost is paid every time.
   n_steps: ${ evaluation.n_steps }
   max_batch: 128 # rollouts advance in lockstep; batches shrink as rollouts finish
   clamp_history: false # clamp fed-back generated history to [0,1]
@@ -42,6 +42,9 @@ rollout:
   html_shots: [57013, 61237, 64770, 73368, 77604]
   plot_samples: 3 # stochastic samples overlaid per starting point in the browser (see todo.md)
   analysis: true # also export the horizon figures/tables in-run (redo/tweak later via eval_notebooks/rollout_analysis.py)
+  # analysis_max_samples: null # cap samples/start point fed into the horizon stats (like
+  # plot_samples but for the analysis, not the browser); only set this if a full run has
+  # actually run out of memory, since it trades away the statistical power n_samples buys.
 
 # MARK:
 window_set: # for evaluation plots

@@ -11,14 +11,19 @@ test_cache_mode: create # create or use
 rollout:
   start_fractions: [0.05, 0.10, 0.25, 0.50, 0.75] # rollout start points as fraction of shot length
   step: ${ data.seq_length } # samples to advance per generation; < seq_length gives overlapped chaining
-  # Full test set (44 shots) x 5 fractions x 15 samples = 3300 rollouts, for good
+  # Full test set (44 shots) x 5 fractions x 30 samples = 6600 rollouts, for good
   # per-(start_fraction, depth) sample sizes in the horizon analysis. Sized against the
-  # planning-time estimate of 10-25 min for 220 rollouts (n_samples=1): 15x that is
-  # ~2.5-6.3h, leaving margin inside the 6-8h budget. That baseline was never actually
-  # measured on GPU, so time a short run first (e.g. n_samples=2 on the full shot set)
-  # and rescale linearly before trusting this number on the cluster. Labeling no longer
-  # scales with n_samples (batched per (shot,start_i) in src.rollout.label_rollout_group),
-  # so generation is the only real driver of wall time here.
+  # planning-time estimate of 10-25 min for 220 rollouts (n_samples=1): 30x that is
+  # ~5-12.5h, which is why run_snellius_job.sh's SBATCH --time was raised to 1400:00
+  # (23.3h) to cover the pessimistic end with margin. That 10-25 min baseline was never
+  # actually measured on GPU though, so time a short run first (e.g. n_samples=2 on the
+  # full shot set) and rescale linearly before trusting either number on the cluster.
+  # Labeling does not scale with n_samples (batched per (shot,start_i) in
+  # src.rollout.label_rollout_group), so generation is the only real driver of wall time.
+  # If the run still exceeds budget, generation/caching has already succeeded regardless
+  # (the browser and the summary are written before the horizon analysis, and each of
+  # the three is isolated so one failing doesn't take out the others); analysis_max_samples
+  # below is the lever if the horizon analysis specifically runs out of memory.
   n_samples: 30
   n_steps: ${ evaluation.n_steps }
   max_batch: 128 # rollouts advance in lockstep; batches shrink as rollouts finish
@@ -32,6 +37,9 @@ rollout:
   html_shots: [57013, 61237, 64770, 73368, 77604]
   plot_samples: 4 # stochastic samples overlaid per starting point in the browser (see todo.md)
   analysis: true # also export the horizon figures/tables in-run (redo/tweak later via eval_notebooks/rollout_analysis.py)
+  # analysis_max_samples: null # cap samples/start point fed into the horizon stats (like
+  # plot_samples but for the analysis, not the browser); only set this if a full run has
+  # actually run out of memory, since it trades away the statistical power n_samples buys.
 
 batch_size: 512
 data:

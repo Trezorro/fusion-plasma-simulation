@@ -106,8 +106,11 @@ Autoregressive rollout evaluation, run after `trainer.test()` (see [run-lifecycl
 | `html_shots` | list | 5 window_set shots | Shots included in the interactive rollout browser HTML (all test shots are still rolled out and cached; this only restricts what gets rendered) |
 | `plot_samples` | int | 3 | Stochastic samples overlaid per starting point in the browser (`src.rollout.build_rollout_groups` caps and groups samples by `(shot, start_i)`; `n_samples` can be much larger than this) |
 | `analysis` | bool | true | Also export the horizon figures/tables in-run to `output/pdfplots/{run_name}/rollout_analysis/` (same code as `eval_notebooks/rollout_analysis.py`, which can redo them from the cache) |
+| `analysis_max_samples` | int or null | null | Caps stochastic samples per starting point fed into the horizon analysis specifically, like `plot_samples` but for the statistics rather than the browser. `null` (default) uses every rollout; only set this after a run has actually run out of memory on the full set, since it trades away the statistical power `n_samples` buys |
 
-`configs/reeval.yaml` sets `n_samples` much higher than `configs/plasmaflow.yaml` (15 vs 1): the main config's rollout block runs after every training run, so it stays cheap by default, while `reeval.yaml` is for dedicated post-hoc evaluation campaigns where more samples per start point give better statistical power in the horizon analysis. See the comment above `n_samples` in `reeval.yaml` for the time-budget derivation.
+Both `configs/plasmaflow.yaml` and `configs/reeval.yaml` currently set `n_samples` to the same value (30); the main config's rollout block runs after every training run and pays this cost every time (`run.py` gates only on `'rollout' in C`, nothing distinguishes a routine training run from a dedicated eval campaign), so keep an eye on whether that value still makes sense for routine runs. See the comment above `n_samples` in `reeval.yaml` for the time-budget derivation.
+
+**Failure isolation:** `_run_rollouts_inner` writes the browser first, then the summary, then (if `analysis` is true) the horizon analysis, each wrapped in its own try/except. The browser is written before anything that touches the full, unfiltered result set, so a later failure (most likely a `MemoryError` in the horizon analysis at a large `n_samples`, since it is not filtered by `html_shots`/`plot_samples` the way the browser is) can't take the browser or the summary down with it.
 
 ## model
 
