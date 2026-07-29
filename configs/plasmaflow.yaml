@@ -102,7 +102,7 @@ evaluation:
     #   n: 64
 
 # MARK:
-model: configs/itransformer.yaml # grid cell IN-itransformer-noleak; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
+model: configs/itransformer.yaml # grid cell IS-itransformer-ipla; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
 # MARK:
 data:
   Class: FusionShotDataModule
@@ -128,8 +128,8 @@ data:
         "POHM", # same
         "Z_axis", # same
       ]
-    c: # noleak (IN-itransformer-noleak), see docs/run_grid.md
-      - IP  # programmed current reference, carries no ELM timing
+    c: # ipla single leak (IS-itransformer-ipla), see docs/run_grid.md
+      - IPLA  # realized current, pulses at ELMs (single leak)
       - PNBI  # neutral beam injection power
       - PECRH  # ECRH power
     label: LHD_label
