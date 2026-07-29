@@ -102,7 +102,7 @@ evaluation:
     #   n: 64
 
 # MARK:
-model: configs/tide.yaml # grid cell TS-tide-ipla; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
+model: configs/dlinear.yaml # grid cell D-dlinear; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
 # MARK:
 data:
   Class: FusionShotDataModule
@@ -128,8 +128,8 @@ data:
         "POHM", # same
         "Z_axis", # same
       ]
-    c: # ipla single leak (TS-tide-ipla), see docs/run_grid.md
-      - IPLA  # realized current, pulses at ELMs (single leak)
+    c: # noleak (D-dlinear), see docs/run_grid.md
+      - IP  # programmed current reference, carries no ELM timing
       - PNBI  # neutral beam injection power
       - PECRH  # ECRH power
     label: LHD_label
