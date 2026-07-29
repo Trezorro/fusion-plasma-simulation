@@ -102,7 +102,7 @@ evaluation:
     #   n: 64
 
 # MARK:
-model: configs/cfm.yaml # or configs/{unflow,itransformer,tide,dlinear,patchtst}.yaml
+model: configs/cfm.yaml # grid cell CF-cfm-triple-normal-s05; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
 # MARK:
 data:
   Class: FusionShotDataModule
@@ -128,18 +128,12 @@ data:
         "POHM", # same
         "Z_axis", # same
       ]
-    c: # triple leak (CF): IPLA + PNBI + PECRH + KAPPA + VOL, see docs/run_grid.md
-      # - NBI-median
-      # - ECRH-median
-      - IPLA # The realized plasma current, measured in real time. This is the actual current flowing through the plasma, driven by the induction system.  Shows pulses at ELMS (leakage)
-      # - IP # Current reference line
-      # - gas_fringes  # Ingepompte gas
-      - PNBI  # Heating technique: colliding Neutral beam injection. 0 unless turned on
-      - PECRH  # magnetron.
-      # - a_minor  # reel gemeten plasma shape a k d (horizontale radius
-      - KAPPA
-      - VOL
-      # - DELTA  # linkerbovenhoek naar links vanuit hetmidden
+    c: # triple leak (CF-cfm-triple-normal-s05), see docs/run_grid.md
+      - IPLA  # realized current, pulses at ELMs (leak)
+      - PNBI  # neutral beam injection power
+      - PECRH  # ECRH power
+      - KAPPA  # elongation shape signal
+      - VOL  # plasma volume shape signal
     label: LHD_label
   val_shots: [
                 52302,
