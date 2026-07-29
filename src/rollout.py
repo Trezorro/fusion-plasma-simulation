@@ -17,6 +17,7 @@ Label conventions (important): surrogate labels produced here are UNSHIFTED
 LHD_label / conditioning_input['label'] convention is +1-shifted; do not mix them.
 """
 import itertools
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -297,6 +298,34 @@ def label_rollout_group(data_module: FusionShotDataModule, results: list[Rollout
         r.surr_labels_real = surr_real[i].astype(np.int16)
 
 
+def rollout_config_snapshot() -> str:
+    """Return a JSON string of the run config, for storing on the rollout cache.
+
+    Lets a notebook (or anyone) recover which columns and settings produced a cache
+    without wandb access. For a reeval run get_current_config() is already the base
+    training config merged with the reeval overrides, so training and evaluation
+    settings are both captured. Interpolations are resolved; anything unserializable is
+    stringified. Returns '{}' if the config cannot be read (never raises).
+    """
+    from omegaconf import OmegaConf
+
+    from src.config import get_current_config, is_reeval_run
+    try:
+        C = get_current_config()
+        try:
+            snapshot = OmegaConf.to_container(C, resolve=True)
+        except Exception:
+            # A single unresolved interpolation must not cost us the whole config; keep the
+            # raw (interpolation-string) values instead. wandb.config is normally already
+            # resolved, so this only bites off-wandb.
+            snapshot = OmegaConf.to_container(C, resolve=False)
+        snapshot['is_reeval'] = bool(is_reeval_run())
+        return json.dumps(snapshot, default=str)
+    except Exception:
+        logger.exception("Could not build the rollout config snapshot; cache root attrs will omit it.")
+        return '{}'
+
+
 def _result_attrs(result: RolloutResult, dataset: FusionShotDataset, step) -> dict:
     spec = result.spec
     return {
@@ -535,6 +564,16 @@ def _run_rollouts_inner(model, data_module: FusionShotDataModule, rollout_conf):
     step = rollout_conf.get('step') or dataset.seq_length
     cache_mode = rollout_conf.get('cache_mode', 'create')
     n_samples = rollout_conf.get('n_samples', 1)
+    # Deterministic models (the UnFlowModule baselines) produce the same trace regardless
+    # of the prior sample, so more than one sample per start point is wasted storage and
+    # compute. Only the stochastic FlowModule benefits from n_samples > 1.
+    from src.models.UnFlow import UnFlowModule
+    if isinstance(model, UnFlowModule) and n_samples > 1:
+        logger.info(
+            "Deterministic model %s: forcing rollout n_samples=1 (was %d); extra samples would be identical.",
+            type(model).__name__, n_samples,
+        )
+        n_samples = 1
     cache_name = rollout_conf.cache_name
     test_cache = getattr(model, 'test_cache', None)
     if test_cache is not None and test_cache.cache_filename == cache_name:
@@ -583,8 +622,12 @@ def _run_rollouts_inner(model, data_module: FusionShotDataModule, rollout_conf):
             start_fractions=list(rollout_conf.start_fractions),
             n_samples=n_samples,
             cols_x=list(data_module.cols.x),
+            cols_c=list(data_module.cols.get('c', [])),  # so readers show the right covariates
             run_name=str(wandb.run.name) if wandb.run is not None else '',
+            config_json=rollout_config_snapshot(),  # full run config, for wandb-less inspection
         )
+        logger.info("Wrote rollout cache to %s (%d rollouts, config snapshot attached).",
+                    cache.h5_path, len(results))
         if cached:  # pull previously cached rollouts back in for metrics/plots
             results += _load_results_from_cache(RolloutHDFCache(cache_name, mode='r'), cached)
 
