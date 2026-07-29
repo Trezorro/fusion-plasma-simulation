@@ -1,6 +1,6 @@
 # This will be merged into the inherited config from the base run
 
-base_run: CN-cfm-noleak-normal-s05 # ID or unique name. CN grid headline (noleak, normal prior sigma 0.5, attention on); training finished but its rollouts hit the time limit, so we reeval to get them. cols.c (IP/PNBI/PECRH) come from this base config, not plasmaflow.yaml.
+base_run: CNb-cfm-noleak-normal-s05-noatt # grid CFM reeval; columns, prior and attention come from this run's own wandb config, not plasmaflow.yaml
 prefer_model_alias: best # null just takes the one with latest, can be best or latest.
 
 test_cache_name: ${ run_name } #test_tinyhistory # test_cache_unflow #  # tinyhistory_seq_normal_smC_BIG #
