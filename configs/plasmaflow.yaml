@@ -102,7 +102,7 @@ evaluation:
     #   n: 64
 
 # MARK:
-model: configs/unflow.yaml # grid cell UN-unet-noleak; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
+model: configs/unflow.yaml # grid cell US-unet-ipla; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
 # MARK:
 data:
   Class: FusionShotDataModule
@@ -128,8 +128,8 @@ data:
         "POHM", # same
         "Z_axis", # same
       ]
-    c: # noleak (UN-unet-noleak), see docs/run_grid.md
-      - IP  # programmed current reference, carries no ELM timing
+    c: # ipla single leak (US-unet-ipla), see docs/run_grid.md
+      - IPLA  # realized current, pulses at ELMs (single leak)
       - PNBI  # neutral beam injection power
       - PECRH  # ECRH power
     label: LHD_label
