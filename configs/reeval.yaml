@@ -1,6 +1,6 @@
 # This will be merged into the inherited config from the base run
 
-base_run: CNd-cfm-noleak-brownian-s07-noatt # grid CFM reeval; columns, prior and attention come from this run's own wandb config, not plasmaflow.yaml
+base_run: CN-cfm-noleak-normal-s05 # remediation reeval: fixed order + histogram skip
 prefer_model_alias: best # null just takes the one with latest, can be best or latest.
 
 test_cache_name: ${ run_name } #test_tinyhistory # test_cache_unflow #  # tinyhistory_seq_normal_smC_BIG #
@@ -24,7 +24,7 @@ rollout:
   # (the browser and the summary are written before the horizon analysis, and each of
   # the three is isolated so one failing doesn't take out the others); analysis_max_samples
   # below is the lever if the horizon analysis specifically runs out of memory.
-  n_samples: 30 # full stochastic sampling for the headline CN reeval
+  n_samples: 5 # remediation batch
   n_steps: ${ evaluation.n_steps }
   max_batch: 128 # rollouts advance in lockstep; batches shrink as rollouts finish
   clamp_history: false # clamp fed-back generated history to [0,1]
