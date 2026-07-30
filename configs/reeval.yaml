@@ -24,7 +24,7 @@ rollout:
   # (the browser and the summary are written before the horizon analysis, and each of
   # the three is isolated so one failing doesn't take out the others); analysis_max_samples
   # below is the lever if the horizon analysis specifically runs out of memory.
-  n_samples: 5 # remediation batch
+  n_samples: 30 # remediation batch
   n_steps: ${ evaluation.n_steps }
   max_batch: 128 # rollouts advance in lockstep; batches shrink as rollouts finish
   clamp_history: false # clamp fed-back generated history to [0,1]
