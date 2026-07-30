@@ -171,15 +171,21 @@ trainer.validate(model=model, datamodule=fusion_data_module)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 src.evaluation.evaluate_window_set(model.to(device), fusion_data_module, C.window_set)
 src.evaluation.animate_window_set(model.to(device), fusion_data_module, C.window_set)
-logger.info("Starting final testing...")
-trainer.test(model=model, datamodule=fusion_data_module)
-logger.info("Finished testing.")
 
+# Rollout runs before trainer.test() on purpose: trainer.test() computes per-window
+# metrics (PeakMetric etc.) over the full test set, which is slow and unrelated to the
+# rollout cache. Running rollout first means the cache is written (incrementally, so a
+# later failure/time-limit loses at most the tail) before that slower stage gets any
+# chance to eat the job's time budget.
 if 'rollout' in C:  # Autoregressive rollout evaluation; off when the config block is absent
     logger.info("Starting autoregressive rollout evaluation...")
     import src.rollout
     src.rollout.run_rollouts(model.to(device), fusion_data_module, C.rollout)
     logger.info("Finished rollout evaluation.")
+
+logger.info("Starting final testing...")
+trainer.test(model=model, datamodule=fusion_data_module)
+logger.info("Finished testing.")
 
 
 

@@ -10,7 +10,7 @@ This document answers one question: what happens, step by step, when you submit 
 2. **Resume training**: continue an interrupted run from its wandb checkpoint.
 3. **Reeval**: re-evaluate an already-trained run without retraining.
 
-All three paths share the same evaluation tail (`trainer.validate()`, `evaluate_window_set()`, `trainer.test()`). They differ only in setup and in whether `trainer.fit()` runs.
+All three paths share the same evaluation tail (`trainer.validate()`, `evaluate_window_set()`, `run_rollouts()`, `trainer.test()`). They differ only in setup and in whether `trainer.fit()` runs.
 
 ```
 run.py
@@ -25,11 +25,13 @@ run.py
 ├── wandb_logger.unwatch
 ├── trainer.validate()     [always]
 ├── evaluate_window_set()  [always]
-├── trainer.test()         [always]
 ├── run_rollouts()         [only if a rollout: block is in the config]
+├── trainer.test()         [always]
 ├── prune_online_checkpoints
 └── run.finish()
 ```
+
+Rollouts run **before** `trainer.test()` on purpose: `trainer.test()` computes per-window metrics (`PeakMetric` etc.) over the entire test set, which is slow and has nothing to do with the rollout cache. Running rollouts first means the cache is written (incrementally; a later failure or time limit loses at most whatever hadn't finished yet) before the slower test pass gets any chance to eat the job's time budget.
 
 ## Path 1: Fresh training
 
@@ -50,8 +52,8 @@ The sequence is:
 9. **Unwatch.** `wandb_logger.experiment.unwatch(model)` removes the gradient hooks.
 10. **Validate.** `trainer.validate()` runs one final validation pass.
 11. **Window set.** `evaluate_window_set(model, data_module, C.window_set)` always runs (see [evaluate_window_set](#evaluate_window_set)).
-12. **Test.** `trainer.test()` runs the final test pass (see [Test loop](#test-loop-trainertest)).
-13. **Rollouts.** If the config has a `rollout:` block, `src.rollout.run_rollouts()` performs autoregressive rollout evaluation (see [Rollout evaluation](#rollout-evaluation)). No block, no rollouts.
+12. **Rollouts.** If the config has a `rollout:` block, `src.rollout.run_rollouts()` performs autoregressive rollout evaluation (see [Rollout evaluation](#rollout-evaluation)) before the test pass, so the cache is safe even if the test pass runs long or hangs. No block, no rollouts.
+13. **Test.** `trainer.test()` runs the final test pass (see [Test loop](#test-loop-trainertest)).
 14. **Prune.** `prune_online_checkpoints(run)` deletes wandb artifacts that carry neither the `best` nor the `latest` alias.
 15. **Finish.** `run.finish()` closes the wandb run.
 
@@ -85,7 +87,7 @@ Re-evaluates a previously trained run without retraining. Differences from Path 
 - `consolidate_base_reeval_configs()` loads `configs/reeval.yaml`, finds the base run by its `base_run` name, and downloads the checkpoint using `prefer_model_alias` (either `best` or `latest`).
 - The wandb run is tagged `reeval`.
 - `trainer.fit()` is **skipped**.
-- `trainer.validate()`, `evaluate_window_set()`, and `trainer.test()` all still run.
+- `trainer.validate()`, `evaluate_window_set()`, `run_rollouts()` (if configured), and `trainer.test()` all still run.
 
 This path exists to regenerate metrics and figures from a finished model, for example after changing a metric or plotter.
 
@@ -171,7 +173,7 @@ output/pdfplots/{run_name}/qualitative_samples/{full|nolegend}/{WxH}/{shot}_{t}s
 
 ## Rollout evaluation (`src/rollout.py`)
 
-Runs after `trainer.test()` only when the config contains a `rollout:` block (see [configuration.md](configuration.md)); removing the block disables the feature entirely. The whole stage is wrapped in try/except like `animate_window_set`, so a failure here cannot kill a finished run.
+Runs after `evaluate_window_set()` and before `trainer.test()`, only when the config contains a `rollout:` block (see [configuration.md](configuration.md)); removing the block disables the feature entirely. The whole stage is wrapped in try/except like `animate_window_set`, so a failure here cannot kill a finished run.
 
 1. **Plan.** `compute_rollout_specs()` turns `rollout.start_fractions` into per-shot start indices, clamped to `[crop_margin, shot_len - crop_margin - seq_length]`. On short shots multiple fractions can clamp onto the same index; duplicates are dropped and recorded as skipped.
 2. **Generate.** `_generate_rollouts()` chains windows: the real history at the start point conditions the first generation, after which each generated window becomes the next `x_history` while `c` and `position_sequence` keep coming from the real shot data (`label` is carried too, but it is not a model input). All rollouts advance in lockstep; window k of every unfinished rollout is batched together (up to `rollout.max_batch`), and finished rollouts drop out. The advance per generation is `rollout.step` (default `seq_length`, i.e. non-overlapping).
