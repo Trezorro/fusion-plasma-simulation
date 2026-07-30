@@ -49,6 +49,10 @@ evaluation:
   n_steps: 120 # enough for rk4
   flow_rho: 2.0
   solve_method: simple # dopri5, euler, midpoint
+  # Peak histogram PDF export has hung for 11+ hours on the shared reservation node with
+  # no progress logged, eating the whole job budget before the rollout stage (the actual
+  # point of a reeval) ever starts. Skip it here; redo later from the test cache if needed.
+  skip_peak_histograms: true
   plot_functions:
   # every item has to have a 'key' key.
   # n are optional through defaults in PlotsCallback

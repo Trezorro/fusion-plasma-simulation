@@ -73,6 +73,11 @@ evaluation:
   flow_rho: 2.0 # must be between 1.0 and 3.0
   solve_method: simple # dopri5, euler, midpoint
   max_n: 64
+  # Peak histogram PDF export has hung for 11+ hours on the shared reservation node with
+  # no progress logged, eating the whole job budget before the rollout stage ever starts.
+  # Off for the grid so every cell reliably reaches rollout; redo later from the test
+  # cache (mode=use) once the grid is through, when node contention is less of a risk.
+  skip_peak_histograms: true
   peaks:
     # scipy.signal.find_peaks prominence on the [0,1]-normalized signal, for every channel.
     # Deliberately at noise level: PD and FIR hold tens to hundreds of peaks per window at this value.

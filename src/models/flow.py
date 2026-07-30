@@ -477,8 +477,22 @@ class FlowModule(L.LightningModule):
         for sub_metric in self.peak_metrics.children():
             peak_dfs.append(sub_metric.extract_df_all(self.test_cache))
             # sub_metric.export_2d_NBI_distributions() only works with normal NBI column
-        logger.info("Peak metrics saved to cache. Generating histograms...")
-        sub_metric.make_histograms(peak_dfs)
+        from src.config import get_current_config
+        C = get_current_config()
+        if C.get('evaluation', {}).get('skip_peak_histograms', False):
+            # Peak histogram PDF export (~300-450 Kaleido/Chromium calls via
+            # peak_metric.save_histogram -> src.to_pdf.dump_figure_to_pdfs) has been seen to
+            # hang for 11+ hours on this shared single-node reservation with no progress
+            # logged, blocking the rollout stage that runs after on_test_epoch_end returns.
+            # Same code path for every backbone (UnFlowModule inherits this method), so it
+            # is not architecture-specific; likely contention on the shared node rather than
+            # a deterministic bug, since some runs sail through and others hang indefinitely.
+            # This flag lets a run skip straight past it when the histograms are not needed
+            # (e.g. rollout-focused reevals), without touching the normal single-run default.
+            logger.info("Skipping peak histogram PDF export (evaluation.skip_peak_histograms=true).")
+        else:
+            logger.info("Peak metrics saved to cache. Generating histograms...")
+            sub_metric.make_histograms(peak_dfs)
         logger.info("Histograms done! Testing Done. Resetting metrics.")
         self.moments_metrics.reset()
         self.peak_metrics.reset()
