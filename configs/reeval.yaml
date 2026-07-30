@@ -1,6 +1,6 @@
 # This will be merged into the inherited config from the base run
 
-base_run: CN-cfm-noleak-normal-s05 # remediation reeval: fixed order + histogram skip
+base_run: CNb-cfm-noleak-normal-s05-noatt # remediation reeval: fixed order + histogram skip
 prefer_model_alias: best # null just takes the one with latest, can be best or latest.
 
 test_cache_name: ${ run_name } #test_tinyhistory # test_cache_unflow #  # tinyhistory_seq_normal_smC_BIG #
