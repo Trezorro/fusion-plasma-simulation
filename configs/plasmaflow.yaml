@@ -107,7 +107,7 @@ evaluation:
     #   n: 64
 
 # MARK:
-model: configs/dlinear.yaml # grid cell D-dlinear; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
+model: configs/unflow.yaml # grid cell UFv2-unet-triple; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
 # MARK:
 data:
   Class: FusionShotDataModule
@@ -133,10 +133,12 @@ data:
         "POHM", # same
         "Z_axis", # same
       ]
-    c: # noleak (D-dlinear), see docs/run_grid.md
-      - IP  # programmed current reference, carries no ELM timing
+    c: # triple leak (UFv2-unet-triple), see docs/run_grid.md
+      - IPLA  # realized current, pulses at ELMs (leak)
       - PNBI  # neutral beam injection power
       - PECRH  # ECRH power
+      - KAPPA  # elongation shape signal
+      - VOL  # plasma volume shape signal
     label: LHD_label
   val_shots: [
                 52302,
