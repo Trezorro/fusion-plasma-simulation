@@ -1,5 +1,5 @@
 # Conditional Flow Matching (CFM), the paper's own model. This file holds the axes that
-# vary across the CN/CNb/CNc/CNd/CF grid cells (prior, prior_sigma, model_params.mid_attn);
+# vary across the CN/CNb/CNc/CNd/CF/CSb grid cells (prior, prior_sigma, model_params.mid_attn);
 # everything else here is the fixed architecture. See docs/run_grid.md for what each cell
 # changes and why. Select by setting `model: configs/cfm.yaml` in configs/plasmaflow.yaml.
 model:
@@ -34,7 +34,7 @@ model:
       positional_encoding_c: 8
       ch_mults: [2, 2, 2, 2]
       is_attn: [false, false, false, false] # attention stays bottleneck-only either way
-      mid_attn: true # CN/CNc/CF: true (attention on). CNb/CNd: false (attention off)
+      mid_attn: false # CN/CNc/CF: true (attention on). CNb/CNd/CSb: false (attention off)
       attn_heads: 2
       n_blocks: 2
       norm_groups: 4
