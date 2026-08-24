@@ -31,7 +31,7 @@ model:
       positional_encoding_c: 0  # Only used if using +mlp
       ch_mults: [2, 2, 2, 2]  # Default [1, 2, 2, 4]
       is_attn: [false, false, false, false] # Default [false, false, false, false]
-      mid_attn: true # Default false
+      mid_attn: false # Default false. UN/US/UF: true (attention on). USb: false (attention off, final-work variant)
       attn_heads: 2  # Default 1
       n_blocks: 2 # Default 2. Number of residual blocks
       norm_groups: 4 # Default false
