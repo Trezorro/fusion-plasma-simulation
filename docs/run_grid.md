@@ -110,7 +110,7 @@ train split, so cross-dataset comparison is confounded. Nothing here can be salv
 | `CF` | `CF-cfm-triple-normal-s05` | CFM, normal prior, attention on | triple | **New cell.** Does CFM also improve when handed ELM timing? |
 | `UN` | `UN-unet-noleak` | U-Net deterministic | noleak | Same architecture as CFM, no flow. Isolates the flow itself |
 | `US` | `US-unet-ipla` | U-Net deterministic | single | **New cell.** Middle point of the dose-response: does one leaky signal move the needle, or does it take all three? |
-| `UF` | `UF-unet-triple` | U-Net deterministic | triple | Top of the dose-response, and the same ablation `CF` runs on CFM |
+| `UF` | `UF-unet-triple` (retrained as `UFv2-unet-triple`, see below) | U-Net deterministic | triple | Top of the dose-response, and the same ablation `CF` runs on CFM |
 | `IN` | `IN-itransformer-noleak` | iTransformer | noleak | Strong deterministic baseline: capacity is not the issue |
 | `IS` | `IS-itransformer-ipla` | iTransformer | single | Oracle check, light version |
 | `TN` | `TN-tide-noleak` | TiDE | noleak | Covariate-aware baseline |
@@ -120,6 +120,35 @@ train split, so cross-dataset comparison is confounded. Nothing here can be salv
 Thirteen trainings (up from the previous ten): CFM grew from 2 cells to 5 (the attention/prior ablation),
 U-Net grew from 2 cells to 3 (the dose-response middle point), iTransformer and TiDE swapped their `triple`
 cell for the lighter `single` cell (net zero change in count for those two).
+
+### Canonical cache per cell (post Jul 29-Aug 1 grid submission)
+
+The Jul 29 grid submission hit two problems, both from `submit_remote_job_snellius.sh` /
+`run_snellius_job.sh` sharing one checked-out clone on the Snellius login node across jobs
+submitted back to back: a test-phase peak-histogram hang that crashed several runs before
+they reached rollout eval (fixed by `skip_peak_histograms: true` + a rollout-before-test
+reorder, `-e2` reevals below), and a `git checkout` race between two jobs submitted at the
+same instant that silently swapped `UF-unet-triple`'s config for `IN-itransformer-noleak`'s
+mid-run (**not just an eval-side bug: the checkpoint itself is a noleak ITransformer,
+retrained as `UFv2`**). This table is the single source of truth for which cache under
+`output/test_cache/` and which directory under `output/htmlplots/` to actually use; anything
+else in those two directories has been moved to `output/_archive/` (see its `README.md`).
+
+| ID | Canonical cache (`output/test_cache/<name>_rollout.{h5,json}`) | `output/htmlplots/<name>/` | Status |
+|---|---|---|---|
+| `CN` | `R-CN-cfm-noleak-normal-s05-e2` | same | reeval, current |
+| `CNb` | `R-CNb-cfm-noleak-normal-s05-noatt-e2` | same | reeval, current |
+| `CNc` | `R-CNc-cfm-noleak-brownian-s07-e2` | same | reeval, current |
+| `CNd` | `R-CNd-cfm-noleak-brownian-s07-noatt-e2` | same | reeval, current |
+| `CF` | `R-CF-cfm-triple-normal-s05-e2` | same | reeval, current |
+| `UN` | `UN-unet-noleak` | same | base training run, no reeval needed |
+| `US` | `US-unet-ipla` | same | base training run, no reeval needed |
+| `UF` | `UFv2-unet-triple` | same | **retrain in progress** (2026-08-23); `UF-unet-triple` and its `R-UF-unet-triple-e2` reeval are corrupted, archived, do not use |
+| `IN` | `R-IN-itransformer-noleak-e2` | same | reeval, current |
+| `IS` | `R-IS-itransformer-ipla-e2` | same | reeval, current |
+| `TN` | `R-TN-tide-noleak-e2` | same | **reeval in progress** (2026-08-23); base run trained cleanly (120/120 epochs) but crashed before rollout eval |
+| `TS` | `R-TS-tide-ipla-e2` | same | **reeval in progress** (2026-08-23); base run trained cleanly (120/120 epochs) but crashed before rollout eval |
+| `D` | `D-dlinear-r2` | same | reeval, current |
 
 ### What the grid buys, per claim
 
