@@ -107,7 +107,7 @@ evaluation:
     #   n: 64
 
 # MARK:
-model: configs/cfm.yaml # grid cell CSb-cfm-ipla-normal-s05-noatt; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
+model: configs/unflow.yaml # grid cell UNb-unet-noleak-noatt; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
 # MARK:
 data:
   Class: FusionShotDataModule
@@ -133,8 +133,8 @@ data:
         "POHM", # same
         "Z_axis", # same
       ]
-    c: # ipla single leak (CSb-cfm-ipla-normal-s05-noatt), see docs/run_grid.md
-      - IPLA  # realized current, pulses at ELMs (single leak)
+    c: # noleak (UNb-unet-noleak-noatt), see docs/run_grid.md
+      - IP  # programmed current reference, carries no ELM timing
       - PNBI  # neutral beam injection power
       - PECRH  # ECRH power
     label: LHD_label

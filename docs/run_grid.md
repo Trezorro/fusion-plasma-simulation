@@ -118,6 +118,7 @@ train split, so cross-dataset comparison is confounded. Nothing here can be salv
 | `D` | `D-dlinear` | DLinear | blind | Floor baseline. No leak letter |
 | `USb` | `USb-unet-ipla-noatt` | U-Net deterministic, attention off | single | **New cell.** `CNb` showed no-attention is competitive-or-better at `noleak`, where there's no ELM timing to actually generate; U-Net's baselines already generate ELMs from single leak alone, so this is where a no-attention U-Net gets tested with a real signal to use. Final work uses no-attention CFM/U-Net throughout, so this supersedes `US` there |
 | `CSb` | `CSb-cfm-ipla-normal-s05-noatt` | CFM, normal prior, attention off | single | **New cell.** Same motivation as `USb`, for CFM: tests the no-attention finding at the leak level where it matters, and is the no-attention/single-leak cell the final work carries forward for CFM |
+| `UNb` | `UNb-unet-noleak-noatt` | U-Net deterministic, attention off | noleak | **New cell.** Completes the no-attention final-work set: `UN` is the flow-vs-no-flow isolation baseline paired with `CN`/headline CFM, so it needs its own no-attention counterpart too, not just the leak cells (`USb`) |
 
 Thirteen trainings (up from the previous ten): CFM grew from 2 cells to 5 (the attention/prior ablation),
 U-Net grew from 2 cells to 3 (the dose-response middle point), iTransformer and TiDE swapped their `triple`
