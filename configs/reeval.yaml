@@ -1,6 +1,6 @@
 # This will be merged into the inherited config from the base run
 
-base_run: TN-tide-noleak # remediation reeval: crashed before rollout eval, same histogram hang already fixed for IS/IN/UF/CF
+base_run: TS-tide-ipla # remediation reeval: crashed before rollout eval, same histogram hang already fixed for IS/IN/UF/CF
 prefer_model_alias: best # null just takes the one with latest, can be best or latest.
 
 test_cache_name: ${ run_name } #test_tinyhistory # test_cache_unflow #  # tinyhistory_seq_normal_smC_BIG #
