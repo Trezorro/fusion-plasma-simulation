@@ -1,6 +1,6 @@
 # Run naming and the experiment grid
 
-The naming scheme and full grid for our experiments is documented here.
+The naming scheme and final grid for the paper are documented here.
 wandb runs and caches also follow these names `output/test_cache/{name}.h5`.
 
 ## Naming scheme
@@ -19,20 +19,14 @@ be reworded without breaking the handle.
 | backbone letter | `C` CFM, `U` U-Net deterministic, `I` iTransformer, `T` TiDE, `D` DLinear, `P` PatchTST |
 | leak letter | `N` noleak, `S` single leak (ipla), `F` full leak (triple). Omitted for covariate-blind backbones |
 | variant letter | `b`, `c`, ... a second run in the same cell (a prior ablation, an attention ablation) |
-| `v{revision}` | absent = v1. `v2`, `v3`: the cell was **retrained**, see below |
+| `v{revision}` | absent = v1. `v2`, `v3`: the cell was **retrained** |
 
 `grep '^C'` gets every CFM run, `grep -- '-triple'` gets a full-leak run, and the ID sorts into backbone
 groups.
 
-**Why a letter and not the old digit (`0`/`1`/`3`):** the digit read as a covariate *count*, which was
-wrong even for the cell it was supposed to describe cleanly (`noleak` still has three covariates, `IP`,
-`PNBI`, `PECRH`; the digit was actually counting *informative* covariates, not covariates). A letter that
-means "leak level" instead of a digit that looks like "covariate count" removes the ambiguity outright,
-since a letter carries no numeric-count connotation to misread.
-
 ### Redoing a run
 
-Which marker you use depends on one question: **did the trained weights change?**
+Which marker to use depends on one question: **did the trained weights change?**
 
 | What happened | Marker | Example |
 |---|---|---|
@@ -41,15 +35,7 @@ Which marker you use depends on one question: **did the trained weights change?*
 | Same cell, deliberately different hyperparameter | variant letter | `CNb` |
 | A variant that then needs a retrain | both, letter before `v` | `CNbv2` |
 
-The retrain/re-eval split is the one that matters. A re-eval produces identical science from identical
-weights, so it must not look like a new model. This is not hypothetical: the whole Jul 1-8 cache
-generation needed an eval re-run (`-e2`) and nothing more, because the models were fine and only the
-peak-extraction hook crashed. See [handoff-peak-boxplots.md](handoff-peak-boxplots.md).
-
-Useful side effect: a dataset change forces a retrain of every cell, so the whole grid bumps to `v2`
-together and `v` doubles as a grid generation. Runs from different generations then cannot be silently
-compared, which is exactly the failure the old names allowed. Do not put the dataset in the name;
-`data.file` is already in the wandb config.
+A re-eval produces identical science from identical weights, so it must not look like a new model.
 
 Avoid `.` in IDs: several notebooks parse names via `Path.stem` and string splits.
 
@@ -71,117 +57,81 @@ Set by `data.cols.c` in `configs/plasmaflow.yaml`. This is the whole leakage/ora
 "floor baseline: covariates cannot inform the X channels, so it is fed X-history only." Giving them a
 leak cell is meaningless.
 
-**Leak coverage is not the same for every backbone.** CFM gets the two extremes only (`N`, `F`): the
-question for our own model is a switch test, not a trend. U-Net gets all three points (`N`, `S`, `F`):
-it is the cheapest backbone to run three ways (deterministic, no prior/attention axis of its own), so it
-is the one that shows whether the covariate effect is a step or a dose-response. iTransformer and TiDE
-get the lighter two-point check (`N`, `S`): they are supporting baselines, not the focus of the leak
-narrative, so the coarser single-leak comparison is enough.
+## The attention and prior axis (CFM and U-Net)
 
-## The attention and prior axis (CFM only)
-
-Two more ways to vary the same `ConditionalUNet` backbone that CFM already uses, both scoped to the
-`noleak` cell so the attention/prior ablation and the leak ablation never get confounded together (a
-full 2 prior x 2 attention x 2 leak factorial was considered and dropped as unnecessary cost for the
-questions being asked here).
+Two more ways to vary the `ConditionalUNet` backbone that both CFM and the deterministic U-Net cells use.
 
 | Axis | Values | Config |
 |---|---|---|
-| Attention | on (default, unmarked) / off (`-noatt`) | `model.params.model_params.mid_attn`: `true` (default) / `false`. `is_attn` stays all-`false` either way (attention was already bottleneck-only) |
-| Prior | normal (default, unmarked) / brownian (`-brownian`) | `model.params.prior` |
-| Prior sigma | normal `0.5` (`-s05`) / brownian `0.7` (`-s07`) | `model.params.prior_sigma`. Brownian sigma is a *terminal* std, whose time-averaged std is `sigma/sqrt(2)`; `0.7` was picked so brownian's time-averaged spread (`0.7/sqrt(2) = 0.495`) matches normal's constant `0.5`, making the two priors comparable in spread rather than in the raw sigma number |
+| Attention | on / off (`-noatt`) | `model.params.model_params.mid_attn`. `is_attn` stays all-`false` either way (attention was already bottleneck-only) |
+| Prior (CFM only) | normal (default, unmarked) / brownian (`-brownian`) | `model.params.prior` |
+| Prior sigma (CFM only) | normal `0.5` (`-s05`) / brownian `0.7` (`-s07`) | `model.params.prior_sigma`. Brownian sigma is a *terminal* std, whose time-averaged std is `sigma/sqrt(2)`; `0.7` matches normal's constant `0.5` time-averaged spread |
 
-This replaces the old open item about the brownian sigma value (previously unresolved, "confirm before
-launching"): `0.7` is now the number, chosen by the sqrt(2) matching argument above, not carried over from
-whatever brownian run happened to exist before.
+**Final work uses no-attention (`mid_attn: false`) throughout, for both PlasmaFlow (CFM) and UnFlow
+(the deterministic U-Net).** No-attention was found to be competitive-or-better, so it is the backbone
+used in every main-text cell below. Attention-on and Brownian-prior cells remain available as ablations.
 
-## The grid
+## Main-text grid (Table \ref{tab:grid})
 
-All cells train on the **current** dataset (`data.file`, `2026_07_13-TCV_shots_V2.parquet`). This is the
-point of the re-run: the previous caches straddle two datasets, and normalization is derived from the
-train split, so cross-dataset comparison is confounded. Nothing here can be salvaged by re-eval alone.
+All cells train on `data.file: 2026_07_13-TCV_shots_V2.parquet`. Cache file = `output/test_cache/<name>_rollout.{h5,json}`;
+matching directory under `output/htmlplots/<name>/`.
 
-| ID | Run name | Backbone | Leak | Why it exists |
+| Model | ID | Covariates | Role | Cache (`<name>`) |
 |---|---|---|---|---|
-| `CN` | `CN-cfm-noleak-normal-s05` | CFM, normal prior, attention on | noleak | **Headline model** |
-| `CNb` | `CNb-cfm-noleak-normal-s05-noatt` | CFM, normal prior, attention off | noleak | Does the bottleneck self-attention matter for ELM-scale transient timing, or is the conv backbone alone enough? |
-| `CNc` | `CNc-cfm-noleak-brownian-s07` | CFM, brownian prior, attention on | noleak | Prior ablation, attention on |
-| `CNd` | `CNd-cfm-noleak-brownian-s07-noatt` | CFM, brownian prior, attention off | noleak | Prior ablation, attention off. Together with `CNc`, checks whether the prior and the attention axis interact |
-| `CF` | `CF-cfm-triple-normal-s05` | CFM, normal prior, attention on | triple | **New cell.** Does CFM also improve when handed ELM timing? |
-| `UN` | `UN-unet-noleak` | U-Net deterministic | noleak | Same architecture as CFM, no flow. Isolates the flow itself |
-| `US` | `US-unet-ipla` | U-Net deterministic | single | **New cell.** Middle point of the dose-response: does one leaky signal move the needle, or does it take all three? |
-| `UF` | `UF-unet-triple` (retrained as `UFv2-unet-triple`, see below) | U-Net deterministic | triple | Top of the dose-response, and the same ablation `CF` runs on CFM |
-| `IN` | `IN-itransformer-noleak` | iTransformer | noleak | Strong deterministic baseline: capacity is not the issue |
-| `IS` | `IS-itransformer-ipla` | iTransformer | single | Oracle check, light version |
-| `TN` | `TN-tide-noleak` | TiDE | noleak | Covariate-aware baseline |
-| `TS` | `TS-tide-ipla` | TiDE | single | Oracle check, light version |
-| `D` | `D-dlinear` | DLinear | blind | Floor baseline. No leak letter |
-| `USb` | `USb-unet-ipla-noatt` | U-Net deterministic, attention off | single | **New cell.** `CNb` showed no-attention is competitive-or-better at `noleak`, where there's no ELM timing to actually generate; U-Net's baselines already generate ELMs from single leak alone, so this is where a no-attention U-Net gets tested with a real signal to use. Final work uses no-attention CFM/U-Net throughout, so this supersedes `US` there |
-| `CSb` | `CSb-cfm-ipla-normal-s05-noatt` | CFM, normal prior, attention off | single | **New cell.** Same motivation as `USb`, for CFM: tests the no-attention finding at the leak level where it matters, and is the no-attention/single-leak cell the final work carries forward for CFM |
-| `UNb` | `UNb-unet-noleak-noatt` | U-Net deterministic, attention off | noleak | **New cell.** Completes the no-attention final-work set: `UN` is the flow-vs-no-flow isolation baseline paired with `CN`/headline CFM, so it needs its own no-attention counterpart too, not just the leak cells (`USb`) |
+| PlasmaFlow (CFM) | `CNb` | noleak | headline model | `R-CNb-cfm-noleak-normal-s05-noatt-e2` |
+| PlasmaFlow (CFM) | `CSb` | single-leak | timing oracle | `CSb-cfm-ipla-normal-s05-noatt` |
+| UnFlow | `UNb` | noleak | flow-vs-no-flow isolation | `UNb-unet-noleak-noatt` |
+| UnFlow | `USb` | single-leak | timing oracle | `USb-unet-ipla-noatt` |
+| TiDE | `TN` | noleak | covariate-aware baseline | `R-TN-tide-noleak-e2` |
+| TiDE | `TS` | single-leak | timing oracle, light | `R-TS-tide-ipla-e2` |
+| iTransformer | `IN` | noleak | capacity check | `R-IN-itransformer-noleak-e2` |
+| iTransformer | `IS` | single-leak | timing oracle, light | `R-IS-itransformer-ipla-e2` |
+| DLinear | `D` | — | floor baseline | `D-dlinear-r2` |
 
-Thirteen trainings (up from the previous ten): CFM grew from 2 cells to 5 (the attention/prior ablation),
-U-Net grew from 2 cells to 3 (the dose-response middle point), iTransformer and TiDE swapped their `triple`
-cell for the lighter `single` cell (net zero change in count for those two).
-
-`USb` and `CSb` were added after the grid finished, once results showed no-attention was
-competitive-or-better and single leak was already enough for the deterministic baselines to
-generate ELMs: the final work uses only no-attention CFM/U-Net, so these are the cells that
-carry that forward at the leak level where the attention question actually has a signal to
-bite on (`CNb`'s no-attention comparison was noleak-only). Fifteen trainings total.
-
-### Canonical cache per cell (post Jul 29-Aug 1 grid submission)
-
-The Jul 29 grid submission hit two problems, both from `submit_remote_job_snellius.sh` /
-`run_snellius_job.sh` sharing one checked-out clone on the Snellius login node across jobs
-submitted back to back: a test-phase peak-histogram hang that crashed several runs before
-they reached rollout eval (fixed by `skip_peak_histograms: true` + a rollout-before-test
-reorder, `-e2` reevals below), and a `git checkout` race between two jobs submitted at the
-same instant that silently swapped `UF-unet-triple`'s config for `IN-itransformer-noleak`'s
-mid-run (**not just an eval-side bug: the checkpoint itself is a noleak ITransformer,
-retrained as `UFv2`**). This table is the single source of truth for which cache under
-`output/test_cache/` and which directory under `output/htmlplots/` to actually use; anything
-else in those two directories has been moved to `output/_archive/` (see its `README.md`).
-
-| ID | Canonical cache (`output/test_cache/<name>_rollout.{h5,json}`) | `output/htmlplots/<name>/` | Status |
-|---|---|---|---|
-| `CN` | `R-CN-cfm-noleak-normal-s05-e2` | same | reeval, current |
-| `CNb` | `R-CNb-cfm-noleak-normal-s05-noatt-e2` | same | reeval, current |
-| `CNc` | `R-CNc-cfm-noleak-brownian-s07-e2` | same | reeval, current |
-| `CNd` | `R-CNd-cfm-noleak-brownian-s07-noatt-e2` | same | reeval, current |
-| `CF` | `R-CF-cfm-triple-normal-s05-e2` | same | reeval, current |
-| `UN` | `UN-unet-noleak` | same | base training run, no reeval needed |
-| `US` | `US-unet-ipla` | same | base training run, no reeval needed |
-| `UF` | `UFv2-unet-triple` | same | **retrain in progress** (2026-08-23); `UF-unet-triple` and its `R-UF-unet-triple-e2` reeval are corrupted, archived, do not use |
-| `IN` | `R-IN-itransformer-noleak-e2` | same | reeval, current |
-| `IS` | `R-IS-itransformer-ipla-e2` | same | reeval, current |
-| `TN` | `R-TN-tide-noleak-e2` | same | **reeval in progress** (2026-08-23); base run trained cleanly (120/120 epochs) but crashed before rollout eval |
-| `TS` | `R-TS-tide-ipla-e2` | same | **reeval in progress** (2026-08-23); base run trained cleanly (120/120 epochs) but crashed before rollout eval |
-| `D` | `D-dlinear-r2` | same | reeval, current |
-
-### What the grid buys, per claim
-
-- CFM vs `UN`: identical `ConditionalUNet` backbone, the only difference is flow matching vs a
-  deterministic point prediction. This is the cleanest possible isolation of the contribution.
+- CFM vs `UNb`: identical `ConditionalUNet` backbone, the only difference is flow matching vs a
+  deterministic point prediction. Cleanest isolation of the flow-matching contribution.
 - CFM vs `IN`/`TN`/`D`: model capacity and architecture family are not the bottleneck.
-- `CN` vs `CNb`: does attention specifically matter for CFM, independent of the leak question.
-- `CN` vs `CNc`/`CNd`: prior choice (normal vs brownian), with and without attention.
-- `UN` -> `US` -> `UF`: does a deterministic model's use of ELM timing scale with how much of it it is
-  handed, or does it only respond once the signal is unambiguous? This is the load-bearing evidence that
-  timing, not capacity or spectral bias, is what is missing, now shown as a trend rather than a switch.
-- `IN`/`TN` vs `IS`/`TS`: the same switch test as before, at lower cost since these are supporting
-  baselines rather than the focus of the leak narrative.
-- `CN` vs `CF`: the same test applied to our own model, which closes the obvious reviewer question of
-  whether CFM uses covariates at all.
+- `CNb` vs `CSb`, `UNb` vs `USb`, `IN` vs `IS`, `TN` vs `TS`: does a single leaky covariate
+  (realized current, `IPLA`) already give the model what it needs to time ELMs. This is the
+  paper's central timing-vs-capacity argument, run across every backbone.
 
-### Deliberately excluded
+## Appendix ablations (Appendix~\ref{app:ablations})
 
-- The `triple` cell for iTransformer and TiDE: replaced by `single` (see above); keeping both would add
-  two more trainings for baselines that are not the paper's focus.
-- The full attention x prior x leak factorial for CFM: would be 8 CFM cells instead of 5; the two axes
-  are kept as separate single-axis ablations off the `noleak` headline instead (see "The attention and
-  prior axis" above).
-- `PatchTST`: config exists at `configs/patchtst.yaml`, never run. Would need its own leak letter like the
-  other covariate-aware baselines if it gets added.
-- Positional-encoding axis (`yesPos`/`noPos`): settled. Removed for the paper to prevent shortcut
-  learning, so it is not an axis any more. See `.claude/CLAUDE.md`.
+Attention-on and Brownian-prior variants of the `noleak`/`single` CFM and U-Net cells above.
+
+| Model | ID | Covariates | What it isolates | Cache (`<name>`) |
+|---|---|---|---|---|
+| PlasmaFlow (CFM) | `CN` | noleak | attention on (vs `CNb`) | `R-CN-cfm-noleak-normal-s05-e2` |
+| PlasmaFlow (CFM) | `CNc` | noleak | Brownian prior, attention on | `R-CNc-cfm-noleak-brownian-s07-e2` |
+| PlasmaFlow (CFM) | `CNd` | noleak | Brownian prior, attention off | `R-CNd-cfm-noleak-brownian-s07-noatt-e2` |
+| UnFlow | `UN` | noleak | attention on (vs `UNb`) | `UN-unet-noleak` |
+| UnFlow | `US` | single-leak | attention on (vs `USb`) | `US-unet-ipla` |
+
+## High leakage dose cells (triple leak, not in either table above)
+
+Attention-on only; kept for a possible supplementary dose-response figure (`N` -> `S` -> `F`), not
+part of the main text or the ablations appendix.
+
+| Model | ID | Covariates | Cache (`<name>`) |
+|---|---|---|---|
+| PlasmaFlow (CFM) | `CF` | triple-leak | `R-CF-cfm-triple-normal-s05-e2` |
+| UnFlow | `UF` | triple-leak | `UFv2-unet-triple` |
+
+## Do not use
+
+| ID | Cache (`<name>`) | Why |
+|---|---|---|
+| `UF-unet-triple` reeval | `R-UF-unet-triple-e2` | Corrupted: a Snellius submission race silently trained an ITransformer/noleak model under this label. Superseded by `UFv2-unet-triple` above |
+
+Everything else under `output/test_cache/`/`output/htmlplots/` (pre-e2 superseded attempts, pre-grid
+runs, smoke/debug caches) is archived under `output/_archive/` and not part of the paper; see its
+`README.md` if you need the reason a specific one was set aside.
+
+## Deliberately excluded
+
+- The `triple` cell for iTransformer and TiDE: replaced by `single`; keeping both would add two more
+  trainings for baselines that are not the paper's focus.
+- The full attention x prior x leak factorial for CFM: kept as separate single-axis ablations instead.
+- `PatchTST`: config exists at `configs/patchtst.yaml`, never run.
+- Positional-encoding axis (`yesPos`/`noPos`): removed for the paper to prevent shortcut learning, not
+  an axis any more. See `.claude/CLAUDE.md`.
