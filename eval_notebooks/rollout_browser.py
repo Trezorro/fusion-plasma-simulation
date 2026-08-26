@@ -36,7 +36,7 @@ data_module = DataSetClass(**C.data)
 data_module.prepare_data()
 data_module.setup()
 
-CACHE_NAME = os.environ.get("ROLLOUT_CACHE_NAME", "R-NormalMidAttSig03_anim_rollout")
+CACHE_NAME = os.environ.get("ROLLOUT_CACHE_NAME", "R-CNb-cfm-noleak-normal-s05-noatt-e2")
 SHOTS = list(C.rollout.html_shots) if "rollout" in C else None  # None = every cached rollout
 MAX_SAMPLES = int(C.rollout.plot_samples) if "rollout" in C else 3  # samples overlaid per start point
 HTML_DIR = Path(os.environ.get("ROLLOUT_HTML_DIR", "output/htmlplots/local"))

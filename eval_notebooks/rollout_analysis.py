@@ -73,7 +73,7 @@ PDF_DIR = Path(os.environ.get("ROLLOUT_PDF_DIR", "output/pdfplots/rollout_analys
 
 # %% Models: (rollout_cache_name, print_name); one line per model in every panel
 MODELS = [
-    (os.environ.get("ROLLOUT_CACHE_NAME", "R-NormalMidAttSig03_anim_rollout"), "CFM (ours)"),
+    (os.environ.get("ROLLOUT_CACHE_NAME", "R-CNb-cfm-noleak-normal-s05-noatt-e2"), "CFM (ours)"),
     # ("R-BrownianMidAttSig1_anim_rollout", "CFM brownian"),
 ]
 
