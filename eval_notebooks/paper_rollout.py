@@ -64,15 +64,75 @@ mpl.rcParams.update({
 MODE_COLORS = ["lightskyblue", "orange", "red"]
 MODE_NAMES = ["L", "D", "H"]
 
+# Physics-symbol labels from docs/variable_reference.md, keyed by the parquet column name.
+# `PD` is the renamed `Halpha1` column (see docs/data-pipeline.md column-rename table), so it
+# takes the Halpha1 symbol. Falls back to the raw column name if a channel isn't in this table.
+VAR_LATEX = {
+    "FIR_LIDs_core": r"$n_{e,\text{core}}$",
+    "FIR_LIDs_LFS": r"$n_{e,\text{LFS}}$",
+    "PD": r"$\text{PD}_{H\alpha}$",
+    "Halpha1": r"$\text{PD}_{H\alpha}$",
+    "Halpha13": r"$\text{PD}_{CIII}$",
+    "Halpha_fft": r"$\text{PD}_{\text{FFT}}$",
+    "DML": r"$\text{DML}$",
+    "POHM": r"$P_{\mathit{OHM}}$",
+    "Z_axis": r"$Z_{\text{axis}}$",
+    "R_axis": r"$R_{\text{axis}}$",
+    "IP": r"$I_{p,\mathit{ref}}$",
+    "IPLA": r"$I_p$",
+    "PNBI": r"$P_{\mathit{NBI}}$",
+    "PNBI2": r"$P_{\mathit{NBI2}}$",
+    "PECRH": r"$P_{\mathit{ECRH}}$",
+    "INPWR": r"$P_{\mathit{in}}$",
+    "AREA": r"$A_p$",
+    "DELTA_BOTTOM": r"$\delta_{\text{bottom}}$",
+    "DELTA_TOP": r"$\delta_{\text{top}}$",
+    "GAP_in": r"$\Delta_{\text{in}}$",
+    "GAP_out": r"$\Delta_{\text{out}}$",
+    "KAPPA": r"$\kappa$",
+    "MAJRAD": r"$R_0$",
+    "MINRAD": r"$a$",
+    "VOL": r"$V_p$",
+    "BZERO": r"$B_0$",
+    "Q95": r"$q_{95}$",
+    "GWfr": r"$n_e/n_{\mathit{GW}}$",
+    "Ne_rho_max_grad1": r"$\max(n'_{e,\text{edge}})$",
+    "Ne_rho_max_grad2": r"$\max(n''_{e,\text{edge}})$",
+    "TS_Ne_on_axis": r"$n_{e,0}$",
+    "SXRcore": r"$\mathit{SXR}_{\text{core}}$",
+    "Te_rho_max_grad1": r"$\max(T'_{e,\text{edge}})$",
+    "Te_rho_max_grad2": r"$\max(T''_{e,\text{edge}})$",
+    "TS_Te_on_axis": r"$T_{e,0}$",
+    "P_LH": r"$P_{\mathit{LH}}$",
+    "BETAN": r"$\beta_N$",
+    "BETAP": r"$\beta_p$",
+    "BETAT": r"$\beta_t$",
+    "Wtot": r"$W_{\mathit{tot}}$",
+    "H98y2calc": r"$H_{\mathit{98y2}}$",
+    "Prad": r"$P_{\mathit{rad}}$",
+    "PradBulk": r"$P_{\mathit{rad},\text{bulk}}$",
+    "PSOL_RT": r"$P_{\mathit{rad},\text{SOL}}$",
+    "LI": r"$l_i$",
+    "ZEFF": r"$Z_{\mathit{eff}}$",
+    "nu_e_star": r"$\nu_{e,\text{ped}}^{*}$",
+    "Vloop": r"$V_{\mathit{loop}}$",
+}
+
+
+def _var_label(col):
+    return VAR_LATEX.get(col, col)
+
 GT_COLOR = "black"
+GT_ALPHA = 0.9
 HISTORY_COLOR = "0.55"
 HISTORY_ALPHA = 0.85
 GENERATED_COLOR = "#D55E00"  # Okabe-Ito vermillion, same as the interactive browser
 # C-row palette matches the interactive browser and avoids the mode-bar colours
 # (D is orange, L is light blue, generated is vermillion).
 C_COLORS = ["#0072B2", "#009E73", "#CC79A7", "#E69F00"]
-MODE_BAR_RATIO = 0.09
-C_ROW_RATIO = 0.6
+MODE_BAR_RATIO = 0.15
+C_ROW_RATIO = 0.5
+C_GAP_RATIO = 0.06  # spacer row between the C row and the mode bars
 
 # %% Config + data
 CONFIG_NAME = "plasmaflow"
@@ -107,9 +167,18 @@ def _rle(labels):
 def _style_axis(ax, xlim):
     ax.set_facecolor("#F7F7F7")
     ax.grid(color="white", linewidth=1.0)
+    ax.set_axisbelow(True)  # grid must sit below the boundary/t_start lines, not cut through them
     for s in ("top", "right"):
         ax.spines[s].set_visible(False)
     ax.set_xlim(*xlim)
+    ax.margins(y=0.03)
+
+
+def _add_boundaries(ax, boundary_times, t_start, zorder_boundary=1, zorder_start=5):
+    """Dotted chained-window boundaries + solid rollout-start line, drawn above the grid."""
+    for t_b in boundary_times:
+        ax.axvline(t_b, color="0.6", linewidth=0.4, linestyle=":", zorder=zorder_boundary)
+    ax.axvline(t_start, color="0.25", linewidth=0.8, zorder=zorder_start)
 
 
 def _add_mode_bar(ax, labels, times, name, xlim, t_start):
@@ -117,27 +186,47 @@ def _add_mode_bar(ax, labels, times, name, xlim, t_start):
     for start, end, val in _rle(labels):
         ax.axvspan(times[start], times[min(end, len(times) - 1)],
                    color=MODE_COLORS[val], linewidth=0, zorder=0)
-    ax.axvline(t_start, color="0.25", linewidth=0.8)
+    ax.axvline(t_start, color="0.25", linewidth=0.8, zorder=5)
     ax.set_xlim(*xlim)
     ax.set_yticks([])
-    ax.set_ylabel(name, rotation=0, ha="right", va="center", labelpad=12)
+    ax.set_ylabel(name, rotation=0, ha="right", va="center", labelpad=12, fontsize=8)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
 
 
-def _export(fig, shot, frac, sample_idx, sizes):
+def _place_mode_label(fig, ax_c, ax_mode_a, ax_mode_b, text_artist):
+    """(Re)compute the "Mode" label's x position from the just-resized figure and place it.
+
+    Label extents are fixed in points/inches, but the figure width changes across export
+    sizes, so the correct x as a *figure fraction* is size-dependent and must be recomputed
+    after every fig.set_size_inches call, not cached from the pre-export default-size draw.
+    """
+    if text_artist is not None:
+        text_artist.remove()
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    label_x = ax_c.yaxis.label.get_window_extent(renderer).transformed(fig.transFigure.inverted()).x1
+    pos_gen = ax_mode_a.get_position()
+    pos_real = ax_mode_b.get_position()
+    mode_y = (pos_gen.y1 + pos_real.y0) / 2
+    return fig.text(label_x, mode_y, "Mode", rotation=90, ha="right", va="center", fontsize=8)
+
+
+def _export(fig, shot, frac, sample_idx, sizes, ax_c, ax_mode_a, ax_mode_b):
+    mode_label = None
     for w, h in sizes:
         fig.set_size_inches(w, h)
+        mode_label = _place_mode_label(fig, ax_c, ax_mode_a, ax_mode_b, mode_label)
         # sample_idx in the filename: with n_samples > 1 several rollouts share
         # (shot, frac) and would otherwise overwrite each other's PDF.
         out = PDF_DIR / f"{w:.0f}x{h:.0f}" / f"{shot}_{frac:.2f}_s{sample_idx}.pdf"
         out.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(out, bbox_inches="tight")
+        fig.savefig(out, bbox_inches="tight", pad_inches=0.05)
         print("Succesfully exported", out)
 
 
 # %% The figure: 5 X rows + C row + 2 mode bars, one rollout per figure
-def plot_rollout(record, sizes=((9, 11), (7, 9), (12, 14))):
+def plot_rollout(record, sizes=((12,4), (7,5), (12,7), (12,5))):
     times = record["times"]
     hl = int(record["history_length"])
     t_start = float(record["t_start"])
@@ -149,8 +238,8 @@ def plot_rollout(record, sizes=((9, 11), (7, 9), (12, 14))):
     n_x = len(CHANNEL_NAMES)
     fig = plt.figure()
     gs = gridspec.GridSpec(
-        n_x + 3, 1,
-        height_ratios=[1] * n_x + [C_ROW_RATIO] + [MODE_BAR_RATIO] * 2, hspace=0.18
+        n_x + 4, 1,
+        height_ratios=[1] * n_x + [C_ROW_RATIO, C_GAP_RATIO] + [MODE_BAR_RATIO] * 2, hspace=0.0
     )
 
     axes = []
@@ -159,58 +248,61 @@ def plot_rollout(record, sizes=((9, 11), (7, 9), (12, 14))):
         axes.append(ax)
         ax.plot(times[:hl], record["real_x"][ch, :hl], color=HISTORY_COLOR, lw=0.9,
                 alpha=HISTORY_ALPHA, zorder=2)
-        ax.plot(gen_times, record["real_x"][ch, hl:], color=GT_COLOR, lw=0.8, zorder=3)
+        ax.plot(gen_times, record["real_x"][ch, hl:], color=GT_COLOR, lw=0.8, zorder=3, alpha=GT_ALPHA)
         ax.plot(gen_times, record["generated_x"][ch], color=GENERATED_COLOR, lw=0.8,
                 alpha=0.9, zorder=4)
-        for t_b in boundary_times:
-            ax.axvline(t_b, color="0.6", linewidth=0.4, linestyle=":", zorder=1)
-        ax.axvline(t_start, color="0.25", linewidth=0.8, zorder=5)
+        _add_boundaries(ax, boundary_times, t_start)
         _style_axis(ax, xlim)
-        ax.set_ylabel(CHANNEL_NAMES[ch], rotation=0, ha="right", va="center", labelpad=14)
+        ax.set_ylabel(_var_label(CHANNEL_NAMES[ch]), rotation=90, ha="right", va="center", labelpad=14)
         ax.set_xticklabels([])
+        ax.tick_params(axis="x", length=0)
 
     ax_c = fig.add_subplot(gs[n_x, 0])
     for ci, c_name in enumerate(C_NAMES):
         ax_c.plot(times, record["real_c"][ci], color=C_COLORS[ci % len(C_COLORS)],
-                  lw=0.9, label=c_name)
-    ax_c.axvline(t_start, color="0.25", linewidth=0.8)
+                  lw=0.9, label=_var_label(c_name))
+    _add_boundaries(ax_c, boundary_times, t_start)
     _style_axis(ax_c, xlim)
-    ax_c.set_ylabel("C", rotation=0, ha="right", va="center", labelpad=14)
+    ax_c.set_ylabel("C", rotation=90, ha="right", va="center", labelpad=14)
     ax_c.set_xticklabels([])
+    ax_c.tick_params(axis="x", length=0)
     axes.append(ax_c)
 
-    ax_gen = fig.add_subplot(gs[n_x + 1, 0])
-    _add_mode_bar(ax_gen, record["surr_labels_gen"], times, "gen", xlim, t_start)
-    ax_gen.set_xticklabels([])
-    ax_real = fig.add_subplot(gs[n_x + 2, 0])
-    _add_mode_bar(ax_real, record["surr_labels_real"], times, "real", xlim, t_start)
-    ax_real.set_xlabel("Shot time (s)")
+    ax_mode_a = fig.add_subplot(gs[n_x + 2, 0])
+    _add_mode_bar(ax_mode_a, record["surr_labels_real"], times, r"real", xlim, t_start)
+    ax_mode_a.set_xticklabels([])
+    ax_mode_a.tick_params(axis="x", length=0)
+    ax_mode_b = fig.add_subplot(gs[n_x + 3, 0])
+    _add_mode_bar(ax_mode_b, record["surr_labels_gen"], times, r"gen", xlim, t_start)
+    ax_mode_b.set_xlabel("Shot time (s)")
+
+    fig.align_ylabels(axes)
 
     handles = [
         Line2D([], [], color=HISTORY_COLOR, alpha=HISTORY_ALPHA, label=r"real history $x_{W_H}$"),
         Line2D([], [], color=GT_COLOR, label="real"),
         Line2D([], [], color=GENERATED_COLOR, label="generated (rollout)"),
     ]
-    handles += [Line2D([], [], color=C_COLORS[ci % len(C_COLORS)], label=c_name)
+    handles += [Line2D([], [], color=C_COLORS[ci % len(C_COLORS)], label=_var_label(c_name))
                 for ci, c_name in enumerate(C_NAMES)]
     handles += [Patch(color=c, label=n) for c, n in zip(MODE_COLORS, MODE_NAMES)]
-    fig.legend(handles=handles, loc="center left", bbox_to_anchor=(1.0, 0.5), frameon=False)
-    fig.suptitle(
-        f"Shot {record['shot_number']}, rollout from {record['start_frac']:.0%} "
-        f"(t={t_start:.2f}s, {record['n_windows']} windows, sample {record['sample_idx']})", y=0.91
-    )
-    fig.align_ylabels(axes)
-    _export(fig, record["shot_number"], record["start_frac"], record["sample_idx"], sizes)
+    # fig.legend(handles=handles, loc="center left", bbox_to_anchor=(1.0, 0.5), frameon=False)
+    # fig.suptitle(
+    #     f"Shot {record['shot_number']}, rollout from {record['start_frac']:.0%} "
+    #     f"(t={t_start:.2f}s, {record['n_windows']} windows, sample {record['sample_idx']})", y=0.90
+    # )
+    _export(fig, record["shot_number"], record["start_frac"], record["sample_idx"], sizes,
+            ax_c, ax_mode_a, ax_mode_b)
     plt.close(fig)
 
 
 # %% Run: pick the rollout cache and which rollouts to print
-CACHE_NAME = os.environ.get("ROLLOUT_CACHE_NAME", "R-NormalMidAttSig03_anim_rollout")
+CACHE_NAME = os.environ.get("ROLLOUT_CACHE_NAME", "R-CNb-cfm-noleak-normal-s05-noatt-e2_rollout")
 SHOTS = None  # None = all cached rollouts; or a list like [57013, 61237, 64770, 77604]
 # With n_samples > 1 every (shot, frac) has several sample_idx; None prints all of them
 # (44 shots x 5 fractions x n_samples PDFs per size at production scale). Set an int to
 # cap how many samples per starting point get printed.
-MAX_SAMPLES_PER_START = None
+MAX_SAMPLES_PER_START = 10
 
 # %% Fetch the cache from Snellius if missing (set AUTO_FETCH=False to only print the command)
 AUTO_FETCH = True
@@ -231,7 +323,7 @@ if __name__ == "__main__":
     # bigger than the SHOTS/MAX_SAMPLES_PER_START subset this notebook actually prints.
     results = load_results_from_cache(cache, shots=SHOTS, max_samples=MAX_SAMPLES_PER_START)
     step = cache.get_rollout(*cache.list_rollouts()[0])["step"]
-    records = build_rollout_records(results, data_module, step=step, shots=SHOTS)
+    records = build_rollout_records(results, data_module, step=step, shots=SHOTS, max_samples=10)
     print(f"{len(records)} rollouts to plot from {CACHE_NAME}")
     for record in records:
         plot_rollout(record)
