@@ -6,6 +6,13 @@ Run it as a script from the repo root:
     PYTHONPATH=. python eval_notebooks/rollout_tables.py --force        # ignore the intermediate parquet
     PYTHONPATH=. python eval_notebooks/rollout_tables.py --shots 3      # quick smoke run
     PYTHONPATH=. python eval_notebooks/rollout_tables.py --threshold large_scale  # coarser peaks
+    PYTHONPATH=. python eval_notebooks/rollout_tables.py --filter gaussian:1      # smooth before find_peaks
+
+--filter smooths both the real and the generated trace with the given kernel immediately
+before find_peaks, and nothing else: the Dice score keeps using the surrogate mode labels
+stored in the cache, which the classifier produced on the unfiltered signals. A filtered run
+writes its own per-slice parquet and its own suffixed tables (..._gaussiansigma1.tex), so it
+never overwrites or invalidates the unfiltered ones, and every caption names the filter.
 
 Given the MODELS mapping below (display name -> rollout cache stem) it reads every cache,
 recomputes every per-slice statistic, aggregates them along one explicit ladder, and writes
@@ -72,6 +79,7 @@ import src.data_loaders
 from src.config import load_config_from_file
 from src.hdf_cache import RolloutHDFCache, get_cache_dir
 from src.metrics.metrics import PeakProps
+from src.metrics.ot_peak_error import ot_peak_error
 from src.signal_filters import apply_filter, filter_label, resolve_filter
 from src.rollout import build_rollout_records, load_results_from_cache
 
@@ -124,6 +132,68 @@ STRAT_BINS = [
     ("early", 0, 5),
     ("late", 6, 11),
 ]
+
+# --- pooled optimal-transport peak error -------------------------------------------------
+# The depth table scores peaks with an unbalanced optimal-transport cost instead of a
+# Wasserstein distance between prominence distributions; see src/metrics/ot_peak_error.py for
+# the formulation and why the old column had to go. Two things change here.
+#
+# First, peaks are no longer sliced into generation windows for this metric. A window is 25.6
+# ms and an ELM displaced across a window boundary was counted as a miss in one window and a
+# false alarm in the next, which is an artefact of the grid, not a model error. The peaks of a
+# whole depth stratum (STRAT_BINS, so six windows = 153.6 ms) are pooled per shot and the cost
+# is computed once over that pool, with each peak's position inside the pool entering the
+# transport cost. Displacement is then measured continuously and priced by how far it is.
+#
+# Second, mass. A peak carries its prominence as mass, so a hundred noise-scale peaks weigh
+# what their prominences say they weigh and cannot stand in for a few large ELMs. This is the
+# whole point: the Wasserstein column compared two *normalized* prominence distributions, so a
+# model emitting many small peaks against a real trace of many small peaks plus a few large
+# ones paid almost nothing for missing the large ones.
+# lam is the price of one unit of unmatched mass, per ms. Matching two peaks costs their time
+# separation; leaving both unmatched costs 2*lam, so **the effective maximum transport distance
+# is 2*lam**, twice the number written here. Every value in OT_LAMBDAS_MS is computed and
+# stored as its own set of rows in the pool parquet, keyed by `lam_ms`, so the sensitivity of
+# the ranking to lam can be read off without recomputing anything; OT_LAMBDA_MS selects the
+# one the tables report. Solving is cheap next to reading the caches, so the list is nearly
+# free. 10 ms (a 20 ms matching horizon) is the reported value: beyond about that, a generated
+# peak is not a displaced ELM but a different event.
+OT_LAMBDAS_MS = [10.0, 30.0]
+OT_LAMBDA_MS = 10.0
+OT_PEAK_MASS = "prominence"  # "prominence" or "width"
+
+# Which threshold each metric is computed at. The OT error wants every peak, including the
+# noise-scale ones, because pricing spurious mass is half of what it measures and a high
+# threshold would hide exactly the peaks it is meant to charge for. The peak *count*, by
+# contrast, is meaningless at noise level (hundreds of peaks per window on PD, none of them
+# ELMs), so it is reported at the large-scale threshold where a count is a count of events.
+METRIC_THRESHOLD = {
+    "ot_error": "all_peaks",
+    "ot_error_rel": "all_peaks",
+    "ot_missed_frac": "all_peaks",
+    "ot_false_frac": "all_peaks",
+    "pool_count_error": "large_scale",
+    "pool_abs_count_error": "large_scale",
+    "pool_n_peaks_real": "large_scale",
+}
+
+# A depth-table variant in which the transport cost is computed on the same ELM-scale peaks as
+# the count instead of on every peak. It answers a narrower question than the default mixed
+# table: not "how well is the whole peak structure reproduced", but "how well are the events
+# large enough to be ELMs placed". It cannot charge a model for spurious noise-scale mass,
+# since it never sees those peaks, so it is the easier table to explain and the weaker test.
+# Written alongside the default rather than replacing it.
+ELM_SCALE_METRIC_THRESHOLD = {m: "large_scale" for m in METRIC_THRESHOLD}
+
+# Depth-table variants: (filename/label tag, METRIC_THRESHOLD override or None).
+STRAT_TABLE_VARIANTS = [("", None), ("_elmscale", ELM_SCALE_METRIC_THRESHOLD)]
+
+# Metrics of the depth table, which is now the pooled table.
+# The count is reported signed. The absolute value hides the failure it most needs to show: a
+# model that emits no ELM-scale peaks at all scores |dN| = N, a number indistinguishable from
+# an ordinary miscount, and on PD it lands close enough to the flow model's error to be ranked
+# beside it. Signed, the same cell reads -N and says plainly that nothing was generated.
+STRAT_TABLE_METRICS = ["ot_error", "ot_error_rel", "pool_count_error"]
 
 # Peak prominence threshold used everywhere in the reported tables. Resolved from the
 # reference cache's config: "all_peaks" -> evaluation.peaks.prominence,
@@ -228,12 +298,25 @@ SLICE_PARQUET = OUTPUT_DIR / "rollout_slice_metrics.parquet"
 # fraction, threshold or detection setting invalidates it instead of silently producing rows
 # of "--" for the parts that were never computed.
 SLICE_META = SLICE_PARQUET.with_suffix(".meta.json")
+# The pooled OT rows live at a coarser granularity than the slice rows (one row per shot,
+# sample, channel, threshold and depth stratum), so they get their own file rather than being
+# broadcast onto the slice table. Both are written and invalidated together under one
+# signature, so they can never describe different settings.
+POOL_PARQUET = OUTPUT_DIR / "rollout_pool_metrics.parquet"
+
+
+# Set by --models to skip the appendix-only ablations. Those are three 30-sample flow caches
+# and they cost more than the whole main table does, so a run that only needs the main and
+# depth tables can leave them out. It is part of the parquet signature, so a main-only parquet
+# is correctly rejected by a later full run instead of producing empty appendix rows.
+INCLUDE_APPENDIX_MODELS = True
 
 
 def all_models() -> "OrderedDict[str, str]":
     """Every cache the run touches: the main rows first, then the appendix-only ablations."""
     merged = OrderedDict(MODELS)
-    merged.update(APPENDIX_EXTRA_MODELS)
+    if INCLUDE_APPENDIX_MODELS:
+        merged.update(APPENDIX_EXTRA_MODELS)
     return merged
 
 
@@ -245,12 +328,17 @@ def slice_signature() -> dict:
             {*START_FRACTIONS, APPENDIX_START_FRACTION, STRAT_START_FRACTION})],
         "label_spill": LABEL_SPILL,
         "max_samples": MAX_SAMPLES,
+        "include_appendix_models": INCLUDE_APPENDIX_MODELS,
         "width_rel_height": WIDTH_REL_HEIGHT,
         "width_clip": WIDTH_CLIP_SAMPLES,
         "large_peak_prominence_default": LARGE_PEAK_PROMINENCE_DEFAULT,
         "large_peak_prominence_overrides": sorted(LARGE_PEAK_PROMINENCE_OVERRIDES.items()),
         "signal_filter": {c: resolve_filter(SIGNAL_FILTER, c) for c in ["__default__", *TABLE_CHANNELS]},
-        "schema": 9,  # bump when the per-slice columns or the threshold set change
+        "ot_lambdas_ms": [float(x) for x in OT_LAMBDAS_MS],
+        "ot_peak_mass": OT_PEAK_MASS,
+        "strat_start_fraction": STRAT_START_FRACTION,
+        "strat_bins": [list(b) for b in STRAT_BINS],
+        "schema": 11,  # bump when the per-slice columns or the threshold set change
     }
 
 
@@ -269,13 +357,30 @@ METRIC_SPECS = {
     "width_w1_ms":     (r"$W_1^{w}$ [ms]",       2, True,  1.0),
     "width_w1_ms_base": (r"$W_1^{w,\mathrm{base}}$ [ms]", 2, True, 1.0),  # audit only
     "miss_rate":       (r"miss \%",              1, True,  100.0),
+    # Pooled optimal-transport columns. E_OT is absolute, in (prominence x ms); E_OT/E_0 is
+    # the same number divided by the cost of predicting no peaks at all, so 1.0 means "no
+    # better than an empty trace" and it is comparable across shots and diagnostics.
+    "ot_error":        (r"$E_{\mathrm{OT}}$",      2, True,  1.0),
+    "ot_error_rel":    (r"$E_{\mathrm{OT}}/E_{0}$", 3, True, 1.0),
+    "ot_missed_frac":  (r"$m_{\mathrm{miss}}$",    3, True,  1.0),
+    "ot_false_frac":   (r"$m_{\mathrm{false}}$",   3, True,  1.0),
+    "pool_count_error":     (r"$\Delta N$",        2, None,  1.0),
+    "pool_abs_count_error": (r"$|\Delta N|$",      2, True,  1.0),
+    "pool_n_peaks_real":    (r"$N$",                2, None,  1.0),
     "dice":            (r"$\mathcal{D}\uparrow$", 3, False, 1.0),
 }
 
 # Metrics ranked on the absolute value rather than the signed one (a signed count error of
 # -0.1 beats +5.0), and metrics that describe the data rather than score a model.
 RANK_ON_ABS = {"count_error"}
-NEVER_RANKED = {"rate_gen_per_ms", "rate_real_per_ms"}
+NEVER_RANKED = {"rate_gen_per_ms", "rate_real_per_ms", "pool_n_peaks_real"}
+RANK_ON_ABS = RANK_ON_ABS | {"pool_count_error"}
+# Computed once on the pooled peaks, never per slice, so they have no per-slice detection
+# variant to select between.
+POOL_METRICS_SET = {"ot_error", "ot_error_rel", "ot_missed_frac", "ot_false_frac",
+                    "ot_loc", "ot_missed_mass", "ot_false_mass", "ot_gen_mass", "ot_real_mass",
+                    "pool_count_error", "pool_abs_count_error",
+                    "pool_n_peaks_gen", "pool_n_peaks_real"}
 
 # %% ---------------------------------------------------------------------------------
 # Cache / data module setup
@@ -484,6 +589,31 @@ def _widths(peaks: PeakProps, clip):
     return w if clip is None else np.minimum(w, float(clip))
 
 
+def prepare_traces(generated, real, real_full, channel_names, channel_name, history_length):
+    """(generated, real, context) traces for one channel, smoothed if SIGNAL_FILTER is set.
+
+    Smoothing is applied here, once per (channel, trace), rather than inside the detectors:
+    history and rollout are filtered as one array so the kernel does not see an artificial edge
+    at the seam, and every detector downstream then reads exactly the same samples. Real and
+    generated get an identical filter, so this changes what counts as a peak but not who is
+    being measured. Everything downstream (positions, prominences, widths) is measured on the
+    filtered trace.
+
+    The rollout was seeded with the real history, so the real history is the correct left
+    context for the generated trace as well as for the real one.
+    """
+    ci = channel_names.index(channel_name)
+    context = real_full[ci, :history_length]
+    gen_trace, real_trace = generated[ci], real[ci]
+    if resolve_filter(SIGNAL_FILTER, channel_name) is not None:
+        gen_cat = apply_filter(np.concatenate([context, gen_trace]), SIGNAL_FILTER, channel_name)
+        real_cat = apply_filter(np.concatenate([context, real_trace]), SIGNAL_FILTER, channel_name)
+        gen_trace, real_trace = gen_cat[history_length:], real_cat[history_length:]
+        # The two contexts are the same real samples, so either filtered copy will do.
+        context = real_cat[:history_length]
+    return gen_trace, real_trace, context
+
+
 def _peak_stats(gen_peaks: PeakProps, real_peaks: PeakProps, sample_rate, slice_ms, suffix="", width_clip=None) -> dict:
     """The per-slice peak comparison for one pair of peak sets.
 
@@ -560,23 +690,8 @@ def record_slice_rows(record, channel_names, channels, thresholds, sample_rate, 
     }
     rows = []
     for channel_name in channels:
-        ci = channel_names.index(channel_name)
-        # The rollout was seeded with the real history, so it is the correct left context for
-        # the generated trace as well as for the real one.
-        context = real_full[ci, :history_length]
-        # Smoothing is applied here, once per (channel, trace), rather than inside the
-        # detectors: history and rollout are filtered as one array so the kernel does not see
-        # an artificial edge at the seam, and the full-trace and per-slice detectors then both
-        # read exactly the same samples. Real and generated get an identical filter, so this
-        # changes what counts as a peak but not who is being measured. Everything downstream
-        # (positions, prominences, widths) is measured on the filtered trace.
-        gen_trace, real_trace = generated[ci], real[ci]
-        if resolve_filter(SIGNAL_FILTER, channel_name) is not None:
-            gen_cat = apply_filter(np.concatenate([context, gen_trace]), SIGNAL_FILTER, channel_name)
-            real_cat = apply_filter(np.concatenate([context, real_trace]), SIGNAL_FILTER, channel_name)
-            gen_trace, real_trace = gen_cat[history_length:], real_cat[history_length:]
-            # The two contexts are the same real samples, so either filtered copy will do.
-            context = real_cat[:history_length]
+        gen_trace, real_trace, context = prepare_traces(
+            generated, real, real_full, channel_names, channel_name, history_length)
         for threshold_name, threshold in thresholds.items():
             threshold = _resolve_threshold(threshold, channel_name)
             rh = WIDTH_REL_HEIGHT
@@ -618,6 +733,110 @@ def record_slice_rows(record, channel_names, channels, thresholds, sample_rate, 
         dice_by_k[k] = dice_scores(labels_gen[lo:hi], labels_real[lo:hi])
     for row in rows:
         row["dice"], row["dice_macro"] = dice_by_k[row["k"]]
+    return rows
+
+
+def pool_peaks(trace, context, prominence, history_length, step, lo, hi, sample_rate, rel_height):
+    """(times_ms, masses) of every peak in rollout windows lo..hi inclusive, pooled.
+
+    Detection runs once over history+rollout for the same reason it does per slice (a peak's
+    prominence and width are properties of its surrounding trough, not of whatever the window
+    happens to contain), but the window grid is used only to select the pool: within it, a
+    peak keeps its continuous position. Times are milliseconds from the start of the pool, so
+    the generated and the real set share an origin, which is what makes their displacement
+    meaningful.
+    """
+    peaks = PeakProps.from_find_peaks(
+        np.concatenate([context, trace]), prominence=prominence, rel_height=rel_height)
+    positions = np.asarray(peaks.X, dtype=float) - history_length
+    keep = (positions >= lo * step) & (positions < (hi + 1) * step)
+    times_ms = (positions[keep] - lo * step) * 1000.0 / sample_rate
+    if OT_PEAK_MASS == "prominence":
+        mass = np.asarray(peaks.prominences, dtype=float)[keep]
+    elif OT_PEAK_MASS == "width":
+        mass = np.asarray(peaks.widths, dtype=float)[keep] * 1000.0 / sample_rate
+    else:
+        raise ValueError(f"OT_PEAK_MASS must be 'prominence' or 'width', got {OT_PEAK_MASS!r}")
+    return times_ms, mass
+
+
+def record_pool_rows(record, channel_names, channels, thresholds, sample_rate, expected_L):
+    """One row per (depth stratum, channel, threshold) for a single rollout.
+
+    This is the pooled counterpart of `record_slice_rows`: no per-window slicing, one optimal
+    transport solve over all the peaks of a stratum. Only records at STRAT_START_FRACTION
+    produce rows, since the strata are only defined there.
+    """
+    if not np.isclose(record["start_frac"], STRAT_START_FRACTION):
+        return []
+    history_length = int(record["history_length"])
+    step = int(record["step"])
+    n_windows = int(record["n_windows"])
+    generated = record["generated_x"]
+    real_full = record["real_x"]
+    real = real_full[:, history_length:]
+
+    L = slice_length(record)
+    if L != expected_L or step != L:
+        raise ValueError(f"pooled peaks assume non-overlapping windows of the config length; "
+                         f"got L={L}, step={step}, seq_length={expected_L}")
+    # A stratum that the rollout does not reach would be pooled from fewer windows than the
+    # same stratum on another shot, so the shots would not be comparable. STRAT_BINS is capped
+    # at the shortest test shot's budget precisely so this cannot happen; if it does, the bins
+    # and the caches disagree and silently averaging over unequal spans would hide it.
+    max_k = max(hi for _, _, hi in STRAT_BINS)
+    if n_windows <= max_k:
+        raise ValueError(
+            f"shot {record['shot_number']} has {n_windows} rollout windows but STRAT_BINS "
+            f"needs {max_k + 1}; lower the depth budget or drop the shot")
+
+    base = {
+        "shot": int(record["shot_number"]),
+        "start_idx": int(record["start_idx"]),
+        "start_frac": float(record["start_frac"]),
+        "sample_idx": int(record["sample_idx"]),
+        "slice_length": L,
+    }
+    rows = []
+    for channel_name in channels:
+        gen_trace, real_trace, context = prepare_traces(
+            generated, real, real_full, channel_names, channel_name, history_length)
+        for threshold_name, threshold in thresholds.items():
+            threshold = _resolve_threshold(threshold, channel_name)
+            for stratum, lo, hi in STRAT_BINS:
+                args = (context, threshold, history_length, step, lo, hi, sample_rate, WIDTH_REL_HEIGHT)
+                gen_t, gen_m = pool_peaks(gen_trace, *args)
+                real_t, real_m = pool_peaks(real_trace, *args)
+                n_gen, n_real = len(gen_t), len(real_t)
+                # The peaks are detected once and then priced at every lam: only the transport
+                # solve depends on lam, and it is the cheap half.
+                for lam in OT_LAMBDAS_MS:
+                    err = ot_peak_error(gen_t, gen_m, real_t, real_m, lam)
+                    rows.append({
+                        **base,
+                        "lam_ms": float(lam),
+                        "stratum": stratum, "k_lo": lo, "k_hi": hi,
+                        "pool_ms": 1000.0 * (hi - lo + 1) * L / sample_rate,
+                        "channel": channel_name,
+                        "threshold_name": threshold_name, "threshold": threshold,
+                        "ot_error": err.total,
+                        "ot_error_rel": err.relative,
+                        "ot_loc": err.loc,
+                        "ot_missed_mass": err.missed_mass,
+                        "ot_false_mass": err.false_mass,
+                        "ot_gen_mass": err.gen_mass,
+                        "ot_real_mass": err.real_mass,
+                        # Which side of the budget the error comes from: how much of the real mass
+                        # went unmatched, and how much generated mass was spurious relative to the
+                        # real total. Both are on the same denominator so they are comparable, and
+                        # together with ot_loc they account for the whole of ot_error.
+                        "ot_missed_frac": err.missed_mass / err.real_mass if err.real_mass else np.nan,
+                        "ot_false_frac": err.false_mass / err.real_mass if err.real_mass else np.nan,
+                        "pool_n_peaks_gen": n_gen,
+                        "pool_n_peaks_real": n_real,
+                        "pool_count_error": n_gen - n_real,
+                        "pool_abs_count_error": abs(n_gen - n_real),
+                    })
     return rows
 
 
@@ -728,6 +947,56 @@ def aggregate_by_stratum(slice_metrics: pd.DataFrame):
     return _add_derived(stratum)
 
 
+POOL_METRICS = [
+    "ot_error", "ot_error_rel", "ot_loc", "ot_missed_mass", "ot_false_mass",
+    "ot_gen_mass", "ot_real_mass", "ot_missed_frac", "ot_false_frac",
+    "pool_n_peaks_gen", "pool_n_peaks_real", "pool_count_error", "pool_abs_count_error",
+]
+
+
+def aggregate_pools(pool_metrics: pd.DataFrame) -> pd.DataFrame:
+    """sample -> real trajectory -> (model, stratum), the same ladder `aggregate` uses.
+
+    A stochastic model's samples are averaged into one number per real trajectory before the
+    shots are averaged, so a model does not gain from having more samples in the cache, and
+    the reported spread is the standard deviation across shots. There is no slice level here:
+    the pool *is* the unit.
+    """
+    keys = ["model", "shot", "start_idx", "stratum"] + CONDITION_KEYS + ["lam_ms"]
+    trajectory = (pool_metrics.groupby(keys, as_index=False)
+                  .agg(**{m: (m, "mean") for m in POOL_METRICS},
+                       n_samples=("sample_idx", "nunique")))
+    agg = {m: (m, "mean") for m in POOL_METRICS}
+    agg |= {f"{m}_std": (m, "std") for m in POOL_METRICS}
+    return (trajectory.groupby(["model", "stratum"] + CONDITION_KEYS + ["lam_ms"], as_index=False)
+            .agg(**agg, n_trajectories=("shot", "size"), n_samples=("n_samples", "mean")))
+
+
+def merge_pool_metrics(stratum_metrics: pd.DataFrame, pool_stratum: pd.DataFrame,
+                       lam: float = None) -> pd.DataFrame:
+    """Attach the pooled columns to the per-slice stratum frame on their shared keys.
+
+    The two frames answer different questions at the same granularity (model, stratum, channel,
+    threshold), so the table renderer can read a pooled and a per-slice column side by side
+    without knowing which is which. An outer join: a threshold present in one and not the other
+    should surface as a '--' cell, not silently drop the row that does exist.
+    """
+    keys = ["model", "stratum"] + CONDITION_KEYS
+    # The pool frame carries every lam in OT_LAMBDAS_MS; the table reports one. Selecting here
+    # rather than in the renderer keeps the merged frame at the stratum frame's granularity, so
+    # a lam column can never silently duplicate rows into the per-slice metrics.
+    lam = OT_LAMBDA_MS if lam is None else float(lam)
+    selected = pool_stratum[np.isclose(pool_stratum["lam_ms"], lam)]
+    if selected.empty:
+        raise ValueError(
+            f"lambda={lam} is not in the parquet, which holds "
+            f"{sorted(pool_stratum['lam_ms'].unique())}; add it to OT_LAMBDAS_MS and rerun "
+            "with --force")
+    shared = (set(stratum_metrics.columns) & set(selected.columns)) - set(keys)
+    return stratum_metrics.merge(
+        selected.drop(columns=sorted(shared)), on=keys, how="outer", validate="one_to_one")
+
+
 # %% ---------------------------------------------------------------------------------
 # LaTeX rendering
 # ------------------------------------------------------------------------------------
@@ -774,7 +1043,7 @@ def _rank_marks(values, metric, tol=1e-12):
 
 def _metric_key(metric: str, detection: str) -> str:
     """Column name in the aggregated frame for a metric under a detection variant."""
-    if metric in ("dice", "dice_macro"):
+    if metric in ("dice", "dice_macro") or metric in POOL_METRICS_SET:
         return metric  # detection-independent
     return metric if detection == "full_trace" else f"{metric}_cut"
 
@@ -787,9 +1056,12 @@ def _block_mask(frame, block_val, block_key="start_frac"):
 
 
 def _cell_values(start_metrics, models, start_frac, channel, metric, detection, threshold_name=None,
-                 block_key="start_frac"):
+                 block_key="start_frac", metric_thresholds=None):
     """(means, stds) over `models` for one column, or NaNs where a model has no rows."""
-    threshold_name = threshold_name or PEAK_THRESHOLD
+    # A metric may pin its own threshold (METRIC_THRESHOLD): the OT error is computed over
+    # every peak while the counts beside it are only meaningful at the large-scale threshold,
+    # so one table row legitimately mixes the two.
+    threshold_name = _threshold_of(metric, threshold_name or PEAK_THRESHOLD, metric_thresholds)
     col = _metric_key(metric, detection)
     means, stds = [], []
     for model in models:
@@ -848,7 +1120,7 @@ def _detection_sentence(detection):
 def _stacked_table(start_metrics, models, blocks, metrics, global_metrics, detection,
                    *, label, caption, environment="table", block_label, group_label,
                    font=r"\scriptsize", tabcolsep=3, threshold_name=None, block_key="start_frac",
-                   group_titles=None, block_notes=None):
+                   group_titles=None, block_notes=None, metric_thresholds=None):
     """Shared builder for the stacked tables.
 
     `blocks` is a list of (block_key, block_title, start_frac, channels_for_columns): each
@@ -909,7 +1181,7 @@ def _stacked_table(start_metrics, models, blocks, metrics, global_metrics, detec
         cells = {}
         for channel, metric in columns:
             means, stds = _cell_values(start_metrics, models, start_frac, channel, metric, detection,
-                                       threshold_name, block_key)
+                                       threshold_name, block_key, metric_thresholds)
             _, decimals, _, scale = METRIC_SPECS[metric]
             marks = _rank_marks(means, metric)
             for i, model in enumerate(models):
@@ -924,6 +1196,39 @@ def _stacked_table(start_metrics, models, blocks, metrics, global_metrics, detec
     return "\n".join(lines) + "\n"
 
 
+def _filter_sentence() -> str:
+    """Caption clause naming the pre-detection smoothing, empty when none is applied.
+
+    Only the peak columns are affected. The Dice score is computed from the surrogate mode
+    labels stored in the cache, which were produced by the classifier on the unfiltered
+    signals, so it is identical to the unfiltered table by construction.
+    """
+    resolved = resolve_filter(SIGNAL_FILTER)
+    per_channel = isinstance(SIGNAL_FILTER, dict) and "kind" not in SIGNAL_FILTER
+    if resolved is None and not per_channel:
+        return ""
+    def pretty(spec, channel=None):
+        r = resolve_filter(spec, channel)
+        if r is None:
+            return "unsmoothed"
+        if r["kind"] == "gaussian":
+            n = r["sigma"]
+            return rf"Gaussian kernel, $\sigma={n:g}$ sample{'' if n == 1 else 's'}"
+        return filter_label(spec, channel)
+
+    if per_channel:
+        applied = ", ".join(f"{c}: {pretty(SIGNAL_FILTER, c)}" for c in TABLE_CHANNELS)
+    else:
+        applied = pretty(SIGNAL_FILTER)
+    return (
+        r" Both the real and the generated trace are smoothed before peak detection "
+        rf"({applied} at the 10\,kHz sample rate), so the peak columns count features "
+        r"above the sensor noise rather than the noise itself; the smoothing is identical on "
+        r"both sides. $\mathcal{D}$ is unaffected: it is computed from the surrogate mode "
+        r"labels of the unfiltered signals."
+    )
+
+
 def render_latex(start_metrics: pd.DataFrame, label="tab:rollout_results", detection=None,
                  threshold_name=None) -> str:
     """Main table: one stacked block per start fraction, one column group per diagnostic."""
@@ -933,8 +1238,8 @@ def render_latex(start_metrics: pd.DataFrame, label="tab:rollout_results", detec
     _check_available(start_metrics, models, START_FRACTIONS, TABLE_CHANNELS, threshold_name)
     threshold_sentence = (
         "" if threshold_name == PEAK_THRESHOLD else
-        rf" Peaks are detected at the {threshold_name!r} prominence threshold "
-        rf"(0.01 rather than the default 0.001), so counts are not comparable to the other tables."
+        rf" Peaks are detected at the {threshold_name!r} prominence threshold rather than the "
+        r"default, so counts are not comparable to the other tables."
     )
     caption = (
         r"Autoregressive rollout results. Each entry is the mean over test shots of the "
@@ -945,7 +1250,7 @@ def render_latex(start_metrics: pd.DataFrame, label="tab:rollout_results", detec
         r"$\mathcal{D}$ is the micro-averaged Dice score between the generated and real "
         r"surrogate mode sequences. Lower is better except for $\mathcal{D}$. Best in bold, "
         r"second best underlined, within each start fraction. " + _detection_sentence(detection)
-        + threshold_sentence
+        + threshold_sentence + _filter_sentence()
     )
     blocks = [
         (f, rf"start fraction $f={f:g}$", f, list(TABLE_CHANNELS))
@@ -958,43 +1263,122 @@ def render_latex(start_metrics: pd.DataFrame, label="tab:rollout_results", detec
     )
 
 
-def _threshold_annotations(slice_metrics, channels, threshold_name):
-    """Channel -> "PD {\tiny ...}" header decorated with the prominence actually used.
+def _count_sentence(metrics):
+    """Caption clause defining the peak-count column, matching whichever variant is shown."""
+    if "pool_count_error" in metrics:
+        return (
+            r"$\Delta N$ is the signed peak-count error over the pool, so $\Delta N = -N$ "
+            r"identifies a model that generated no peaks of that scale at all, and "
+            r"$\mathcal{D}$ the micro-averaged Dice score between the generated and real "
+            r"surrogate mode sequences; $\Delta N$ is ranked on its absolute value. "
+        )
+    return (
+        r"$|\Delta N|$ is the absolute peak-count error over the pool, and $\mathcal{D}$ the "
+        r"micro-averaged Dice score between the generated and real surrogate mode sequences. "
+    )
 
-    Read back from the parquet rather than the config constants so the annotation cannot drift
-    from the number the rows were computed with.
+
+def _threshold_of(metric, default_threshold, overrides=None):
+    """The threshold name one column is computed at.
+
+    `overrides` replaces METRIC_THRESHOLD wholesale for a table variant, so the same renderer
+    can produce the mixed-threshold table and the single-threshold one without either of them
+    reading a mapping the other set.
     """
+    mapping = METRIC_THRESHOLD if overrides is None else overrides
+    return mapping.get(metric, default_threshold)
+
+
+def _threshold_order(metrics, default_threshold, overrides=None):
+    """The distinct threshold names the block's columns use, in column order."""
+    names = []
+    for metric in metrics:
+        name = _threshold_of(metric, default_threshold, overrides)
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def _threshold_sentence(metrics, default_threshold, overrides=None):
+    """Caption clause explaining the `pi >= a/b` annotation over each column group.
+
+    The two numbers are not two variants of one measurement: they are the detection thresholds
+    of two different columns, and a reader who takes the header as a single setting will
+    misread the table. Which is which follows the column order, so it is derived here rather
+    than written out, and stays correct if STRAT_TABLE_METRICS is reordered.
+    """
+    names = _threshold_order(metrics, default_threshold, overrides)
+    if names == ["large_scale"]:
+        # The single-threshold variant: every column sees the same peaks, so the header carries
+        # one number per channel and the only thing to explain is what that number selects.
+        return (
+            r"Every column is computed on the same peaks: those above the per-channel "
+            r"	exttt{find\_peaks} prominence given under each column group, on the "
+            r"$[0,1]$-normalised signal, chosen to admit \acrshort{ELM}-scale events and reject "
+            r"sensor noise. The two channels take different values because their normalised "
+            r"amplitudes differ: \acrshort{ELM} bursts on \acrshort{PD} are far taller than the slower "
+            r"\acrshort{DML} deflections. "
+        )
+    if len(names) != 2 or names != ["all_peaks", "large_scale"]:
+        # Any other combination would need its own wording; say nothing rather than something
+        # false, and let the header stand on its own.
+        return ""
+    return (
+        r"Each column group is headed by the two \texttt{find\_peaks} prominence thresholds its "
+        r"columns use, on the $[0,1]$-normalised signal, in column order as "
+        r"$\pi{\geq}\pi_{\mathrm{OT}}/\pi_{N}$. The transport cost is computed over every peak "
+        r"down to $\pi_{\mathrm{OT}}$, which sits at sensor-noise scale: including the noise "
+        r"peaks is what lets a model be charged for the spurious mass it emits instead of "
+        r"scoring well for emitting a lot of it. The count uses only the peaks above the "
+        r"\acrshort{ELM}-scale $\pi_{N}$, where a count of peaks is a count of events rather than of "
+        r"noise excursions. The two channels take different values because their normalised "
+        r"amplitudes differ: \acrshort{ELM} bursts on \acrshort{PD} are far taller than the slower \acrshort{DML} "
+        r"deflections."
+    )
+
+
+def _metric_threshold_annotations(slice_metrics, channels, metrics, default_threshold,
+                                  overrides=None):
+    """Channel -> header decorated with every prominence the block's columns actually use.
+
+    A block whose columns mix thresholds (the OT error over all peaks, the count at the
+    large-scale threshold) cannot carry a single number in its header, so both are listed in
+    the order the METRIC_THRESHOLD names them. Values are read back from the parquet rather
+    than from the config constants so the annotation cannot drift from what was computed.
+    """
+    names = _threshold_order(metrics, default_threshold, overrides)
     out = {}
-    d = slice_metrics[slice_metrics["threshold_name"] == threshold_name]
     for channel in channels:
-        vals = d[d["channel"] == channel]["threshold"].unique()
-        if len(vals) != 1:
-            out[channel] = channel
-            continue
-        out[channel] = rf"{channel}\,{{\tiny$\pi{{\geq}}{float(vals[0]):g}$}}"
+        parts = []
+        for name in names:
+            vals = slice_metrics[(slice_metrics["threshold_name"] == name)
+                                 & (slice_metrics["channel"] == channel)]["threshold"].unique()
+            if len(vals) == 1:
+                parts.append(f"{float(vals[0]):g}")
+        out[channel] = rf"{channel}\,{{\tiny$\pi{{\geq}}{'/'.join(parts)}$}}" if parts else channel
     return out
 
 
-def _stratum_notes(stratum_metrics, channels, threshold_name, detection):
-    """Stratum title suffix carrying the real peak count per channel.
+def _pool_stratum_notes(pool_stratum, channels, overrides=None):
+    """Stratum title suffix carrying the real peak count of the pool, per channel.
 
-    The real count is a property of the measured trace, so it is identical for every model and
-    belongs in the block header rather than in a column repeated down the rows. It is the
-    reference the count errors above it are relative to, and it makes the difficulty gradient
-    between the strata visible instead of implicit.
+    A property of the measured trace, so it is identical for every model and belongs in the
+    block header rather than in a column repeated down the rows. It is the reference the count
+    errors above it are relative to, and it makes the difficulty gradient between the strata
+    visible instead of implicit. Counted at the same threshold the count columns use.
     """
-    col = _metric_key("n_peaks_real", detection)
     notes = {}
     for label, lo, hi in STRAT_BINS:
         parts = []
         for channel in channels:
-            sel = stratum_metrics[(stratum_metrics["stratum"] == label)
-                                  & (stratum_metrics["channel"] == channel)
-                                  & (stratum_metrics["threshold_name"] == threshold_name)]
+            name = _threshold_of("pool_n_peaks_real", PEAK_THRESHOLD, overrides)
+            sel = pool_stratum[(pool_stratum["stratum"] == label)
+                               & (pool_stratum["channel"] == channel)
+                               & (pool_stratum["threshold_name"] == name)]
             if len(sel):
-                parts.append(rf"{channel} ${float(sel[col].mean()):.1f}$")
+                parts.append(rf"{channel} ${float(sel['pool_n_peaks_real'].mean()):.1f}$")
         title = _stratum_title(label, lo, hi)
-        notes[title] = (r", real peaks/window: " + ", ".join(parts)) if parts else ""
+        notes[title] = (r", real peaks/pool: " + ", ".join(parts)) if parts else ""
     return notes
 
 
@@ -1005,27 +1389,43 @@ def _stratum_title(label, lo, hi):
 def render_stratified_latex(stratum_metrics: pd.DataFrame, slice_metrics: pd.DataFrame,
                             label="tab:rollout_depth", detection=None, threshold_name=None,
                             metrics=None, models=None, environment="table",
-                            font=r"\scriptsize", tabcolsep=3) -> str:
-    """Main depth table: one stacked block per depth stratum at a fixed start fraction."""
+                            font=r"\scriptsize", tabcolsep=3, lam=None,
+                            metric_thresholds=None) -> str:
+    """Main depth table: one stacked block per depth stratum at a fixed start fraction.
+
+    `stratum_metrics` must already carry the pooled columns for `lam` (see `merge_pool_metrics`);
+    `lam` only names the value in the caption, it does not select anything here.
+    """
     detection = detection or PEAK_DETECTION
     threshold_name = threshold_name or PEAK_THRESHOLD
-    metrics = list(metrics or TABLE_METRICS)
+    lam = OT_LAMBDA_MS if lam is None else float(lam)
+    metrics = list(metrics or STRAT_TABLE_METRICS)
     models = list(models or MODELS)
     channels = list(TABLE_CHANNELS)
     n_windows = STRAT_BINS[-1][2] + 1
+    pool_windows = STRAT_BINS[0][2] - STRAT_BINS[0][1] + 1
     caption = (
         r"Autoregressive rollout results by rollout depth. All rollouts start from the same "
         rf"point in the discharge ($f={STRAT_START_FRACTION:g}$) and are split into equal "
         rf"halves of the first {n_windows} generated windows, so the two blocks differ only in "
         r"how long the model has been feeding on its own output and not in where in the shot "
         r"they sit, which is what varying the start point would confound them with. "
-        r"$|\Delta N|$ is the absolute peak-count error per window and $W_1^{\pi}$, $W_1^{w}$ "
-        r"are Wasserstein-1 distances between the generated and real peak prominence and width "
-        r"distributions, widths in ms; $\mathcal{D}$ is the micro-averaged Dice score between "
-        r"the generated and real surrogate mode sequences. The per-channel peak prominence is "
-        r"given under each column group and the real peak count per window beside each block "
-        r"title, since the later stratum carries denser ELMs. Lower is better except for "
-        r"$\mathcal{D}$. Best in bold, second best underlined, within each block."
+        rf"Peaks are pooled over all {pool_windows} generated windows of a half rather than cut "
+        r"at the generation-window boundaries, and each peak enters as its prominence placed at "
+        r"its time within the pool. $E_{\mathrm{OT}}$ is the unbalanced optimal-transport cost "
+        r"between the generated and the real peaks: each peak enters with its prominence as "
+        r"mass; matching costs mass times time separation, and mass left unmatched on either "
+        rf"side costs $\lambda={lam:g}$\,ms per unit, so peaks pair only when they are within "
+        r"$2\lambda$, and a missed \acrshort{ELM} is charged $\lambda$ times its full prominence. "
+        r"$E_{0}$ normalises this by the cost of predicting no peaks at all, so "
+        r"$E_{\mathrm{OT}}/E_{0}=1$ is exactly as good as an empty trace and anything above it "
+        r"is worse. "
+        + _count_sentence(metrics) +
+        _threshold_sentence(metrics, threshold_name, metric_thresholds) +
+        r" The real peak count per pool is given beside each block title, since the later "
+        r"stratum carries denser \acrshort{ELM}s. Lower is better except for $\mathcal{D}$. Best in "
+        r"bold, second best underlined, within each block."
+        + _filter_sentence()
     )
     blocks = [(lab, _stratum_title(lab, lo, hi), lab, list(channels)) for lab, lo, hi in STRAT_BINS]
     return _stacked_table(
@@ -1033,8 +1433,10 @@ def render_stratified_latex(stratum_metrics: pd.DataFrame, slice_metrics: pd.Dat
         label=label, caption=caption, environment=environment, block_label="stratum",
         group_label="Modes", font=font, tabcolsep=tabcolsep, threshold_name=threshold_name,
         block_key="stratum",
-        group_titles=_threshold_annotations(slice_metrics, channels, threshold_name),
-        block_notes=_stratum_notes(stratum_metrics, channels, threshold_name, detection),
+        metric_thresholds=metric_thresholds,
+        group_titles=_metric_threshold_annotations(slice_metrics, channels, metrics,
+                                                   threshold_name, metric_thresholds),
+        block_notes=_pool_stratum_notes(stratum_metrics, channels, metric_thresholds),
     )
 
 
@@ -1064,7 +1466,7 @@ def render_appendix_latex(start_metrics: pd.DataFrame, channel_names,
         r"and does not depend on the diagnostic, so it repeats down the blocks. Entries are "
         r"means over test shots with the subscript giving the standard deviation across "
         r"shots; $\hat r$ and $r$ are descriptive and are not ranked, $\Delta N$ is ranked on "
-        r"its magnitude. " + _detection_sentence(detection)
+        r"its magnitude. " + _detection_sentence(detection) + _filter_sentence()
     )
     # One column group per block, so the group header carries the diagnostic name and the
     # block header repeats it for readers scanning the row labels.
@@ -1231,7 +1633,7 @@ def plot_depth_curves(depth_metrics: pd.DataFrame, slice_metrics, seq_length, pd
 # ------------------------------------------------------------------------------------
 
 
-def compute_slice_metrics(args) -> tuple[pd.DataFrame, pd.DataFrame]:
+def compute_slice_metrics(args) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     missing = [f"{n} ({s})" for n, s in all_models().items() if not (get_cache_dir() / f"{s}.h5").exists()]
     if missing:
         raise FileNotFoundError(
@@ -1258,7 +1660,7 @@ def compute_slice_metrics(args) -> tuple[pd.DataFrame, pd.DataFrame]:
     CHANNEL_ORDER = list(channel_names)
     print(f"channels={channels}  thresholds={thresholds}  sample_rate={sample_rate}")
 
-    frames, audit_rows = [], []
+    frames, pool_frames, audit_rows = [], [], []
     for name, cache_stem in all_models().items():
         cache = RolloutHDFCache(cache_stem, mode="r")
         cfg = cache_config(cache)
@@ -1291,20 +1693,26 @@ def compute_slice_metrics(args) -> tuple[pd.DataFrame, pd.DataFrame]:
             records = [r for r in records
                        if any(np.isclose(r["start_frac"], f)
                               for f in slice_signature()["start_fractions"])]
-            rows = []
+            rows, pool_rows = [], []
             for record in records:
                 rows.extend(record_slice_rows(
                     record, channel_names, channels, thresholds, sample_rate, seq_length
                 ))
-            if rows:
-                frame = pd.DataFrame(rows)
-                frame.insert(0, "model", name)
-                frames.append(frame)
+                # Pooled rows exist only at STRAT_START_FRACTION; the call is a no-op elsewhere.
+                pool_rows.extend(record_pool_rows(
+                    record, channel_names, channels, thresholds, sample_rate, seq_length
+                ))
+            for target, batch in ((frames, rows), (pool_frames, pool_rows)):
+                if batch:
+                    frame = pd.DataFrame(batch)
+                    frame.insert(0, "model", name)
+                    target.append(frame)
             if i % 10 == 0 or i == len(shots):
                 print(f"  {i}/{len(shots)} shots")
 
     slice_metrics = pd.concat(frames, ignore_index=True)
-    return slice_metrics, pd.DataFrame(audit_rows)
+    pool_metrics = pd.concat(pool_frames, ignore_index=True)
+    return slice_metrics, pool_metrics, pd.DataFrame(audit_rows)
 
 
 def main():
@@ -1324,6 +1732,10 @@ def main():
                         help=f"override PEAK_THRESHOLD (default {PEAK_THRESHOLD}) for the tables, "
                              "the report and the depth plots; non-default values write to "
                              "suffixed filenames instead of overwriting the main outputs")
+    parser.add_argument("--models", choices=["all", "main"], default="all",
+                        help="'main' drops the appendix-only ablation caches, which are the "
+                             "slowest to read and are only needed by the appendix tables; the "
+                             "main and depth tables are unaffected")
     parser.add_argument("--filter", default=None,
                         help="pre-detection smoothing, overriding SIGNAL_FILTER: 'none', "
                              "'gaussian' (sigma=3 samples), 'gaussian:1.5', 'median:5'. Peaks "
@@ -1332,7 +1744,10 @@ def main():
                              "to suffixed table filenames")
     args = parser.parse_args()
 
-    global SIGNAL_FILTER, SLICE_PARQUET, SLICE_META
+    global SIGNAL_FILTER, SLICE_PARQUET, SLICE_META, POOL_PARQUET, INCLUDE_APPENDIX_MODELS
+    INCLUDE_APPENDIX_MODELS = args.models == "all"
+    if not INCLUDE_APPENDIX_MODELS:
+        print(f"--models main: skipping {list(APPENDIX_EXTRA_MODELS)}")
     if args.filter is not None:
         kind, _, param = args.filter.partition(":")
         SIGNAL_FILTER = {"kind": kind} if kind != "none" else None
@@ -1346,12 +1761,14 @@ def main():
     if filter_tag:
         SLICE_PARQUET = OUTPUT_DIR / f"rollout_slice_metrics{filter_tag}.parquet"
         SLICE_META = SLICE_PARQUET.with_suffix(".meta.json")
+        POOL_PARQUET = OUTPUT_DIR / f"rollout_pool_metrics{filter_tag}.parquet"
         print(f"signal filter: {filter_label(SIGNAL_FILTER)} -> {SLICE_PARQUET.name}")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     signature = slice_signature()
     audit, reuse = None, False
-    if SLICE_PARQUET.exists() and SLICE_META.exists() and not args.force and not args.shots:
+    if (SLICE_PARQUET.exists() and POOL_PARQUET.exists() and SLICE_META.exists()
+            and not args.force and not args.shots):
         cached = json.loads(SLICE_META.read_text())
         # Compare the signature after a JSON round-trip, not as live Python. Tuples in the
         # signature (the model pairs, the threshold overrides) come back as lists, so a direct
@@ -1365,11 +1782,13 @@ def main():
         else:
             print(f"reusing {SLICE_PARQUET} (pass --force to recompute)")
             slice_metrics = pd.read_parquet(SLICE_PARQUET)
+            pool_metrics = pd.read_parquet(POOL_PARQUET)
             reuse = True
     if not reuse:
-        slice_metrics, audit = compute_slice_metrics(args)
+        slice_metrics, pool_metrics, audit = compute_slice_metrics(args)
         if not args.shots:
             slice_metrics.to_parquet(SLICE_PARQUET)
+            pool_metrics.to_parquet(POOL_PARQUET)
             SLICE_META.write_text(json.dumps(signature, indent=2))
 
     if audit is not None:
@@ -1409,20 +1828,40 @@ def main():
 
     # Depth-stratified tables: main (absolute count error) and appendix (relative, plus the
     # ablation rows), both at the fixed STRAT_START_FRACTION.
-    stratum = aggregate_by_stratum(slice_metrics)
-    stratum.to_csv(OUTPUT_DIR / f"rollout_stratum_metrics{suffix}.csv", index=False)
-    strat_tex = render_stratified_latex(
-        stratum, slice_metrics, label=f"{label}_depth", detection=detection,
-        threshold_name=threshold_name)
-    strat_path = OUTPUT_DIR / f"rollout_depth_table{suffix}.tex"
-    strat_path.write_text(strat_tex)
-    strat_appendix = render_stratified_latex(
-        stratum, slice_metrics, label=f"{label}_depth_appendix", detection=detection,
-        threshold_name=threshold_name,
-        metrics=["abs_count_error", "rel_count_error", "prominence_w1", "width_w1_ms"],
-        models=list(all_models()), font=r"\footnotesize", tabcolsep=4)
-    strat_appendix_path = OUTPUT_DIR / f"rollout_depth_appendix_table{suffix}.tex"
-    strat_appendix_path.write_text(strat_appendix)
+    stratum_slices = aggregate_by_stratum(slice_metrics)
+    pool_stratum = aggregate_pools(pool_metrics)
+    pool_stratum.to_csv(OUTPUT_DIR / f"rollout_pool_metrics{suffix}.csv", index=False)
+
+    # One depth table per lambda in the parquet. The reported lambda keeps the unsuffixed
+    # filename and label so the paper's \input path never moves; every other lambda is a
+    # sensitivity variant written beside it. All of them read the same stored peaks, so this
+    # costs nothing beyond the rendering.
+    lambdas = sorted(pool_metrics["lam_ms"].unique(), key=lambda x: (not np.isclose(x, OT_LAMBDA_MS), x))
+    strat_paths = []
+    for lam in lambdas:
+        lam_tag = "" if np.isclose(lam, OT_LAMBDA_MS) else f"_lam{lam:g}"
+        stratum = merge_pool_metrics(stratum_slices, pool_stratum, lam=lam)
+        stratum.to_csv(OUTPUT_DIR / f"rollout_stratum_metrics{suffix}{lam_tag}.csv", index=False)
+        for var_tag, overrides in STRAT_TABLE_VARIANTS:
+            tag = f"{suffix}{var_tag}{lam_tag}"
+            lab = f"{label}_depth{var_tag}{lam_tag}"
+            strat_tex = render_stratified_latex(
+                stratum, slice_metrics, label=lab, detection=detection,
+                threshold_name=threshold_name, lam=lam, metric_thresholds=overrides)
+            strat_path = OUTPUT_DIR / f"rollout_depth_table{tag}.tex"
+            strat_path.write_text(strat_tex)
+            strat_paths.append(strat_path)
+            strat_appendix = render_stratified_latex(
+                stratum, slice_metrics, label=f"{lab}_appendix", detection=detection,
+                threshold_name=threshold_name, lam=lam, metric_thresholds=overrides,
+                metrics=["ot_error", "ot_error_rel", "ot_missed_frac", "ot_false_frac",
+                         "pool_count_error", "pool_abs_count_error"],
+                models=list(all_models()), font=r"\footnotesize", tabcolsep=4)
+            strat_appendix_path = OUTPUT_DIR / f"rollout_depth_appendix_table{tag}.tex"
+            strat_appendix_path.write_text(strat_appendix)
+            strat_paths.append(strat_appendix_path)
+    # The reported lambda is first in `lambdas`, so this is the frame the report below prints.
+    stratum = merge_pool_metrics(stratum_slices, pool_stratum, lam=OT_LAMBDA_MS)
 
     depth = aggregate_by_depth(slice_metrics)
     depth.to_csv(OUTPUT_DIR / f"rollout_depth_metrics{suffix}.csv", index=False)
@@ -1442,9 +1881,20 @@ def main():
     ] + ["dice", "n_trajectories"]
     with pd.option_context("display.width", 220, "display.max_rows", 400):
         print(start[show].sort_values(["start_frac", "channel", "model"]).round(4).to_string(index=False))
+    print(f"\n=== pooled OT report (reported lambda={OT_LAMBDA_MS:g} ms, "
+          f"computed {OT_LAMBDAS_MS}, mass={OT_PEAK_MASS}) ===")
+    pool_show = pool_stratum[pool_stratum["channel"].isin(TABLE_CHANNELS)]
+    cols = ["model", "stratum", "channel", "threshold_name", "lam_ms", "ot_error", "ot_error_rel",
+            "ot_loc", "ot_missed_frac", "ot_false_frac", "pool_n_peaks_gen",
+            "pool_n_peaks_real", "pool_abs_count_error", "n_trajectories"]
+    with pd.option_context("display.width", 240, "display.max_rows", 600):
+        print(pool_show[cols].sort_values(["lam_ms", "channel", "threshold_name", "stratum", "model"])
+              .round(4).to_string(index=False))
+
     print(f"\nwrote {tex_path}\nwrote {appendix_path}")
-    print(f"wrote {strat_path}\nwrote {strat_appendix_path}")
-    print(strat_tex)
+    for path in strat_paths:
+        print(f"wrote {path}")
+    print((OUTPUT_DIR / f"rollout_depth_table{suffix}.tex").read_text())
 
 
 if __name__ == "__main__":
