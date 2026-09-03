@@ -11,8 +11,9 @@ Run:  PYTHONPATH=. python eval_notebooks/elm_interval_stats.py
 import numpy as np
 from scipy.signal import find_peaks
 
-from eval_notebooks.rollout_tables import REFERENCE_MODEL, MODELS, cache_config, build_data_module
+from eval_notebooks.rollout_tables import REFERENCE_MODEL, MODELS
 from src.hdf_cache import RolloutHDFCache
+from src.rollout_cache import build_data_module, cache_config
 
 PD_PROMINENCE = 0.1  # bumped from 0.05 to check sensitivity to ripple-scale peaks
 
