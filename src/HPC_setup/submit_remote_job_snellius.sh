@@ -6,7 +6,6 @@ REMOTE_USER="mtresoor"
 REMOTE_HOST="snellius.surf.nl"
 REPO_PATH="~/fusion-plasma-simulation"
 JOB_SCRIPT="run_snellius_job.sh"
-GIT_BRANCH="main"  # Branch to pull from
 REMOTE_SLURM_DIR="$REMOTE_USER@$REMOTE_HOST:/home/$REMOTE_USER/fusion-plasma-simulation/output/slurms"
 LOCAL_HPC_PATH="output/snellius/"
 QUEUE_FORMAT="--format=\"%.15i %.80j %.8T %.5M %.5D %P %R\""
@@ -75,13 +74,22 @@ fi
 git push origin "$JOB_NAME"
 SBATCH_JOB_NAME="$JOB_NAME"
 
-# SSH into the main node, pull latest code, submit SLURM job, and inspect queue
+# SSH into the main node, check out the tag just pushed above, and submit.
+#
+# Checking out the tag itself here matters: sbatch reads #SBATCH directives (partition,
+# time, gpus, ...) from JOB_SCRIPT as it sits on disk at submission time, not from whatever
+# commit the job later checks out at runtime. The old flow reset to a hardcoded branch
+# before calling sbatch, so any #SBATCH edit made on a feature branch silently never took
+# effect: SLURM would submit with that branch's stale header, then the job would
+# git-checkout the tag internally too late for sbatch to have seen it. This is why every
+# job in the Jul 29 grid submission got capped at 13:20h despite run_snellius_job.sh being
+# bumped to 24h on this branch. Checking out the tag itself makes sbatch and the job body
+# always agree on which commit's header applies.
 ssh -T -o LogLevel=ERROR $REMOTE_USER@$REMOTE_HOST << EOF
     cd $REPO_PATH
-    git fetch origin
-    git checkout $GIT_BRANCH  # Switch to the main branch, incase we are detached
-    git reset --hard origin/$GIT_BRANCH  # Reset local branch to match remote
-    git pull origin $GIT_BRANCH
+    git fetch origin --tags
+    git reset --hard  # clear any leftover local state before switching
+    git checkout "tags/$JOB_NAME"
     sbatch --job-name=$SBATCH_JOB_NAME $JOB_SCRIPT $JOB_NAME $REEVAL_MODE
     echo "Submitted job '$JOB_NAME'. Checking queue status:"
     squeue $QUEUE_FORMAT

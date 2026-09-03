@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 # TODO: define generalized includes, instead of just looking for model with string. Include data too.
 # TODO: Need to decide how to specify data and model in the config structure.
 
-PROJECT = "flowtoy"
-ENTITY = "tresoor"
-MAIN_CONFIG_FILE = "fm_toy"
+PROJECT = "plasmaflow"
+ENTITY = "deep-learning-course-team"
+MAIN_CONFIG_FILE = "plasmaflow"
 
 
 def print_types(value, level=0):
@@ -43,7 +43,20 @@ def convert_lists(value, level=0):
 
 
 def load_config_from_file(name=MAIN_CONFIG_FILE, as_omega=False) -> dict | omegaconf.DictConfig:
-    """Load configuration from (hierarchical) yaml files and CLI."""
+    """Load and merge configuration from a YAML file, optional model sub-config, and CLI overrides.
+
+    Loads configs/{name}.yaml, then if model key is a string path it loads and merges
+    that model YAML. CLI arguments (key=value or key.sub=value form) are merged last
+    and override file values. update_model_input_channels() auto-syncs channel counts
+    from data.cols into model.params.model_params.
+
+    Args:
+        name: Base name of the config file (without path or .yaml extension).
+        as_omega: If True, return the raw OmegaConf DictConfig instead of a plain dict.
+
+    Returns:
+        dict or OmegaConf.DictConfig: The merged configuration.
+    """
     main_conf = OmegaConf.load(f'configs/{name}.yaml')
     if 'model' in main_conf and type(main_conf.model) == str:
         model_conf = OmegaConf.load(main_conf.model)
@@ -60,6 +73,19 @@ def load_config_from_file(name=MAIN_CONFIG_FILE, as_omega=False) -> dict | omega
     return dict(conf)
 
 def get_current_config(wandb_only=False):
+    """Return the current run configuration as an OmegaConf DictConfig.
+
+    After wandb.init() has been called, wandb is the canonical config source
+    (it merges file config, CLI overrides, and any sweep parameters).
+    Before wandb.init(), falls back to loading the current yaml file.
+
+    Args:
+        wandb_only: If True, raise RuntimeError if wandb.config is unavailable
+            rather than falling back to the yaml file. Use True after wandb.init().
+
+    Returns:
+        OmegaConf.DictConfig: The current configuration with list interpolation applied.
+    """
     if not wandb.config:
         raise RuntimeError("wandb.config was not initialized yet.")
     try:
@@ -88,13 +114,17 @@ def pretty_config(conf):
 def update_model_input_channels(conf):
     """Force the model configuration to have the correct input channels, based on the data configuration.
 
-    This is a hack to avoid having to match the input channels in the config file manually.
+    Keeps model architecture params in sync with data column config so they don't
+    have to be set manually.
     """
     if 'data' in conf and 'cols' in conf.data:
         if 'x' in conf.data.cols:
             conf.model.params.model_params.input_channels = len(conf.data.cols.x)
         if 'c' in conf.data.cols:
             conf.model.params.model_params.c_channels = len(conf.data.cols.c)
+    if 'data' in conf and 'seq_length' in conf.data:
+        # Used by the Brownian prior to set dt = 1/seq_length (horizon T=1).
+        conf.model.params.seq_length = conf.data.seq_length
 
 
 def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.public.Run | None:
@@ -121,7 +151,7 @@ def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.
                 logger.warning("Run ID: %s  Date: %s", r.id, r.created_at)
             raise ValueError(
                 f"Multiple runs found with name '{find_run}'. Please specify a unique run ID or name."
-            )
+            ) from e
         else:
             logger.error("No runs found with name %s", find_run)
             return
@@ -134,6 +164,18 @@ def find_wandb_run(find_run: str, project=PROJECT, entity=ENTITY) -> wandb.apis.
 
 
 def find_and_download_model(run, prefer_alias='latest'):
+    """Download a model artifact from a wandb run and return the local checkpoint path.
+
+    Prefers the artifact with the given alias. Falls back to the single artifact
+    if only one exists, or the first artifact if none match the alias.
+
+    Args:
+        run: wandb Run object with logged model artifacts.
+        prefer_alias: Alias to prefer ('best' or 'latest').
+
+    Returns:
+        Path: Local path to the downloaded model.ckpt file.
+    """
     artifacts = [a for a in run.logged_artifacts() if a.type == "model"]
     selected_artifact = None
     for art in artifacts:
@@ -160,6 +202,20 @@ def find_and_download_model(run, prefer_alias='latest'):
 
 
 def consolidate_base_reeval_configs(reeval_config_name = 'reeval', project=PROJECT):
+    """Load and merge configs for a re-evaluation run.
+
+    Loads configs/reeval.yaml (plus any CLI overrides), finds the base run in wandb,
+    downloads its config, and merges reeval config on top of the base config.
+    The reeval config takes precedence, so any key in reeval.yaml overrides the
+    base run's stored value (useful for changing batch_size, window_set, etc.).
+
+    Args:
+        reeval_config_name: Name of the reeval config file (without .yaml).
+        project: wandb project name to search for the base run.
+
+    Returns:
+        Tuple of (base_run, merged_config_dict).
+    """
     logger.info("Re-evaluating run, loading reeval file.")
     reeval_config = load_config_from_file(reeval_config_name, True) # includes CLI arguments
     logger.info("Finding base run.")

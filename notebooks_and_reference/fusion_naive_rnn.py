@@ -1,3 +1,8 @@
+"""Early RNN/causal-conv autoregressive baseline on TCV parquet shots, adapted from Tomczak's Deep Generative Models code. Prototype/legacy, unmaintained.
+
+Inputs/Outputs: reads ../data/LHD_labeled_TCV/TCV_DATA*.parquet and TCV_*_apau_labeled.csv; writes model checkpoints and PDFs under results_fusion/.
+Handy: ParquetDataset (fixed-window shot loader) and CausalConv1d are reusable patterns, though largely superseded by src/data_loaders.py.
+"""
 # %% Orignal by Jakub Tomczak for the book Deep Generative Models
 import os
 import glob

@@ -1,3 +1,13 @@
+"""Qualitative multi-model sample comparison panels (ground truth vs N generated samples per model), with history context and control signals overlaid.
+
+Scientific output: thesis qualitative generative-quality figures (the "sequence vs channel" model comparison panels).
+Inputs:  config via load_config_from_file('fm_toy', as_omega=True); FusionShotDataModule test dataframe (TEST_DF); HDF5 caches in output/test_cache/ read through src.hdf_cache.TestStepHDFCache(model_name).quick_window(shot, t, TEST_DF); WINDOWS = C.window_set; hardcoded model-name lists (SEQ_VS_CHANNEL pairs, AllCov variants).
+Outputs: output/pdfplots/seqVSchannel/multimodel_{WxH}/kwali_{SUBNAME}_{shot}_{t}.pdf across the 10 aspect ratios exported per window; inline display.
+Usage:   every referenced model cache must exist locally; iterate the WINDOWS loop; SUBNAME is reassigned between cells ("seq_vs_channel" then "new" then "allC"); edit the model-name lists to match available caches.
+Limits:  fragile; hardcoded 'fm_toy' config, cache names, and channel naming; SUBNAME reused across cells so output subfolders differ per cell run.
+Handy:   export_pdf() multi-aspect-ratio PDF exporter and plot_one_window_many_samples() grid builder are the reusable pieces; candidates for src/plotters/.
+History: created Jun 17 2025 ("Plot multiple models together, one window"), 4 same-day iterations, final polish Oct 11 2025 ("Final table and plot scripts").
+"""
 #%% Imports
 import math
 from typing import Type

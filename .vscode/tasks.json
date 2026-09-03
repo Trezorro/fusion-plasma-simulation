@@ -53,13 +53,25 @@
       {
         "label": "Sync traces",
         "type": "shell",
-        "command": "rsync -avzv mtresoor@snellius.surf.nl:/home/mtresoor/fusion-plasma-simulation/output/traces output/snellius/traces",
+        "command": "rsync -avzvh mtresoor@snellius.surf.nl:/home/mtresoor/fusion-plasma-simulation/output/traces output/snellius/traces",
         "problemMatcher": []
       },
       {
         "label": "Sync pdf plots",
         "type": "shell",
-        "command": "rsync -avzv mtresoor@snellius.surf.nl:/home/mtresoor/fusion-plasma-simulation/output/pdfplots/ output/pdfplots/",
+        "command": "rsync -avzvh mtresoor@snellius.surf.nl:/home/mtresoor/fusion-plasma-simulation/output/pdfplots/ output/pdfplots/",
+        "problemMatcher": []
+      },
+      {
+        "label": "Sync rollout caches",
+        "type": "shell",
+        "command": "rsync -avzh --progress --ignore-existing --include='*_rollout.h5' --include='*_rollout.json' --include='*/' --exclude='*' snellius:/scratch-shared/mtresoor/final_cache/ output/test_cache/",
+        "problemMatcher": []
+      },
+      {
+        "label": "Sync html plots",
+        "type": "shell",
+        "command": "rsync -avzvh  --progress --ignore-existing mtresoor@snellius.surf.nl:/home/mtresoor/fusion-plasma-simulation/output/htmlplots/ output/htmlplots/ --include=\"rollouts.html\" --include=\"*/\" --exclude=\"*\"",
         "problemMatcher": []
       }
     ],

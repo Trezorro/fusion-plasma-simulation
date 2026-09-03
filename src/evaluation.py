@@ -2,11 +2,13 @@
 #%%
 import logging
 import time
+from pathlib import Path
 from typing import Any, Callable, Mapping
 from venv import logger
 
 import lightning as L
 import plotly.graph_objects as go
+import plotly.io as pio
 import torch
 from matplotlib import pyplot as plt
 from torch.utils import data
@@ -31,6 +33,15 @@ logger.setLevel(logging.DEBUG)
 
 
 def prune_online_checkpoints(run):
+    """Deletes wandb model artifacts that do not have a 'best' or 'latest' alias.
+
+    Wandb logs every checkpoint as an artifact (log_model="all" in WandbLogger).
+    This function keeps only the meaningful checkpoints and removes the rest to
+    save cloud storage. Called at the end of each validation epoch and at run end.
+
+    Args:
+        run: Active wandb run object.
+    """
     api = wandb.Api()
     artifacts = api.run(run.path).logged_artifacts()
     for art in artifacts:
@@ -113,6 +124,8 @@ class PlotsCallback(L.Callback):
             if not wandb.run.disabled:
                 prune_online_checkpoints(wandb.run)
             # Skip for all other epochs
+            # Fires at epochs 1, 6, 11, ... (== 1 not == 0) so epoch 0 is only covered
+            # by scrutinize_epochs, not the periodic trigger.
             if (trainer.current_epoch % self.val_every_n_epochs == 1) or trainer.current_epoch <= self.scrutinize_epochs:
                 if torch.cuda.is_available():
                     logger.info(torch.cuda.memory_summary(device=None, abbreviated=False))
@@ -167,7 +180,11 @@ class PlotsCallback(L.Callback):
 
 
 class TrainStepMonitor(L.Callback):
-    """Logs the number of train steps and train steps per minute to wandb."""
+    """Logs the number of train steps and train steps per minute to wandb.
+
+    samples_seen counts rematches: each batch is counted batch_rematch_factor
+    times, reflecting actual gradient updates rather than data items.
+    """
 
     def __init__(self):
         super().__init__()
@@ -227,6 +244,22 @@ def output_variance_per_input_variance(output_batch, input_batch, mean_adjusted=
 
 
 def evaluate_window_set(model: FlowModule, data_module: FusionShotDataModule, shot_t: list[tuple]):
+    """Evaluates the model on a set of specific shot windows and writes PDF plots.
+
+    Runs after every trainer.validate(), including reeval runs. Always executes
+    regardless of other config flags; control which windows are evaluated by
+    editing window_set in the config.
+
+    Args:
+        model: FlowModule instance (must already be on the target device).
+        data_module: FusionShotDataModule with a prepared test_dataset.
+        shot_t: List of [shot_number, time_seconds] pairs from config.window_set.
+            Each pair identifies a specific moment in a TCV shot to evaluate.
+
+    Outputs:
+        PDF plots at output/pdfplots/{run_name}/qualitative_samples/ at 8 sizes,
+        plus a "nolegend" variant and a JSON metadata file per window.
+    """
     test_dataset = data_module.test_dataset
     logger.info("Running evaluate_window_set for %s shot windows", len(shot_t))
     for shot, t in shot_t:
@@ -254,3 +287,38 @@ def evaluate_window_set(model: FlowModule, data_module: FusionShotDataModule, sh
             logger.exception(e)
         else:
             logger.info("Created pdfs for shot window %s : %s", shot, t)
+
+
+def animate_window_set(model: FlowModule, data_module: FusionShotDataModule, shot_t: list[tuple], repeat=4):
+    """Animate the integration flow for the curated window_set and write an interactive HTML.
+
+    Companion to evaluate_window_set: builds one batch spanning every window in
+    config.window_set (each repeated `repeat` times for stochastic sample diversity),
+    evaluates the model, and renders animated_window_set_plotly. Logs the figure to wandb
+    and writes a standalone HTML under output/htmlplots/{run_name}/, paralleling the
+    output/pdfplots/{run_name}/ convention used by evaluate_window_set.
+
+    Wrapped in try/except so a failure here never crashes the run.
+
+    Args:
+        model: FlowModule instance (must already be on the target device).
+        data_module: FusionShotDataModule with a prepared test_dataset.
+        shot_t: List of [shot_number, time_seconds] pairs from config.window_set.
+        repeat: Number of stochastic samples per window to animate.
+    """
+    logger.info("Running animate_window_set for %s shot windows", len(shot_t))
+    try:
+        batch = data_module.test_dataset.window_set_batch(shot_t, repeat=repeat)
+        output = model.evaluate(batch, data_module=data_module, n_steps=120 if torch.cuda.is_available() else 5)
+        fig = src.plotters.plot_animations.animated_window_set_plotly(
+            **output, repeat=repeat, title_base="Window set flow"
+        )
+        wandb.log({"val/animated_window_set": wandb.Html(pio.to_html(fig))})
+        out_dir = Path(f"output/htmlplots/{get_current_config().run_name}")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        pio.write_html(fig, out_dir / "animated_window_set.html")
+        logger.info("Wrote animated window set html to %s", out_dir / "animated_window_set.html")
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as e:
+        logger.exception(e)

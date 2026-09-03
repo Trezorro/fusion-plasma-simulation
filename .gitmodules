@@ -1,0 +1,3 @@
+[submodule "giants/TCV-confstate-data"]
+	path = giants/TCV-confstate-data
+	url = https://github.com/yoeripoels/TCV-confstate-data.git

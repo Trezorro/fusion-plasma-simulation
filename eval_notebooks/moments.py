@@ -1,3 +1,13 @@
+"""Wandb run pull plus cache-to-thesis-name mapping; renames wandb runs to human names and builds the cache/experiment map.
+
+Scientific output: none directly; produces the run_map and cache_experiment_map (human_name, Model, History Length, Full Covariates, Conditioning, Prior) that the table notebooks reuse. (Despite the filename, this file does NOT compute distributional moment tables; the moment-table caption text lives in peak_analysis.py/peaks_tables.py.)
+Inputs:  wandb.Api() runs from "tresoor/flowtoy" tagged final_reeval; output/XR-overview.csv; local output/test_cache/*.h5 glob (listed only). The 16 human names are assigned positionally from a hardcoded block, matching the sorted config-group order.
+Outputs: inline only (dataframes); side effect: renames matched wandb runs in place via find_wandb_run(run_name).update(). No files written.
+Usage:   run cells top to bottom; the RERUNNING RUNS sbatch cell is commented out; the human-name block order must match the sorted group order or names misalign.
+Limits:  fragile; needs wandb auth and network; positional human-name mapping breaks if the group set changes; mutates live wandb run names; frozen half-finished ("...start moments...").
+Handy:   get_cache_overview() (config-group to human-name mapping) and the find_wandb_run rename loop duplicate logic in mode_analysis.py/model_cache_overview.py; consolidate into one src/ helper.
+History: created Jun 16 2025 ("...start moments and check tiny evaluation"), single commit, never edited (frozen).
+"""
 #%% Imports
 from numpy import isin
 import pandas as pd

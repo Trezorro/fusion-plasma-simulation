@@ -214,6 +214,37 @@ Two options: skip the passphrase when generating the key (less safe, but simples
 Host *
     AddKeysToAgent yes
 ```
+The hyperparameter file is nothing else than a text file in which each line denotes one set of hyperparameters for which you want to run an experiment. There is no specific order in which you need to put the lines, and you can extend the lines with as many hyperparameter arguments as you want.
+
+File `array_job_hyperparameters.txt`:
+```plaintext
+--seed 42 --learning_rate 1e-3
+--seed 43 --learning_rate 1e-3
+--seed 44 --learning_rate 1e-3
+--seed 45 --learning_rate 1e-3
+--seed 42 --learning_rate 2e-3
+--seed 43 --learning_rate 2e-3
+--seed 44 --learning_rate 2e-3
+--seed 45 --learning_rate 2e-3
+--seed 42 --learning_rate 4e-3
+--seed 43 --learning_rate 4e-3
+--seed 44 --learning_rate 4e-3
+--seed 45 --learning_rate 4e-3
+--seed 42 --learning_rate 1e-2
+--seed 43 --learning_rate 1e-2
+--seed 44 --learning_rate 1e-2
+--seed 45 --learning_rate 1e-2
+```
+
+# Advanced
+Launch temporary interactive session on a gpu node for testing and debugging
+```
+
+salloc --partition=gpu_mig --reservation=terv92681 --gpus=1 --time=00:10:00
+# then once you're on the compute node:
+nvidia-smi. # shows available gpu devices
+python -c "from numba import cuda; cuda.detect()"  # tests them
+```
 
 
 </details>

@@ -11,6 +11,10 @@ from torchdiffeq import odeint
 
 from src.hdf_cache import get_cache_dir
 from src.models.unet_conditional import ConditionalUNet
+from src.models.dlinear import DLinear
+from src.models.patchtst import PatchTST
+from src.models.itransformer import ITransformer
+from src.models.tide import TiDE
 from src.optimal_transport import OTPlanSampler
 import src.metrics.metrics as metrics
 from src.metrics.evaluate_modes import generate_surrogate_labels, generate_surrogate_labels_batched
@@ -24,6 +28,13 @@ logger = logging.getLogger(__name__)
 
 
 class FlowModule(L.LightningModule):
+    """Lightning wrapper for conditional flow matching over plasma diagnostic windows.
+
+    Handles training (manual optimization with a rematching loop), validation, and test
+    (with an optional HDF5 sample cache). Supports several priors ("normal", "brownian",
+    "levy", "resample", "copy", "constant") and optional optimal-transport pairing of
+    prior and target samples (normal prior only).
+    """
 
     TIME_DOMAIN_LOSS = torchmetrics.MeanAbsoluteError
     LOSS_OPTIONS = dict(
@@ -39,6 +50,11 @@ class FlowModule(L.LightningModule):
         # VelocityNet=VelocityNet,  # TODO needs to support channels, t, and conditioning
         # UNetModern=UNetModern,
         ConditionalUNet=ConditionalUNet,
+        # Deterministic point-forecast baselines (used via UnFlowModule):
+        DLinear=DLinear,
+        PatchTST=PatchTST,
+        ITransformer=ITransformer,
+        TiDE=TiDE,
     )
     SAMPLE_RATE = 10_000  # Hz
     PRIOR_OPTIONS = ["normal", "levy", "resample", "brownian", "copy", "constant"]
@@ -51,15 +67,35 @@ class FlowModule(L.LightningModule):
         optimizer_params: Optional[DictConfig | dict] = None,
         prior: Literal["normal", "levy", "resample", "brownian", "copy", "constant"] = "normal",
         prior_sigma: float = 0.3,
+        seq_length: Optional[int] = None,
         ot_method: Optional[str] = None,
         ot_replace: bool = False,
         batch_rematch_factor: int = 1,
         step_every_nth_match: Optional[int] = None,  # if None, step only after all matches.
         gradient_clip_val: float = 1.0,
         flow_steps=100,
+        flow_rho=1.0,
         solve_method='simple',
         **kwargs: Any
     ):
+        """Initialize the flow matching module.
+
+        Args:
+            prior: One of "normal", "brownian", "levy", "resample", "copy", "constant".
+            prior_sigma: Std dev for the normal prior; 0.3 puts ~90% of values in [0,1]
+                given normalized targets.
+            ot_method: Optimal-transport coupling method; only works with prior="normal".
+            batch_rematch_factor: Number of prior-target pairs drawn per batch; each gets
+                its own backward pass, and the average loss is what is logged.
+            step_every_nth_match: Take a gradient step every N matches; must divide
+                batch_rematch_factor evenly. Allows gradient accumulation within the
+                rematching loop. If None, steps only after all matches.
+            gradient_clip_val: Applied inside the manual optimization loop, not by
+                Lightning's built-in clipping.
+            flow_steps: Number of integration steps used for inference/test.
+            solve_method: Integration method for inference/test; currently always forward
+                Euler regardless of value.
+        """
         super().__init__()
         self.save_hyperparameters(logger=False)
         self.optimizer_params = optimizer_params or dict()  # type: ignore
@@ -70,6 +106,7 @@ class FlowModule(L.LightningModule):
         self.loss = self.LOSS_OPTIONS[loss]()
         self.prior = prior
         self.prior_sigma = prior_sigma
+        self.seq_length = seq_length
         self.ot_method = ot_method
         self.ot_sampler = OTPlanSampler(method=ot_method, reg=0.05) if ot_method else None
         self.ot_replace = ot_replace
@@ -77,30 +114,43 @@ class FlowModule(L.LightningModule):
         self.batch_rematch_factor = batch_rematch_factor
         self.step_every_nth_match = step_every_nth_match or batch_rematch_factor
         self.flow_steps = flow_steps
+        self.flow_rho = flow_rho
         self.solve_method = solve_method
         self._validate_configuration()
         self.automatic_optimization = False
-        self.register_buffer("sqrt_dt", torch.sqrt(torch.tensor(1 / self.SAMPLE_RATE)))
+        # dt = 1/seq_length gives a fixed diffusion horizon T=1 over the window, decoupled from
+        # the acquisition rate. Precomputed once on the right device for generate_brownian_motion.
+        if seq_length is not None:
+            self.register_buffer("sqrt_dt", torch.sqrt(torch.tensor(1.0 / seq_length)))
         self.init_metrics()
         self.test_cache_name = None
         self.test_cache = None
         self.test_cache_mode = "create"
 
     def set_cache(self, name: str, mode='create'):
+        """Configure the test-step HDF5 sample cache.
+
+        Args:
+            name: Cache filename without extension.
+            mode: 'create' writes new samples, 'use' loads from an existing cache,
+                'a' skips keys that already exist.
+        """
         from src.hdf_cache import TestStepHDFCache
         self.test_cache_name = name
         self.test_cache_mode = mode
         self.test_cache = TestStepHDFCache(name, 'a')
 
-    def set_integration_method(self, n_steps=None, method=None):
+    def set_integration_method(self, n_steps=None, flow_rho=None, method=None):
+        """Update self.flow_steps and self.solve_method (used by inference/test, not training)."""
         self.flow_steps = n_steps or self.flow_steps
+        self.flow_rho = flow_rho or self.flow_rho
         self.solve_method = method or self.solve_method
-        logger.debug("Integration method set to %s with %s steps", self.solve_method, self.flow_steps)
+        logger.debug("Integration method set to %s with %s steps with rho %.2f for evaluation", 
+                     self.solve_method, self.flow_steps, self.flow_rho)
 
     def _validate_configuration(self):
-        assert self.batch_rematch_factor > 0 and type(
-            self.batch_rematch_factor
-        ) == int, "batch_rematch_factor must be positive integer"
+        assert (self.batch_rematch_factor > 0 
+                and isinstance(self.batch_rematch_factor, int)), "batch_rematch_factor must be positive integer"
         assert self.batch_rematch_factor % self.step_every_nth_match == 0, (
             "batch_rematch_factor must be divisible by step_every_nth_match, or"
             " step_every_nth_match must be None. Otherwise, optimizer steps will"
@@ -115,11 +165,15 @@ class FlowModule(L.LightningModule):
         assert ('position_sequence' in self.model_params.conditioning
                ) == (self.model_params["positional_encoding"]
                      is not None), ("Positional encoding must be configured for position_sequence conditioning")
+        assert 1.0 <= self.flow_rho <= 3.0, "The power rho used for the inference schedule should be between 1.0 and 3.0."
 
     def forward(self, x, t, conditioning=None):
         return self.model(x, t, conditioning=conditioning)
 
     def training_step(self, batch, batch_idx):
+        """Manual backward loop: for each of batch_rematch_factor iterations, sample a new
+        prior, compute the loss and call manual_backward(); opt.step() fires every
+        step_every_nth_match matches. The logged loss is the mean over all matches."""
         opt: LightningOptimizer = self.optimizers()  # type: ignore
         total_loss = 0
         opt.zero_grad()
@@ -136,7 +190,10 @@ class FlowModule(L.LightningModule):
         self.log("loss/train", total_loss, prog_bar=True)
 
     def batch_match(self, batch, batch_idx, match_i=0):
-        """Create a velocity training sample by sampling the prior once and interpolating, then calculate the loss."""
+        """One forward pass: sample the prior once, interpolate, predict velocity, compute loss.
+
+        Logs a warning when the loss exceeds the high-loss threshold (1000).
+        """
         t, samples_at_t, velocity, conditioning_input = self.interpolate_samples(batch)
         pred_velocity = self.model(samples_at_t, t, conditioning_input)
         loss = self.loss(pred_velocity, velocity)
@@ -167,6 +224,15 @@ class FlowModule(L.LightningModule):
 
     @torch.no_grad()
     def interpolate_samples(self, batch):
+        """Build a flow matching training pair: x_t = x0*(1-t) + x1*t, velocity = x1 - x0.
+
+        With an OT sampler, prior (x0) and target (x1) are reordered by the sampled
+        coupling (i, j).
+
+        Note:
+            When OT pairing is active, conditioning_inputs must be reordered with the same
+            j index so each conditioning entry matches its reordered x1 target.
+        """
         _meta, conditioning_inputs, target_samples = batch
         prior_samples = self.get_prior_samples(conditioning_inputs, target_samples.size())
         # TODO: just sample 100x more and pair up with many to one target samples, sample as many t's.
@@ -177,6 +243,7 @@ class FlowModule(L.LightningModule):
             prior_samples = prior_samples[i]
             target_samples = target_samples[j]
             # Fix for conditioning inputs to match their respective target X
+            # j reorders conditioning to match the OT-paired targets; without this, conditioning would not match its x1
             conditioning_inputs = {k: v[j] for k, v in conditioning_inputs.items()}
 
         # interpolate the probability path at t (making the example path)
@@ -187,7 +254,13 @@ class FlowModule(L.LightningModule):
         return t, samples_at_t, target_velocity, conditioning_inputs
 
     def get_prior_samples(self, conditioning_inputs, target_size: torch.Size):
-        """Sample priors either around the mean of 0.5 or starting connected to the last value of Wh."""
+        """Sample priors either around the mean of 0.5 or starting connected to the last value of Wh.
+
+        Args:
+            conditioning_inputs (dict): Conditioning tensors; must contain 'x_history' for
+                the copy, brownian, levy, and resample priors.
+            target_size (torch.Size): Target sample shape, used to size the prior.
+        """
         assert type(
             target_size
         ) == torch.Size and 2 <= len(target_size) <= 5, "target_size must be a torch.Size with 2-5 dimensions"
@@ -217,13 +290,19 @@ class FlowModule(L.LightningModule):
         return prior_samples
 
     def generate_brownian_motion(self, x_last, seq_length):
-        """Generate a Brownian motion trajectory with fixed dt = 1/10000.
+        """Generate a Brownian motion trajectory with dt = 1/seq_length (horizon T=1).
+
+        The diffusion horizon is normalized to the window (T=1) rather than tied to the
+        acquisition rate, so the prior's spread is independent of the sampling frequency.
+        With dt = 1/seq_length, the marginal variance grows as Var(x_k) = (k/seq_length) *
+        prior_sigma^2: the terminal marginal std equals prior_sigma and the time-averaged
+        std equals prior_sigma / sqrt(2).
 
         Brownian motion follows the stochastic differential equation:
         dx_t = dB_t,
             where B_t is a standard Brownian motion with independent Gaussian increments:
             x_{t+dt} = x_t + \\sqrt{dt} * \\xi,  \\xi \\sim \\mathcal{N}(0,1).
-        
+
         Parameters:
         x_last (torch.Tensor): Initial positions of shape (N, C), where N = batch size, C = number of channels.
         seq_length (int): Number of time steps in the sequence.
@@ -311,6 +390,8 @@ class FlowModule(L.LightningModule):
     #     pass
 
     def test_step(self, batch: tuple[dict, dict, torch.Tensor], batch_idx: int = -1):
+        """Run inference() (which handles the cache read/write path), then update_metrics()
+        for accumulation. Metrics are logged per-step, not per-epoch."""
         data_module = self.trainer.datamodule
         meta, conditioning_input, target_samples = batch
         generated_samples, surr_labels_pred, surr_labels_target = self.inference(batch, data_module)
@@ -366,7 +447,8 @@ class FlowModule(L.LightningModule):
 
         metrics_out |= self.mode_test_metrics(pred_labels, target_labels)  # requires full W to split off history itself
         # Ensure both inputs are long tensors with class indices for DiceScore
-        WINDOW_OF_INFLUENCE_SPILL = 15  # the surrogate model looks ahead 15 steps past where it assigns a label.
+        # the surrogate model looks ahead 15 steps (1.5 ms at 10 kHz) past where it assigns a label; duplicated in mode_metrics.py (there capped at min(15, history_length))
+        WINDOW_OF_INFLUENCE_SPILL = 15
         Wf_length = data_module.seq_length
         metrics_out['/dice'] = self.dice_metric(
             pred_labels[:, -Wf_length - WINDOW_OF_INFLUENCE_SPILL:].long(),
@@ -376,6 +458,8 @@ class FlowModule(L.LightningModule):
         return metrics_out
 
     def on_test_epoch_end(self):
+        """Aggregate metrics, log test/final/*, write JSON to cache, extract DataFrames from
+        the mode and peak metrics, generate histograms, then reset all metrics."""
         logger.info("Computing final metrics.")
         test_metrics = self.moments_metrics.compute()
         test_metrics |= self.mode_test_metrics.compute()
@@ -392,9 +476,23 @@ class FlowModule(L.LightningModule):
         peak_dfs = []
         for sub_metric in self.peak_metrics.children():
             peak_dfs.append(sub_metric.extract_df_all(self.test_cache))
-            sub_metric.export_2d_NBI_distributions()
-        logger.info("Peak metrics saved to cache. Generating histograms...")
-        sub_metric.make_histograms(peak_dfs)
+            # sub_metric.export_2d_NBI_distributions() only works with normal NBI column
+        from src.config import get_current_config
+        C = get_current_config()
+        if C.get('evaluation', {}).get('skip_peak_histograms', False):
+            # Peak histogram PDF export (~300-450 Kaleido/Chromium calls via
+            # peak_metric.save_histogram -> src.to_pdf.dump_figure_to_pdfs) has been seen to
+            # hang for 11+ hours on this shared single-node reservation with no progress
+            # logged, blocking the rollout stage that runs after on_test_epoch_end returns.
+            # Same code path for every backbone (UnFlowModule inherits this method), so it
+            # is not architecture-specific; likely contention on the shared node rather than
+            # a deterministic bug, since some runs sail through and others hang indefinitely.
+            # This flag lets a run skip straight past it when the histograms are not needed
+            # (e.g. rollout-focused reevals), without touching the normal single-run default.
+            logger.info("Skipping peak histogram PDF export (evaluation.skip_peak_histograms=true).")
+        else:
+            logger.info("Peak metrics saved to cache. Generating histograms...")
+            sub_metric.make_histograms(peak_dfs)
         logger.info("Histograms done! Testing Done. Resetting metrics.")
         self.moments_metrics.reset()
         self.peak_metrics.reset()
@@ -528,6 +626,11 @@ class FlowModule(L.LightningModule):
         Returns:
             torch.Tensor: Shape [batch_size, num_features]
             torch.Tensor (optional): Shape [n_steps, batch_size, num_features] if save_trajectories is True
+
+        Note:
+            The `method` parameter is currently ignored: the torchdiffeq adaptive solver path
+            is preserved as commented-out code but is bypassed by `if True:`. Only forward
+            Euler is active.
         """
         current_points = initial_points.clone()
         if conditioning_input is not None and self.model.conditioning:
@@ -539,7 +642,9 @@ class FlowModule(L.LightningModule):
             def ode_func(t, x):  # just swap around for torchdiffeq
                 return self.model(x=x.to(torch.float32), t=t.to(torch.float32))
 
-        time_grid = torch.linspace(0, 1, n_steps, device=self.device, dtype=torch.float64)
+        u = torch.linspace(0, 1, n_steps, device=self.device, dtype=torch.float64)
+        rho = self.flow_rho
+        time_grid = 1 - (1 - u).pow(rho)  # denser steps as t -> 1
 
         logger.debug(f"Integrating path with {n_steps} steps with method {method}")
         # logger.debug(
@@ -548,6 +653,7 @@ class FlowModule(L.LightningModule):
         #         k: v.device for k, v in conditioning_input.items()
         #     } if conditioning_input is not None else None
         # )
+        # torchdiffeq adaptive solvers (dopri5, midpoint, etc.) were used in an earlier version and are preserved below as comments; forward Euler is always used now
         if True:
             # Integrate and use progress bar if running on CPU
             if save_trajectories:

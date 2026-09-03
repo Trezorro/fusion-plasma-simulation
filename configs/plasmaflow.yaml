@@ -1,0 +1,200 @@
+# main config for the plasma flow paper that followed from the thesis
+features:
+  - manual_optimization
+  - batch_rematching
+  - pass_t_to_conditioning_input #  Makes sure flow t is also available in the conditioning input when sequentially conditioning
+  - learning_rate_schedule
+  - true_condition_concat
+  - speed_monitor
+  - FIX_conditioning_input_matching
+  - learning_rate_scheduler
+  # - resume_run
+# run_name: testrunAAA
+# resume_id: fwxfmft7
+# resume_name: seq_normal_smC_BIG2
+
+epochs: 120
+limit_train_batches: 150
+limit_val_batches: 30
+batch_size: 128
+patience: 20
+gradient_clip_val: 10 # in testing, lower values did not help prevent loss explosions. This is just a safeguard
+skip_log_summary: false
+
+test_cache_name: ${ run_name }
+test_cache_mode: create # create or use
+
+# Autoregressive rollout evaluation after trainer.test. Remove/comment this whole
+# block to turn the feature off; nothing else references it.
+rollout:
+  start_fractions: [0.05, 0.10, 0.25, 0.50, 0.75] # rollout start points as fraction of shot length
+  step: ${ data.seq_length } # samples to advance per generation; < seq_length gives overlapped chaining
+  n_samples: 30 # stochastic samples per start point; this block fires after every training
+  # run (run.py gates on 'rollout' in C, nothing else), so this cost is paid every time.
+  n_steps: ${ evaluation.n_steps }
+  max_batch: 128 # rollouts advance in lockstep; batches shrink as rollouts finish
+  clamp_history: false # clamp fed-back generated history to [0,1]
+  cache_name: ${ test_cache_name }_rollout
+  cache_mode: create # create or use (use: read cache, skip generation)
+  # 5 window_set shots spanning distinct regimes: 57013/77604 general paper picks,
+  # 61237 has big ELM peaks at 75%, 64770 alone covers L/H/ELM-chaos across its own
+  # start fractions, 73368 is the calm/boring baseline for contrast.
+  html_shots: [57013, 61237, 64770, 73368, 77604]
+  plot_samples: 3 # stochastic samples overlaid per starting point in the browser (see todo.md)
+  analysis: true # also export the horizon figures/tables in-run (redo/tweak later via eval_notebooks/rollout_analysis.py)
+  # analysis_max_samples: null # cap samples/start point fed into the horizon stats (like
+  # plot_samples but for the analysis, not the browser); only set this if a full run has
+  # actually run out of memory, since it trades away the statistical power n_samples buys.
+
+# MARK:
+window_set: # for evaluation plots
+  - [57013, 0.94]
+  - [57013, 1.08]
+  - [73368, 0.38] # All low and boring
+  - [77604, 0.72]
+  - [77604, 0.77]
+  - [77409, 1.32]
+  - [69514, 0.51]
+  - [69514, 0.51]
+  - [64770, 0.17] # L Mode boringness
+  - [64770, 1.09] # H Mode boringness, middenhoog NBI
+  - [64770, 1.52] # H mode shit gets loose
+  - [61237, 0.89] # 75% BIG peaks
+  - [61028, 0.98] # 75%
+  - [61028, 1.12] # 78%
+  - [60813, 1.00] # NBI ramping up
+  - [60813, 1.42] # ramped up to 75%
+  - [77595, 0.94] # High NBI
+  - [76702, 1.14] # high NBI
+
+# MARK:
+evaluation:
+  n_steps: 100 # enough for rk4
+  flow_rho: 2.0 # must be between 1.0 and 3.0
+  solve_method: simple # dopri5, euler, midpoint
+  max_n: 64
+  # Peak histogram PDF export has hung for 11+ hours on the shared reservation node with
+  # no progress logged, eating the whole job budget before the rollout stage ever starts.
+  # Off for the grid so every cell reliably reaches rollout; redo later from the test
+  # cache (mode=use) once the grid is through, when node contention is less of a risk.
+  skip_peak_histograms: true
+  peaks:
+    # scipy.signal.find_peaks prominence on the [0,1]-normalized signal, for every channel.
+    # Deliberately at noise level: PD and FIR hold tens to hundreds of peaks per window at this value.
+    prominence: 0.001
+    # What counts as an ELM-scale H-alpha (PD) burst. Used in two places, and it must be the same
+    # number in both: the 'PD large peaks' channel, and the coincidence gate that defines the
+    # 'DML ELM peaks' channel. Was historically split (0.1 for the former, 0.15 for the latter);
+    # unified here. See docs/evaluation-metrics.md.
+    elm_pd_prominence: 0.1
+  val_every_n_epochs: 5
+  train_every_n_epochs: 20
+  scrutinize_epochs: 3 # Epochs equal or lower than this will always be fully evaluated. -1 to disable
+  plot_functions:
+    # every item has to have a 'key' key.
+    # n are optional through defaults in PlotsCallback
+    # all other keys are passed as kwargs to the plot function
+    # - key: 2d_flow_plot
+    #   n: 64
+    - key: animated_traces
+      n: 5
+    - key: multi_channel_lines
+      n: 16
+      buttons: true
+    # - key: entropy_plot
+    #   method: perm_entropy
+    #   log_key: permutation_entropy_plot
+    #   n: 64
+
+# MARK:
+model: configs/unflow.yaml # grid cell UNb-unet-noleak-noatt; or configs/{cfm,unflow,itransformer,tide,dlinear,patchtst}.yaml
+# MARK:
+data:
+  Class: FusionShotDataModule
+  dir: ./data/
+  file: 2026_07_13-TCV_shots_V2.parquet
+  batch_size: ${ batch_size }
+  seq_length: 256
+  history_length: ${ data.seq_length } # default null / 0, if positive int, will include x_history in the conditioning_inputs
+  crop_margin: 384 # Determines the unused period at start and end of each shot for preprocessing. Must be larger than seq_length
+  overfit_on_shots: null # list of ints or null
+  allowed_start_indices: null # list of ints or null
+  sample_rate: 10000
+  pre_shuffle: true
+  cols:
+    meta:
+      - ShotNum
+      - time
+    x: [
+        "FIR_LIDs_core", # replaces FIR_core
+        # "Halpha1",        # replaces PD (H-alpha divertor photodiode)
+        "PD", # renamed H alpha 1 column back to PD for explicit compatibility
+        "DML", # same
+        "POHM", # same
+        "Z_axis", # same
+      ]
+    c: # noleak (UNb-unet-noleak-noatt), see docs/run_grid.md
+      - IP  # programmed current reference, carries no ELM timing
+      - PNBI  # neutral beam injection power
+      - PECRH  # ECRH power
+    label: LHD_label
+  val_shots: [
+                52302,
+                56662,
+                57009,
+                57010,
+                57011,
+                58460,
+                60812,
+                60830,
+                61060,
+                61274,
+                61275,
+                61277,
+                61279,
+                61281,
+                61702,
+                61703,
+                64060,
+                64067,
+                66494,
+                67182,
+                67186,
+                69512,
+                69515,
+                73330,
+                73367,
+                73927,
+                73929,
+                73931,
+                73934,
+                73936
+            ] # ??? viable samples
+  test_shots: [
+        57094, 57732, 60814, 64365, 67112, 72929, 75264, 76702, 77409, 77595, 53623, 57013, 60813, 61028, 61056, 61237, 63306, 63878, 64386, 64393, 64678, 64686, 64770, 64857, 65469, 65481, 68631, 68697, 69514, 71344, 73368, 73631, 73935, 76304, 77089, 77193, 77196, 77598, 77599, 77602, 77604, 78069, 79825, 83049
+    ] # ???? viable samples
+  train_shots: [
+     26386, 29511, 30043, 30197, 30225, 30262, 30268, 30290, 30310, 31211, 31554, 31650, 31718, 31807, 31839, 32191, 32195, 32592, 32716, 32911, 33188, 33271, 33281, 33459, 33567, 33942, 34010, 34309, 42197, 42514, 43454, 45103, 45105, 46853, 47962, 48580, 53601, 53625, 53627, 53629, 57000, 57024, 57026, 57077, 57081, 57093, 57095, 57103, 57218, 57622, 57623, 57624, 57706, 57715, 57751, 58182, 59061, 59064, 59065, 59066, 59073, 59076, 59825, 60097, 60275, 60992, 60995, 61000, 61005, 61009, 61010, 61021, 61038, 61039, 61042, 61043, 61044, 61055, 61057, 61058, 61242, 61246, 61254, 61260, 61608, 61609, 61630, 61631, 61711, 61712, 61713, 61714, 61716, 61719, 62744, 63229, 63230, 63232, 63234, 63236, 63238, 63240, 63242, 63244, 63246, 63250, 63298, 63300, 63302, 63308, 63310, 63843, 63847, 63848, 63849, 63853, 63877, 63879, 63880, 63882, 63887, 63888, 63920, 63923, 63943, 63944, 63945, 64327, 64335, 64336, 64338, 64340, 64342, 64363, 64364, 64366, 64367, 64368, 64369, 64370, 64371, 64372, 64373, 64374, 64376, 64378, 64389, 64392, 64647, 64648, 64658, 64659, 64662, 64666, 64670, 64675, 64680, 64774, 64820, 64855, 64858, 64859, 64911, 64912, 64913, 64914, 64915, 64916, 64917, 64918, 64919, 64923, 64924, 65253, 65280, 65281, 65282, 65283, 65285, 65288, 65317, 65318, 65319, 65320, 65321, 65322, 65336, 65391, 65468, 65474, 65482, 65487, 65488, 65527, 65557, 65561, 65564, 65566, 68268, 68628, 68643, 68693, 68699, 68919, 68984, 68987, 69113, 69115, 69127, 69129, 69133, 70777, 71208, 72828, 73632, 74498, 74916, 75263, 75265, 76322, 77092, 77330, 77411, 77426, 79815, 79826, 79827, 82610 
+  ] # 1963980 viable samples
+
+# Shorthands for important parameters for wandb
+Prior: ${ model.params.prior }
+Ot_method: ${ model.params.ot_method }
+Cond_dim: ${ model.params.model_params.conditioning_method }
+Channels: ${ model.params.model_params.input_channels }
+Apex_channels: ${ model.params.model_params.apex_hidden_channels }
+T_embedding: ${ model.params.model_params.time_embedding }
+T_emb_d: ${ model.params.model_params.time_embedding_d }
+Pos_encoding: ${ model.params.model_params.positional_encoding }
+Pos_enc_d: ${ model.params.model_params.positional_encoding_d }
+Pos_enc_c: ${ model.params.model_params.positional_encoding_c }
+Attn: ${ model.params.model_params.is_attn }
+Mid_attn: ${ model.params.model_params.mid_attn }
+Attn_heads: ${ model.params.model_params.attn_heads }
+Norm_groups: ${ model.params.model_params.norm_groups }
+Seq_L: ${ data.seq_length }
+Crop: ${ data.crop_margin }
+Cols: ${ data.cols.x }
+Learning_rate: ${ model.params.optimizer_params.lr }
+Rematches:
+  ${ model.params.batch_rematch_factor }

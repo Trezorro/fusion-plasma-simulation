@@ -1,0 +1,17 @@
+# Pared-down pylint config for this codebase's style: short variable names
+# (df, x, ax, etc.) are common, formatting is handled by yapf, and not
+# every function carries a docstring.
+
+[MESSAGES CONTROL]
+disable=
+    missing-function-docstring,
+    missing-module-docstring,
+    missing-class-docstring,
+    line-too-long,
+    invalid-name,
+    too-few-public-methods,
+    pointless-string-statement,
+    wrong-import-position
+
+[FORMAT]
+max-line-length=120

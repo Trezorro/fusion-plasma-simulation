@@ -118,6 +118,7 @@ class ConditionalUNet(nn.Module):
             self.pos_emb = build_time_embedder(
                 positional_encoding,
                 d=positional_encoding_d,
+                # position_sequence is raw seconds (unnormalized), up to ~2.0s per shot; raise this if shots run longer
                 max_value=2.0,
                 suggested_projection_dim=positional_encoding_c
             )

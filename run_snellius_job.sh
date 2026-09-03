@@ -4,7 +4,7 @@
 #SBATCH --error=output/slurms/gpujob-%j-%x.out
 #SBATCH --partition=gpu_mig
 #SBATCH --reservation=terv92681
-#SBATCH --time=800:00
+#SBATCH --time=24:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
@@ -43,12 +43,14 @@ which python
 echo "Version: $(python --version 2>&1)"
 
 
+# Both reeval and training jobs run off the tag submit_remote_job_snellius.sh already
+# creates from your current local branch's HEAD, so a reeval submission runs whatever
+# branch you were on, not a hardcoded "paper". To pin a reeval to a specific older
+# commit/branch, tag it yourself and pass that tag as the job name.
 if [[ $2 == "true" ]]; then
-    echo "Will run on latest commit for reeval task"
-    git checkout main
-else
-    git checkout tags/$1
+    echo "Will run on the tagged commit for reeval task"
 fi
+git checkout tags/$1
 echo "Recent commits:"
 git log -5  --pretty=reference
 # Export wandb env variable

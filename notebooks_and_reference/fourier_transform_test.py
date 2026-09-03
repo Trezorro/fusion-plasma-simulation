@@ -1,4 +1,10 @@
-"""Let's test how to translate a signal to fourier space and back."""
+"""Old fft space exploration work. Considered for fft based model.
+
+Sanity checks for round-tripping synthetic signals (sine, gaussian, mixture) through torch FFT. Prototype/legacy, unmaintained.
+
+Inputs/Outputs: scratch, inline only; generates synthetic signals, no file I/O.
+Handy: plot_signals (dual-axis signal + cumulative-difference plotly plot) is a reusable comparison plot worth lifting into src/plotters/.
+"""
 #%%
 from matplotlib import legend
 from matplotlib.pylab import f

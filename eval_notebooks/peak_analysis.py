@@ -1,3 +1,13 @@
+"""Peak/ELM statistics boxplots (count/prominence/width/base/energy_ratio) across models and mode conditions, with a ghost ground-truth overlay; second half exports peak tables.
+
+Scientific output: thesis ELM/peak boxplot figures and peak-metric tables.
+Inputs:  all output/test_cache/*.h5 via /peaks/{condition} keys; plus output/test_cache/*.json (parse_metrics_json) for the table half; MODEL_ORDER is reversed here; ground truth is the 'Real' distribution, sourced from FM-Sequence-Gaussian.h5.
+Outputs: output/pdfplots/peak_boxplot_with_base_DMLratio/peak_boxplots_{WxH}/boxplots_{channel}.pdf (multiple sizes); output/tables/base_metrics_detail.{tex,xlsx}; output/tables/peak_props_{channel}.xlsx and peaks_overview_split_{channel}.tex (the final peaks_overview_split write is commented out at bottom).
+Usage:   run the boxplot half, then a hardcoded exit() under __main__ (~line 358), then the JSON table half (comment out exit() to reach it); box_plot_peaks(models, 'DML') is the active call, other channels commented.
+Limits:  hardcoded exit() blocks the table half by default; MODEL_ORDER reversed vs the other notebooks; peak_props_*.xlsx filename collides with peaks_tables.py (last run wins); uses energy_ratio label here vs energy_delta in peaks_tables.py.
+Handy:   iter_peak_properties_per_model() generator; box_plot_peaks() grid with ghost-GT overlay, condition-highlight rectangles, and multi-size PDF export; parse_metrics_json() hierarchical-key parser. All good src/ candidates.
+History: created Jun 16 2025 ("Basic boxplot" then "Good boxplot"), major Jun 17 ("Finish awesome boxplots and all tables", +592 lines), heavy Oct 11 2025 rework (+175).
+"""
 #%%# Peak Metrics Analysis from Archived HDF5 Files
 
 # This notebook loads peak property DataFrames directly from HDF5 archives created by PeakMetric, combines them, and explores their dimensions for pivot table analysis.

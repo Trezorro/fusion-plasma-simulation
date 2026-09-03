@@ -1,3 +1,10 @@
+"""Explores TCV shot timing consistency, per-shot length stats, and renders per-shot observable/control/spectrogram plots to PDF. Prototype/legacy, unmaintained.
+
+Also used to develop and iterate over preprocessing techniques for covariates to prevent ELM timing leakage.
+
+Inputs/Outputs: reads ../data/LHD_labeled_TCV/TCV_DATA*.parquet and TCV_*_apau_labeled.csv; writes PDFs under output/pdfplots/shotplots/covariates_tight/ and 10shots.pdf.
+Handy: plot_shot (single-shot observable trace with H/L/dithering mode shading, matplotlib) and check_time_consistency (sample-rate/gap check) are reusable and worth lifting into src/plotters/ and src/ respectively.
+"""
 # %%
 from matplotlib.colors import rgb2hex
 import pandas as pd

@@ -1,3 +1,8 @@
+"""Compares sample entropy distributions between two data batches (KS test, Wasserstein, Jensen-Shannon) via src.data_loaders. Prototype/legacy, unmaintained.
+
+Inputs/Outputs: reads ./data/2024_05_01-NaNsFiltered.parquet through FusionShotDataset; scratch plots only, no writes.
+Handy: get_sample_entropy/normalized_entropies/ks_test_sample_entropy is a reusable per-channel entropy comparison worth extracting into src/metrics/.
+"""
 # %% [markdown]
 # # Test entropy
 #

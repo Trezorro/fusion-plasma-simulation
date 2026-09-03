@@ -18,13 +18,13 @@ logger.debug(
     wandb.env.get_data_dir(), wandb.env.get_artifact_dir()
 )
 
-PROJECT = "flowtoy"
+PROJECT = "plasmaflow"
 if is_reeval_run(): # Based on cli arguments
     logger.info("Re-evaluating previous run, consolidating configs.")
-    base_run, conf = consolidate_base_reeval_configs()
+    base_run, conf = consolidate_base_reeval_configs(project=PROJECT)
     base_checkpoint_path = find_and_download_model(base_run, prefer_alias=conf.get('prefer_model_alias', 'latest'))
 else:
-    conf = load_config_from_file('fm_toy')
+    conf = load_config_from_file('plasmaflow')
     if "resume_id" in conf:
         logger.info("RESUME MODE. This job %s is resuming run %s with ID: %s.", conf.get('run_name', '?'), conf.get('resume_name', '?'), conf.get('resume_id') )
         base_checkpoint_path = find_and_download_model(conf.get('resume_name'))
@@ -35,11 +35,12 @@ else:
 
 run = wandb.init(
     name=conf.get("run_name", None),  # None: Wandb picks a name for us
+    entity="deep-learning-course-team",
     project=PROJECT,
     id=conf.get("resume_id", None),
     resume='allow',
     config=conf,
-    tags=['2final_reeval'] if is_reeval_run() else None
+    tags=['reeval'] if is_reeval_run() else None
     # mode="offline",
 )
 RUN_ID = wandb.run.id
@@ -96,7 +97,8 @@ else:
 if 'test_cache_name' in C:
     model.set_cache(C.test_cache_name, C.test_cache_mode)
 if 'evaluation' in C:
-    model.set_integration_method(C.evaluation.n_steps, C.evaluation.get("solve_method", None))
+    # overwrite original model parameters for reeval runs that reuse trained models
+    model.set_integration_method(C.evaluation.n_steps, C.evaluation.flow_rho, C.evaluation.get("solve_method", None))
 if "skip_log_summary" not in C or not C["skip_log_summary"]:
     logger.info("Model loaded, summary:")
     model.log_summary(C)
@@ -127,7 +129,7 @@ trainer = L.Trainer(
     limit_train_batches=C.limit_train_batches,
     limit_val_batches=C.limit_val_batches,
     limit_test_batches=C.get("limit_test_batches", None),
-    max_time={"hours": 10},
+    max_time={"hours": 12},
     benchmark=True,
     # num_sanity_val_steps=1,
     log_every_n_steps=1,
@@ -168,6 +170,19 @@ logger.info("Starting model validation...")
 trainer.validate(model=model, datamodule=fusion_data_module)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 src.evaluation.evaluate_window_set(model.to(device), fusion_data_module, C.window_set)
+src.evaluation.animate_window_set(model.to(device), fusion_data_module, C.window_set)
+
+# Rollout runs before trainer.test() on purpose: trainer.test() computes per-window
+# metrics (PeakMetric etc.) over the full test set, which is slow and unrelated to the
+# rollout cache. Running rollout first means the cache is written (incrementally, so a
+# later failure/time-limit loses at most the tail) before that slower stage gets any
+# chance to eat the job's time budget.
+if 'rollout' in C:  # Autoregressive rollout evaluation; off when the config block is absent
+    logger.info("Starting autoregressive rollout evaluation...")
+    import src.rollout
+    src.rollout.run_rollouts(model.to(device), fusion_data_module, C.rollout)
+    logger.info("Finished rollout evaluation.")
+
 logger.info("Starting final testing...")
 trainer.test(model=model, datamodule=fusion_data_module)
 logger.info("Finished testing.")

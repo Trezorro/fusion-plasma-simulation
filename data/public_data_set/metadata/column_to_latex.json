@@ -1,0 +1,67 @@
+{
+    "shaping": {
+        "AREA": "$A_p$",
+        "DELTA_BOTTOM": "$\\delta_{\\text{bottom}}$",
+        "DELTA_TOP": "$\\delta_{\\text{top}}$",
+        "GAP_in": "$\\Delta_{\\text{in}}$",
+        "GAP_out": "$\\Delta_{\\text{out}}$",
+        "KAPPA": "$\\kappa$",
+        "MAJRAD": "$R_0$",
+        "MINRAD": "$a$",
+        "R_axis": "$R_{\\text{axis}}$",
+        "Z_axis": "$Z_{\\text{axis}}$",
+        "VOL": "$V_p$"
+    },
+    "emissions": {
+        "Halpha1": "$\\text{PD}_{\\textit{H}\\alpha}^{}$",
+        "Halpha13": "$\\text{PD}_{\\textit{CIII}}^{}$",
+        "Halpha_fft": "$\\text{PD}_{\\text{FFT}}^{}$"
+    },
+    "magnetics": {
+        "BZERO": "$B_0$",
+        "IPLA": "$I_{p}$",
+        "IP": "$I_{p,\\textit{ref}}$",
+        "Q95": "$q_{95}$"
+    },
+    "density": {
+        "FIR_LIDs_core": "$n_{e,\\text{core}}$",
+        "FIR_LIDs_LFS": "$n_{e,\\text{LFS}}$",
+        "GWfr": "$n_e/n_{\\textit{GW}}$",
+        "Ne_rho_max_grad1": "$\\text{max}(n'_{e,\\text{edge}})$",
+        "Ne_rho_max_grad2": "$\\text{max}(n''_{e,\\text{edge}})$",
+        "TS_Ne_on_axis": "$n_{e,0}$"
+    },
+    "temperature": {
+        "SXRcore": "$\\textit{SXR}_{\\text{core}}$",
+        "Te_rho_max_grad1": "$\\text{max}(T'_{e,\\text{edge}})$",
+        "Te_rho_max_grad2": "$\\text{max}(T''_{e,\\text{edge}})$",
+        "TS_Te_on_axis": "$T_{e,0}$"
+    },
+    "power": {
+        "INPWR": "$P_{\\textit{in}}$",
+        "POHM": "$P_{\\textit{OHM}}$",
+        "PNBI": "$P_{\\textit{NBI}}$",
+        "PNBI2": "$P_{\\textit{NBI2}}$",
+        "PECRH": "$P_{\\textit{ECRH}}$",
+        "P_LH": "$P_{\\textit{LH}}$"
+    },
+    "energy_content": {
+        "BETAN": "$\\beta_{N}$",
+        "BETAP": "$\\beta_{p}$",
+        "BETAT": "$\\beta_{t}$",
+        "Wtot": "${W}_{\\textit{tot}}$",
+        "DML": "$\\text{DML}$",
+        "H98y2calc": "$H_{\\textit{98y2}}$"
+    },
+    "radiation": {
+        "Prad": "$P_{\\textit{rad}}$",
+        "PradBulk": "$P_{\\textit{rad},\\text{bulk}}$",
+        "PSOL_RT": "$P_{\\textit{rad},\\text{SOL}}$"
+    },
+    "other": {
+        "LI": "$l_i$",
+        "ZEFF": "$Z_{\\textit{eff}}$",
+        "nu_e_star": "$\\nu_{e,\\text{ped}}^{*}$",
+        "Vloop": "$V_{\\textit{loop}}$"
+    }
+}

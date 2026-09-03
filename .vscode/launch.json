@@ -14,22 +14,23 @@
                 "WANDB_NOTES": "debugging",
             },
             "args": [
-                "epochs=6",
+                "run_name=testrunoffline",
+                "epochs=1",
                 "skip_log_summary=True",
-                "reeval=True",
+                // "reeval=True",
                 "evaluation.plot_functions=null",
                 "evaluation.n_steps=6",
-                "evaluation.max_n=8",
+                "evaluation.max_n=4",
                 // "data.seq_length=64",
                 "limit_val_batches=1",
                 "limit_test_batches=2",
                 "batch_size=10",
                 "data.batch_size=10",
                 "model.params.batch_rematch_factor=1",
-                "model.params.step_every_nth_match=null",
-                "base_run=doublehistory_seq_normal_smC_BIG2",
-                "test_cache_name=doublehistory_seq_normal_smC_BIG2_cache2",
-                "test_cache_mode=use"
+                "model.params.step_every_nth_match=1",
+                // "base_run=doublehistory_seq_normal_smC_BIG2",
+                // "test_cache_name=doublehistory_seq_normal_smC_BIG2_cache2",
+                // "test_cache_mode=use"
             ],
             "justMyCode": true
             
@@ -45,10 +46,11 @@
             },
             "args": [
                 "epochs=1",
+                "run_name=test_wandb_debug",
                 "evaluation.n_steps=2",
                 "evaluation.plot_functions=null",
                 "skip_log_summary=True",
-                "batch_size=16",
+                "batch_size=5",
                 "model.params.batch_rematch_factor=1",
                 "model.params.step_every_nth_match=null"
             ],
@@ -77,7 +79,49 @@
                 "data.batch_size=16"
             ],
             "justMyCode": true
-            
+
+        },
+        {
+            // Quick end-to-end test of the autoregressive rollout pipeline on the paper
+            // CFM model (base_run from reeval.yaml, ckpt fetched from wandb). Two test
+            // shots, light integration; rollout stage runs after trainer.test and writes
+            // {run_name}_rollout.h5 + rollouts.html. Wandb stays ON so the summary and
+            // browser land in the run.
+            "name": "Reeval Rollout Test",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "run",
+            "env": {
+                "WANDB_NOTES": "rollout pipeline test",
+            },
+            "args": [
+                "reeval=true",
+                "run_name=rollout_pipeline_test",
+                "epochs=1",
+                "evaluation.n_steps=8",
+                "evaluation.plot_functions=null",
+                "skip_log_summary=True",
+                "batch_size=16",
+                "data.batch_size=16",
+                "limit_val_batches=1",
+                "limit_test_batches=4",
+                "model.params.batch_rematch_factor=1",
+                "model.params.step_every_nth_match=null",
+                "data.test_shots=[73368,64770]",
+                "window_set=[[73368,0.38],[64770,1.09]]",
+                "rollout.max_batch=16",
+                // Two starting points, multiple stochastic samples overlaid on each, own
+                // cache so it never reuses an older single-sample run; analysis off since
+                // this is just for eyeballing the browser, not the horizon PDFs/tables.
+                "rollout.start_fractions=[0.5,0.9]",
+                "rollout.n_samples=3",
+                "rollout.plot_samples=3",
+                "rollout.html_shots=[73368,64770]",
+                "rollout.cache_name=rollout_multisample_debug",
+                "rollout.cache_mode=create",
+                "rollout.analysis=false",
+            ],
+            "justMyCode": true
         },
         {
             "name": "Run sweep agent",

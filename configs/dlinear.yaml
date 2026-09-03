@@ -1,0 +1,45 @@
+limit_train_batches: 100
+limit_val_batches: 20
+patience: 20
+
+# Deterministic baseline: DLinear (floor). Channel-independent, X-history only.
+# Select by setting `model: configs/dlinear.yaml` in configs/plasmaflow.yaml.
+model:
+  Class: UnFlowModule
+  params:
+    prior: 'constant'  # deterministic fixed input (ignored by the backbone)
+    prior_sigma: 0.3
+    ot_method: null
+    ot_replace: true
+    batch_rematch_factor: 1
+    step_every_nth_match: 1
+    gradient_clip_val: ${ gradient_clip_val }
+    solve_method: ${ evaluation.solve_method }
+    flow_steps: ${ evaluation.n_steps }
+    model: DLinear  # backbone selected from FlowModule.MODEL_OPTIONS
+    model_params:
+      input_channels: 5  # auto-synced from len(data.cols.x) by config.update_model_input_channels
+      seq_len: 256   # lookback = data.history_length
+      pred_len: 256  # horizon = data.seq_length
+      moving_avg: 25 # series_decomp kernel (odd int)
+      apex_hidden_channels: null
+      time_embedding: null
+      time_embedding_d: null
+      positional_encoding: null
+      positional_encoding_d: null
+      positional_encoding_c: null
+      is_attn: null
+      mid_attn: null
+      attn_heads: null
+      norm_groups: null
+      # conditioning documents what the adapter reads from conditioning_input (x_history only;
+      # channel-independent, so no covariates). It does NOT gate the data: x_history is provided
+      # whenever data.history_length > 0. positional_encoding: null keeps _validate_configuration
+      # happy (position_sequence not used).
+      conditioning_method: sequence
+      conditioning: ["x_history"]
+    loss: MSELoss
+    optimizer_params:
+      lr: 0.00005
+      weight_decay: 0
+      amsgrad: false
