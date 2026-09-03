@@ -298,7 +298,7 @@ def plot_rollout(record, sizes=((12,4), (7,5), (12,7), (12,5))):
 
 # %% Run: pick the rollout cache and which rollouts to print
 CACHE_NAME = os.environ.get("ROLLOUT_CACHE_NAME", "R-CNb-cfm-noleak-normal-s05-noatt-e2_rollout")
-SHOTS = None  # None = all cached rollouts; or a list like [57013, 61237, 64770, 77604]
+SHOTS = [77409]# None  # None = all cached rollouts; or a list like [57013, 61237, 64770, 77604]
 # With n_samples > 1 every (shot, frac) has several sample_idx; None prints all of them
 # (44 shots x 5 fractions x n_samples PDFs per size at production scale). Set an int to
 # cap how many samples per starting point get printed.

@@ -38,7 +38,7 @@ data_module.setup()
 #%% 
 # The cache files are written as "<run_name>_rollout.h5"; the suffix is part of the name,
 # both locally and on the cluster.
-CACHE_NAME = os.environ.get("ROLLOUT_CACHE_NAME", "R-IN-itransformer-noleak-e2_rollout" ) #  or "R-CNb-cfm-noleak-normal-s05-noatt-e2_rollout")
+CACHE_NAME = os.environ.get("ROLLOUT_CACHE_NAME", "R-CNb-cfm-noleak-normal-s05-noatt-e2_rollout" ) #  or "R-CNb-cfm-noleak-normal-s05-noatt-e2_rollout")
 SHOTS = None # list(C.rollout.html_shots) if "rollout" in C else None  # None = every cached rollout
 MAX_SAMPLES = int(C.rollout.plot_samples) if "rollout" in C else 2  # samples overlaid per start point
 
