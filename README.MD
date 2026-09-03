@@ -1,5 +1,5 @@
 # PlasmaFlow
-A *Probabilistic Learning Architecture for Simulating Mode-dependent, Abrupt Fluctuations in Long Output Windows*
+A *Probabilistic Learning Architecture for Simulating Mode-dependent, Aperiodic Fluctuations in Long Output Windows*
 
 Generative simulation of tokamak plasma diagnostics, from the TCV confinement-state dataset.
 
