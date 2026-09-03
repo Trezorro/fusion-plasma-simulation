@@ -128,10 +128,30 @@ START_FRACTIONS = [0.05, 0.75]
 STRAT_START_FRACTION = 0.50
 # Equal depth halves, as (label, first k, last k) inclusive. Capped at the shortest test shot's
 # window budget from STRAT_START_FRACTION so every shot contributes every depth.
-STRAT_BINS = [
-    ("early", 0, 5),
-    ("late", 6, 11),
-]
+#
+# A bin set is only usable on shots whose rollout reaches its deepest k, so a deeper set means
+# a smaller shot subset and the two choices are one decision, not two: STRAT_SHOT_SUBSETS
+# below pairs each subset with the bin set its window budget affords. The halves stay equal in
+# every set, because both E_OT and |dN| grow with the pool span and blocks of unequal span
+# would not be comparable.
+#
+# "": every test shot supports 12 windows from f=0.50, so two halves of 6.
+# "long22": the 34 shots that reach 22 windows, so two halves of 11, which is the deepest
+#   equal split those shots afford (23 windows would cost two more shots for one more window).
+STRAT_BIN_SETS = OrderedDict([
+    ("", [("early", 0, 5), ("late", 6, 11)]),
+    ("long22", [("early", 0, 10), ("late", 11, 21)]),
+])
+STRAT_BINS = STRAT_BIN_SETS[""]
+
+
+def bins_of(bin_set: str):
+    return STRAT_BIN_SETS[bin_set]
+
+
+def bin_set_windows(bin_set: str) -> int:
+    """Rollout windows a shot must support to contribute every stratum of `bin_set`."""
+    return max(hi for _, _, hi in bins_of(bin_set)) + 1
 
 # --- pooled optimal-transport peak error -------------------------------------------------
 # The depth table scores peaks with an unbalanced optimal-transport cost instead of a
@@ -162,19 +182,21 @@ OT_LAMBDAS_MS = [10.0, 30.0]
 OT_LAMBDA_MS = 10.0
 OT_PEAK_MASS = "prominence"  # "prominence" or "width"
 
-# Which threshold each metric is computed at. The OT error wants every peak, including the
-# noise-scale ones, because pricing spurious mass is half of what it measures and a high
-# threshold would hide exactly the peaks it is meant to charge for. The peak *count*, by
-# contrast, is meaningless at noise level (hundreds of peaks per window on PD, none of them
-# ELMs), so it is reported at the large-scale threshold where a count is a count of events.
+# Which threshold each metric is computed at. Every reported column now sits at the low
+# all-peaks threshold. The OT error needs it: pricing spurious mass is half of what it
+# measures, and a high threshold would hide exactly the peaks it is meant to charge for. The
+# count follows it so that the two columns of a group describe the same peak population and
+# the header carries one number, at the cost of counting noise excursions as well as events.
+# What the count would have said at ELM scale is instead carried by the reference peak rates
+# in the block title, which are given at both thresholds.
 METRIC_THRESHOLD = {
     "ot_error": "all_peaks",
     "ot_error_rel": "all_peaks",
     "ot_missed_frac": "all_peaks",
     "ot_false_frac": "all_peaks",
-    "pool_count_error": "large_scale",
-    "pool_abs_count_error": "large_scale",
-    "pool_n_peaks_real": "large_scale",
+    "pool_count_error": "all_peaks",
+    "pool_abs_count_error": "all_peaks",
+    "pool_n_peaks_real": "all_peaks",
 }
 
 # A depth-table variant in which the transport cost is computed on the same ELM-scale peaks as
@@ -188,12 +210,21 @@ ELM_SCALE_METRIC_THRESHOLD = {m: "large_scale" for m in METRIC_THRESHOLD}
 # Depth-table variants: (filename/label tag, METRIC_THRESHOLD override or None).
 STRAT_TABLE_VARIANTS = [("", None), ("_elmscale", ELM_SCALE_METRIC_THRESHOLD)]
 
-# Metrics of the depth table, which is now the pooled table.
-# The count is reported signed. The absolute value hides the failure it most needs to show: a
-# model that emits no ELM-scale peaks at all scores |dN| = N, a number indistinguishable from
-# an ordinary miscount, and on PD it lands close enough to the flow model's error to be ranked
-# beside it. Signed, the same cell reads -N and says plainly that nothing was generated.
-STRAT_TABLE_METRICS = ["ot_error", "ot_error_rel", "pool_count_error"]
+# Shot-subset variants of the depth table: (filename/label tag, STRAT_BIN_SETS key). Each
+# subset keeps the shots whose rollout supports its bin set and drops the rest, so a deeper
+# split and a smaller shot set are the same choice made once. The default set keeps all 43
+# shots at depth 12; "long22" keeps the 34 that reach depth 22 and spends the extra room on
+# deeper pools rather than on a longer table. Rendered from the same parquet.
+STRAT_SHOT_SUBSETS = [("", ""), ("_long22", "long22")]
+
+# Metrics of the depth table, which is now the pooled table. Two columns per channel: the
+# absolute transport cost and the absolute peak-count error. E_OT/E_0 is dropped from the
+# reported table: at the all-peaks threshold no model comes near the empty-trace cost, so the
+# normalisation only compresses the spread into a third column saying what E_OT already says.
+# The signed count error is likewise not needed here: it exists to expose a model that emits
+# nothing at all, which cannot happen at noise-scale detection, where every model produces
+# peaks. Both remain in the parquet and the CSVs.
+STRAT_TABLE_METRICS = ["ot_error", "pool_abs_count_error"]
 
 # Peak prominence threshold used everywhere in the reported tables. Resolved from the
 # reference cache's config: "all_peaks" -> evaluation.peaks.prominence,
@@ -337,8 +368,8 @@ def slice_signature() -> dict:
         "ot_lambdas_ms": [float(x) for x in OT_LAMBDAS_MS],
         "ot_peak_mass": OT_PEAK_MASS,
         "strat_start_fraction": STRAT_START_FRACTION,
-        "strat_bins": [list(b) for b in STRAT_BINS],
-        "schema": 11,  # bump when the per-slice columns or the threshold set change
+        "strat_bin_sets": {name: [list(b) for b in bins] for name, bins in STRAT_BIN_SETS.items()},
+        "schema": 12,  # bump when the per-slice columns or the threshold set change
     }
 
 
@@ -781,14 +812,16 @@ def record_pool_rows(record, channel_names, channels, thresholds, sample_rate, e
         raise ValueError(f"pooled peaks assume non-overlapping windows of the config length; "
                          f"got L={L}, step={step}, seq_length={expected_L}")
     # A stratum that the rollout does not reach would be pooled from fewer windows than the
-    # same stratum on another shot, so the shots would not be comparable. STRAT_BINS is capped
-    # at the shortest test shot's budget precisely so this cannot happen; if it does, the bins
-    # and the caches disagree and silently averaging over unequal spans would hide it.
-    max_k = max(hi for _, _, hi in STRAT_BINS)
-    if n_windows <= max_k:
+    # same stratum on another shot, so the shots would not be comparable. The default bin set
+    # is capped at the shortest test shot's budget precisely so this cannot happen; if it does,
+    # the bins and the caches disagree and silently averaging over unequal spans would hide it.
+    # The deeper sets are expected not to fit every shot: those are skipped here and the shots
+    # that do fit are exactly the subset STRAT_SHOT_SUBSETS pairs with the set.
+    if n_windows < bin_set_windows(""):
         raise ValueError(
-            f"shot {record['shot_number']} has {n_windows} rollout windows but STRAT_BINS "
-            f"needs {max_k + 1}; lower the depth budget or drop the shot")
+            f"shot {record['shot_number']} has {n_windows} rollout windows but the default "
+            f"bin set needs {bin_set_windows('')}; lower the depth budget or drop the shot")
+    usable = [name for name in STRAT_BIN_SETS if n_windows >= bin_set_windows(name)]
 
     base = {
         "shot": int(record["shot_number"]),
@@ -803,7 +836,7 @@ def record_pool_rows(record, channel_names, channels, thresholds, sample_rate, e
             generated, real, real_full, channel_names, channel_name, history_length)
         for threshold_name, threshold in thresholds.items():
             threshold = _resolve_threshold(threshold, channel_name)
-            for stratum, lo, hi in STRAT_BINS:
+            for bin_set, (stratum, lo, hi) in [(n, b) for n in usable for b in bins_of(n)]:
                 args = (context, threshold, history_length, step, lo, hi, sample_rate, WIDTH_REL_HEIGHT)
                 gen_t, gen_m = pool_peaks(gen_trace, *args)
                 real_t, real_m = pool_peaks(real_trace, *args)
@@ -815,6 +848,7 @@ def record_pool_rows(record, channel_names, channels, thresholds, sample_rate, e
                     rows.append({
                         **base,
                         "lam_ms": float(lam),
+                        "bin_set": bin_set,
                         "stratum": stratum, "k_lo": lo, "k_hi": hi,
                         "pool_ms": 1000.0 * (hi - lo + 1) * L / sample_rate,
                         "channel": channel_name,
@@ -909,15 +943,15 @@ def _add_derived(frame: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
-def stratum_of(k):
-    """The STRAT_BINS label containing depth k, or None if k falls outside every bin."""
-    for label, lo, hi in STRAT_BINS:
+def stratum_of(k, bins=None):
+    """The bin label containing depth k, or None if k falls outside every bin."""
+    for label, lo, hi in (STRAT_BINS if bins is None else bins):
         if lo <= k <= hi:
             return label
     return None
 
 
-def aggregate_by_stratum(slice_metrics: pd.DataFrame):
+def aggregate_by_stratum(slice_metrics: pd.DataFrame, bins=None):
     """Like `aggregate`, but blocks are depth strata at one fixed start fraction.
 
     The start fraction is held at STRAT_START_FRACTION and the depth index k is binned by
@@ -931,7 +965,7 @@ def aggregate_by_stratum(slice_metrics: pd.DataFrame):
             f"no slices at start fraction {STRAT_START_FRACTION}; add it to START_FRACTIONS "
             "(it is already in the signature) and rerun with --force"
         )
-    d["stratum"] = d["k"].map(stratum_of)
+    d["stratum"] = d["k"].map(lambda k: stratum_of(k, bins))
     d = d[d["stratum"].notna()]
 
     keys = ["model", "shot", "start_idx", "stratum"] + CONDITION_KEYS
@@ -962,18 +996,19 @@ def aggregate_pools(pool_metrics: pd.DataFrame) -> pd.DataFrame:
     the reported spread is the standard deviation across shots. There is no slice level here:
     the pool *is* the unit.
     """
-    keys = ["model", "shot", "start_idx", "stratum"] + CONDITION_KEYS + ["lam_ms"]
+    keys = ["model", "shot", "start_idx", "bin_set", "stratum"] + CONDITION_KEYS + ["lam_ms"]
     trajectory = (pool_metrics.groupby(keys, as_index=False)
                   .agg(**{m: (m, "mean") for m in POOL_METRICS},
                        n_samples=("sample_idx", "nunique")))
     agg = {m: (m, "mean") for m in POOL_METRICS}
     agg |= {f"{m}_std": (m, "std") for m in POOL_METRICS}
-    return (trajectory.groupby(["model", "stratum"] + CONDITION_KEYS + ["lam_ms"], as_index=False)
+    return (trajectory.groupby(["model", "bin_set", "stratum"] + CONDITION_KEYS + ["lam_ms"],
+                               as_index=False)
             .agg(**agg, n_trajectories=("shot", "size"), n_samples=("n_samples", "mean")))
 
 
 def merge_pool_metrics(stratum_metrics: pd.DataFrame, pool_stratum: pd.DataFrame,
-                       lam: float = None) -> pd.DataFrame:
+                       lam: float = None, bin_set: str = "") -> pd.DataFrame:
     """Attach the pooled columns to the per-slice stratum frame on their shared keys.
 
     The two frames answer different questions at the same granularity (model, stratum, channel,
@@ -986,15 +1021,22 @@ def merge_pool_metrics(stratum_metrics: pd.DataFrame, pool_stratum: pd.DataFrame
     # rather than in the renderer keeps the merged frame at the stratum frame's granularity, so
     # a lam column can never silently duplicate rows into the per-slice metrics.
     lam = OT_LAMBDA_MS if lam is None else float(lam)
-    selected = pool_stratum[np.isclose(pool_stratum["lam_ms"], lam)]
+    selected = pool_stratum[np.isclose(pool_stratum["lam_ms"], lam)
+                            & (pool_stratum["bin_set"] == bin_set)]
     if selected.empty:
         raise ValueError(
-            f"lambda={lam} is not in the parquet, which holds "
-            f"{sorted(pool_stratum['lam_ms'].unique())}; add it to OT_LAMBDAS_MS and rerun "
-            "with --force")
+            f"(lambda={lam}, bin set {bin_set!r}) is not in the parquet, which holds "
+            f"lambdas {sorted(pool_stratum['lam_ms'].unique())} and bin sets "
+            f"{sorted(pool_stratum['bin_set'].unique())}; add it to OT_LAMBDAS_MS or "
+            "STRAT_BIN_SETS and rerun with --force")
     shared = (set(stratum_metrics.columns) & set(selected.columns)) - set(keys)
     return stratum_metrics.merge(
         selected.drop(columns=sorted(shared)), on=keys, how="outer", validate="one_to_one")
+
+
+def pool_bin_set_shots(pool_metrics: pd.DataFrame, bin_set: str) -> list:
+    """Shots whose rollout was long enough for `bin_set` to be recorded."""
+    return sorted(pool_metrics[pool_metrics["bin_set"] == bin_set]["shot"].unique())
 
 
 # %% ---------------------------------------------------------------------------------
@@ -1308,12 +1350,23 @@ def _threshold_sentence(metrics, default_threshold, overrides=None):
     than written out, and stays correct if STRAT_TABLE_METRICS is reordered.
     """
     names = _threshold_order(metrics, default_threshold, overrides)
+    if names == ["all_peaks"]:
+        # The reported table: one threshold for every column, so the header carries one number
+        # and the only thing to explain is why it sits at noise scale.
+        return (
+            r"Both columns of a group are computed on the same peaks: everything above the "
+            r"\texttt{find\_peaks} prominence given under the column group, on the "
+            r"$[0,1]$-normalised signal. That threshold sits at sensor-noise scale on purpose. "
+            r"Detecting the noise peaks is what lets a model be charged for the spurious mass "
+            r"it emits, instead of scoring well for emitting a great deal of it, and it means "
+            r"$|\Delta N|$ counts every excursion rather than only \acrshort{ELM}-scale events."
+        )
     if names == ["large_scale"]:
         # The single-threshold variant: every column sees the same peaks, so the header carries
         # one number per channel and the only thing to explain is what that number selects.
         return (
             r"Every column is computed on the same peaks: those above the per-channel "
-            r"	exttt{find\_peaks} prominence given under each column group, on the "
+            r"\texttt{find\_peaks} prominence given under each column group, on the "
             r"$[0,1]$-normalised signal, chosen to admit \acrshort{ELM}-scale events and reject "
             r"sensor noise. The two channels take different values because their normalised "
             r"amplitudes differ: \acrshort{ELM} bursts on \acrshort{PD} are far taller than the slower "
@@ -1359,27 +1412,100 @@ def _metric_threshold_annotations(slice_metrics, channels, metrics, default_thre
     return out
 
 
-def _pool_stratum_notes(pool_stratum, channels, overrides=None):
+# Channels for which the block title also carries the real peak count at the ELM-scale
+# threshold, in parentheses after the count at the reported threshold. Only PD: it is the
+# channel whose ELM bursts are separable by prominence alone, so the pair of numbers says how
+# much of its noise-scale count is actually ELMs. Maps channel -> threshold name.
+STRATUM_NOTE_EXTRA_THRESHOLD = {"PD": "elm_scale"}
+
+
+def _threshold_value(slice_metrics, threshold_name, channel):
+    """The numeric prominence a (threshold name, channel) pair resolved to, from the parquet.
+
+    Read back from what was computed rather than from the config constants, so a printed
+    number cannot drift from the peaks it describes.
+    """
+    vals = slice_metrics[(slice_metrics["threshold_name"] == threshold_name)
+                         & (slice_metrics["channel"] == channel)]["threshold"].unique()
+    return float(vals[0]) if len(vals) == 1 else None
+
+
+def _pool_real_count(pool_stratum, label, channel, threshold_name):
+    """(mean, sd) of the real peaks per pool, or None if not in the frame.
+
+    The sd is across shots, the same spread the table cells carry: it is what makes the mean
+    readable, since the strata mix near-ELM-free discharges with ones carrying hundreds of
+    bursts per pool.
+    """
+    sel = pool_stratum[(pool_stratum["stratum"] == label)
+                       & (pool_stratum["channel"] == channel)
+                       & (pool_stratum["threshold_name"] == threshold_name)]
+    if not len(sel):
+        return None
+    return float(sel["pool_n_peaks_real"].mean()), float(sel["pool_n_peaks_real_std"].mean())
+
+
+def _pool_stratum_notes(pool_stratum, slice_metrics, channels, overrides=None, bins=None):
     """Stratum title suffix carrying the real peak count of the pool, per channel.
 
     A property of the measured trace, so it is identical for every model and belongs in the
     block header rather than in a column repeated down the rows. It is the reference the count
     errors above it are relative to, and it makes the difficulty gradient between the strata
-    visible instead of implicit. Counted at the same threshold the count columns use.
+    visible instead of implicit. Counted at the same threshold the count column uses, plus, for
+    the channels in STRATUM_NOTE_EXTRA_THRESHOLD, at the ELM-scale threshold, each annotated
+    with the prominence it was counted at so the two numbers cannot be confused.
     """
     notes = {}
-    for label, lo, hi in STRAT_BINS:
+    bins = STRAT_BINS if bins is None else bins
+    name = _threshold_of("pool_n_peaks_real", PEAK_THRESHOLD, overrides)
+    for label, lo, hi in bins:
         parts = []
         for channel in channels:
-            name = _threshold_of("pool_n_peaks_real", PEAK_THRESHOLD, overrides)
-            sel = pool_stratum[(pool_stratum["stratum"] == label)
-                               & (pool_stratum["channel"] == channel)
-                               & (pool_stratum["threshold_name"] == name)]
-            if len(sel):
-                parts.append(rf"{channel} ${float(sel['pool_n_peaks_real'].mean()):.1f}$")
+            stats = _pool_real_count(pool_stratum, label, channel, name)
+            if stats is None:
+                continue
+            mean, sd = stats
+            pi = _threshold_value(slice_metrics, name, channel)
+            cell = rf"{channel} ${mean:.1f}_{{\pm{sd:.1f}}}$ {{\tiny$(\pi{{\geq}}{pi:g})$}}"
+            extra_name = STRATUM_NOTE_EXTRA_THRESHOLD.get(channel)
+            extra = (_pool_real_count(pool_stratum, label, channel, extra_name)
+                     if extra_name and extra_name != name else None)
+            if extra is not None:
+                e_mean, e_sd = extra
+                e_pi = _threshold_value(slice_metrics, extra_name, channel)
+                cell += (rf", ${e_mean:.1f}_{{\pm{e_sd:.1f}}}$ "
+                         rf"{{\tiny$(\pi{{\geq}}{e_pi:g})$}}")
+            parts.append(cell)
         title = _stratum_title(label, lo, hi)
-        notes[title] = (r", real peaks/pool: " + ", ".join(parts)) if parts else ""
+        notes[title] = (r", real peaks/pool: " + "; ".join(parts)) if parts else ""
     return notes
+
+
+def long_shots(slice_metrics: pd.DataFrame, min_windows: int) -> list:
+    """Test shots whose rollout from STRAT_START_FRACTION runs at least `min_windows` windows.
+
+    Read off the per-slice frame rather than the caches, so it works on a reused parquet: the
+    depth index k is 0-based and dense, so max(k) + 1 is the window budget of that shot.
+    """
+    at_start = slice_metrics[np.isclose(slice_metrics["start_frac"], STRAT_START_FRACTION)]
+    budget = at_start.groupby("shot")["k"].max() + 1
+    return sorted(budget[budget >= min_windows].index)
+
+
+def _subset_sentence(bin_set, n_shots, n_total):
+    """Caption clause naming the shot subset, empty for the full test set."""
+    if not bin_set:
+        return ""
+    n_windows = bin_set_windows(bin_set)
+    return (
+        rf" Restricted to the {n_shots} of {n_total} test shots whose rollout from "
+        rf"$f={STRAT_START_FRACTION:g}$ runs at least {n_windows} windows, i.e. the longer "
+        r"discharges. The extra room is spent on depth rather than on more shots: the rollout "
+        rf"is followed to window {n_windows - 1} instead of {bin_set_windows('') - 1}, so each "
+        r"pool is nearly twice as long as in the full-test-set table and the late block "
+        r"reaches correspondingly deeper. Rankings are comparable with that table, absolute "
+        r"magnitudes are not."
+    )
 
 
 def _stratum_title(label, lo, hi):
@@ -1390,7 +1516,7 @@ def render_stratified_latex(stratum_metrics: pd.DataFrame, slice_metrics: pd.Dat
                             label="tab:rollout_depth", detection=None, threshold_name=None,
                             metrics=None, models=None, environment="table",
                             font=r"\scriptsize", tabcolsep=3, lam=None,
-                            metric_thresholds=None) -> str:
+                            metric_thresholds=None, subset_note="", bins=None) -> str:
     """Main depth table: one stacked block per depth stratum at a fixed start fraction.
 
     `stratum_metrics` must already carry the pooled columns for `lam` (see `merge_pool_metrics`);
@@ -1402,8 +1528,9 @@ def render_stratified_latex(stratum_metrics: pd.DataFrame, slice_metrics: pd.Dat
     metrics = list(metrics or STRAT_TABLE_METRICS)
     models = list(models or MODELS)
     channels = list(TABLE_CHANNELS)
-    n_windows = STRAT_BINS[-1][2] + 1
-    pool_windows = STRAT_BINS[0][2] - STRAT_BINS[0][1] + 1
+    bins = STRAT_BINS if bins is None else bins
+    n_windows = bins[-1][2] + 1
+    pool_windows = bins[0][2] - bins[0][1] + 1
     caption = (
         r"Autoregressive rollout results by rollout depth. All rollouts start from the same "
         rf"point in the discharge ($f={STRAT_START_FRACTION:g}$) and are split into equal "
@@ -1417,17 +1544,19 @@ def render_stratified_latex(stratum_metrics: pd.DataFrame, slice_metrics: pd.Dat
         r"mass; matching costs mass times time separation, and mass left unmatched on either "
         rf"side costs $\lambda={lam:g}$\,ms per unit, so peaks pair only when they are within "
         r"$2\lambda$, and a missed \acrshort{ELM} is charged $\lambda$ times its full prominence. "
-        r"$E_{0}$ normalises this by the cost of predicting no peaks at all, so "
-        r"$E_{\mathrm{OT}}/E_{0}=1$ is exactly as good as an empty trace and anything above it "
-        r"is worse. "
         + _count_sentence(metrics) +
         _threshold_sentence(metrics, threshold_name, metric_thresholds) +
-        r" The real peak count per pool is given beside each block title, since the later "
-        r"stratum carries denser \acrshort{ELM}s. Lower is better except for $\mathcal{D}$. Best in "
-        r"bold, second best underlined, within each block."
+        r" The mean real peak count per pool, with its standard deviation across shots, is "
+        r"given beside each block title with the prominence it was counted at, since the later "
+        r"stratum carries denser \acrshort{ELM}s and the shots differ widely in how ELMy they "
+        r"are. For \acrshort{PD} a second count follows at the \acrshort{ELM}-scale prominence, "
+        r"which is the part of the noise-scale count that is plausibly \acrshort{ELM}s. Lower is "
+        r"better except for $\mathcal{D}$. Best in bold, second best underlined, within each "
+        r"block."
+        + subset_note
         + _filter_sentence()
     )
-    blocks = [(lab, _stratum_title(lab, lo, hi), lab, list(channels)) for lab, lo, hi in STRAT_BINS]
+    blocks = [(lab, _stratum_title(lab, lo, hi), lab, list(channels)) for lab, lo, hi in bins]
     return _stacked_table(
         stratum_metrics, models, blocks, metrics, TABLE_GLOBAL_METRICS, detection,
         label=label, caption=caption, environment=environment, block_label="stratum",
@@ -1436,7 +1565,8 @@ def render_stratified_latex(stratum_metrics: pd.DataFrame, slice_metrics: pd.Dat
         metric_thresholds=metric_thresholds,
         group_titles=_metric_threshold_annotations(slice_metrics, channels, metrics,
                                                    threshold_name, metric_thresholds),
-        block_notes=_pool_stratum_notes(stratum_metrics, channels, metric_thresholds),
+        block_notes=_pool_stratum_notes(stratum_metrics, slice_metrics, channels,
+                                        metric_thresholds, bins),
     )
 
 
@@ -1828,9 +1958,7 @@ def main():
 
     # Depth-stratified tables: main (absolute count error) and appendix (relative, plus the
     # ablation rows), both at the fixed STRAT_START_FRACTION.
-    stratum_slices = aggregate_by_stratum(slice_metrics)
-    pool_stratum = aggregate_pools(pool_metrics)
-    pool_stratum.to_csv(OUTPUT_DIR / f"rollout_pool_metrics{suffix}.csv", index=False)
+    n_test_shots = slice_metrics["shot"].nunique()
 
     # One depth table per lambda in the parquet. The reported lambda keeps the unsuffixed
     # filename and label so the paper's \input path never moves; every other lambda is a
@@ -1838,30 +1966,64 @@ def main():
     # costs nothing beyond the rendering.
     lambdas = sorted(pool_metrics["lam_ms"].unique(), key=lambda x: (not np.isclose(x, OT_LAMBDA_MS), x))
     strat_paths = []
-    for lam in lambdas:
-        lam_tag = "" if np.isclose(lam, OT_LAMBDA_MS) else f"_lam{lam:g}"
-        stratum = merge_pool_metrics(stratum_slices, pool_stratum, lam=lam)
-        stratum.to_csv(OUTPUT_DIR / f"rollout_stratum_metrics{suffix}{lam_tag}.csv", index=False)
-        for var_tag, overrides in STRAT_TABLE_VARIANTS:
-            tag = f"{suffix}{var_tag}{lam_tag}"
-            lab = f"{label}_depth{var_tag}{lam_tag}"
-            strat_tex = render_stratified_latex(
-                stratum, slice_metrics, label=lab, detection=detection,
-                threshold_name=threshold_name, lam=lam, metric_thresholds=overrides)
-            strat_path = OUTPUT_DIR / f"rollout_depth_table{tag}.tex"
-            strat_path.write_text(strat_tex)
-            strat_paths.append(strat_path)
-            strat_appendix = render_stratified_latex(
-                stratum, slice_metrics, label=f"{lab}_appendix", detection=detection,
-                threshold_name=threshold_name, lam=lam, metric_thresholds=overrides,
-                metrics=["ot_error", "ot_error_rel", "ot_missed_frac", "ot_false_frac",
-                         "pool_count_error", "pool_abs_count_error"],
-                models=list(all_models()), font=r"\footnotesize", tabcolsep=4)
-            strat_appendix_path = OUTPUT_DIR / f"rollout_depth_appendix_table{tag}.tex"
-            strat_appendix_path.write_text(strat_appendix)
-            strat_paths.append(strat_appendix_path)
-    # The reported lambda is first in `lambdas`, so this is the frame the report below prints.
-    stratum = merge_pool_metrics(stratum_slices, pool_stratum, lam=OT_LAMBDA_MS)
+    pool_stratum = None
+    for shot_tag, bin_set in STRAT_SHOT_SUBSETS:
+        # Filtering before aggregation, not after: the shots are the unit the means and the
+        # standard deviations are taken over, so a subset has to re-run the ladder.
+        bins = bins_of(bin_set)
+        if not bin_set:
+            slices, pools, note = slice_metrics, pool_metrics, ""
+        else:
+            # The pool pass only recorded a bin set for the shots long enough to fill it, so
+            # the parquet already defines the subset; long_shots is the same list read off the
+            # slice side, and disagreement means the two passes saw different caches.
+            keep = pool_bin_set_shots(pool_metrics, bin_set)
+            expected = long_shots(slice_metrics, bin_set_windows(bin_set))
+            if keep != expected:
+                raise ValueError(
+                    f"bin set {bin_set!r} was recorded for {keep} but the slice frame says "
+                    f"{expected} reach depth {bin_set_windows(bin_set)}; rerun with --force")
+            slices = slice_metrics[slice_metrics["shot"].isin(keep)]
+            pools = pool_metrics[pool_metrics["shot"].isin(keep)]
+            note = _subset_sentence(bin_set, len(keep), n_test_shots)
+            print(f"{shot_tag}: bin set {bin_set!r}, windows {bins}, "
+                  f"{len(keep)} of {n_test_shots} shots: {keep}")
+        stratum_slices = aggregate_by_stratum(slices, bins)
+        subset_pool_stratum = aggregate_pools(pools)
+        subset_pool_stratum.to_csv(
+            OUTPUT_DIR / f"rollout_pool_metrics{suffix}{shot_tag}.csv", index=False)
+        # The full-set frame is what the console report below prints.
+        pool_stratum = pool_stratum if pool_stratum is not None else subset_pool_stratum
+        for lam in lambdas:
+            lam_tag = "" if np.isclose(lam, OT_LAMBDA_MS) else f"_lam{lam:g}"
+            stratum = merge_pool_metrics(stratum_slices, subset_pool_stratum, lam=lam,
+                                         bin_set=bin_set)
+            stratum.to_csv(
+                OUTPUT_DIR / f"rollout_stratum_metrics{suffix}{shot_tag}{lam_tag}.csv", index=False)
+            for var_tag, overrides in STRAT_TABLE_VARIANTS:
+                # A subset only gets the reported lambda and the default threshold variant: the
+                # sensitivity variants exist to check the reported table, not each other.
+                if shot_tag and (lam_tag or var_tag):
+                    continue
+                tag = f"{suffix}{var_tag}{lam_tag}{shot_tag}"
+                lab = f"{label}_depth{var_tag}{lam_tag}{shot_tag}"
+                strat_tex = render_stratified_latex(
+                    stratum, slices, label=lab, detection=detection,
+                    threshold_name=threshold_name, lam=lam, metric_thresholds=overrides,
+                    subset_note=note, bins=bins)
+                strat_path = OUTPUT_DIR / f"rollout_depth_table{tag}.tex"
+                strat_path.write_text(strat_tex)
+                strat_paths.append(strat_path)
+                strat_appendix = render_stratified_latex(
+                    stratum, slices, label=f"{lab}_appendix", detection=detection,
+                    threshold_name=threshold_name, lam=lam, metric_thresholds=overrides,
+                    subset_note=note, bins=bins,
+                    metrics=["ot_error", "ot_error_rel", "ot_missed_frac", "ot_false_frac",
+                             "pool_count_error", "pool_abs_count_error"],
+                    models=list(all_models()), font=r"\footnotesize", tabcolsep=4)
+                strat_appendix_path = OUTPUT_DIR / f"rollout_depth_appendix_table{tag}.tex"
+                strat_appendix_path.write_text(strat_appendix)
+                strat_paths.append(strat_appendix_path)
 
     depth = aggregate_by_depth(slice_metrics)
     depth.to_csv(OUTPUT_DIR / f"rollout_depth_metrics{suffix}.csv", index=False)
@@ -1884,11 +2046,11 @@ def main():
     print(f"\n=== pooled OT report (reported lambda={OT_LAMBDA_MS:g} ms, "
           f"computed {OT_LAMBDAS_MS}, mass={OT_PEAK_MASS}) ===")
     pool_show = pool_stratum[pool_stratum["channel"].isin(TABLE_CHANNELS)]
-    cols = ["model", "stratum", "channel", "threshold_name", "lam_ms", "ot_error", "ot_error_rel",
+    cols = ["model", "bin_set", "stratum", "channel", "threshold_name", "lam_ms", "ot_error", "ot_error_rel",
             "ot_loc", "ot_missed_frac", "ot_false_frac", "pool_n_peaks_gen",
             "pool_n_peaks_real", "pool_abs_count_error", "n_trajectories"]
     with pd.option_context("display.width", 240, "display.max_rows", 600):
-        print(pool_show[cols].sort_values(["lam_ms", "channel", "threshold_name", "stratum", "model"])
+        print(pool_show[cols].sort_values(["bin_set", "lam_ms", "channel", "threshold_name", "stratum", "model"])
               .round(4).to_string(index=False))
 
     print(f"\nwrote {tex_path}\nwrote {appendix_path}")
