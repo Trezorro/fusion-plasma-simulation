@@ -131,10 +131,16 @@ experiments/
       mode_metrics.py             # ModeTransitionMetric
       peak_metric.py              # PeakMetric (ELM/peak detection)
       metrics.py                  # moment metrics, entropy, SoftDTW
+      ot_peak_error.py            # unbalanced optimal-transport peak error (rollout tables)
+      rollout_peaks.py            # per-window + pooled peak stats on a rollout
+      rollout_aggregate.py        # rollout aggregation ladder (window -> sample -> shot)
     plotters/                     # all plotting code
+      latex_tables.py             # stacked LaTeX result tables
+      rollout_depth.py            # error-against-rollout-depth figures
     data_loaders.py               # FusionShotDataModule + FusionShotDataset
     evaluation.py                 # PlotsCallback + evaluate_window_set
     rollout.py                    # autoregressive rollout evaluation
+    rollout_cache.py              # read side of the rollout caches (stamped config, checks)
     config.py                     # OmegaConf + wandb config loading
     hdf_cache.py                  # HDF5 test result cache + rollout cache
     to_pdf.py                     # dump figures to PDF at multiple sizes

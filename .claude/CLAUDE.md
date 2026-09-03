@@ -2,10 +2,8 @@
 Conditional Flow Matching model for data-driven simulation of plasma confinement diagnostics (TCV tokamak).
 
 ## What this is
- Codebase for Master thesis by Milan Tresoor, now positioned for a KI (Künstliche Intelligenz) journal paper, Technical Contribution format. Active paper branch: `paper`.
 **PlasmaFlow** learns a conditional flow matching model over plasma diagnostic time-series windows. Given a history window of signals plus control covariates, it generates a distribution over plausible future diagnostic windows. The model is trained on real shot data from TCV and evaluated against ground-truth using mode transition metrics, peak metrics, and SoftDTW.
 
-Physics is context, not the contribution. CFM+UNet is an established backbone; novelty is the diagnosis and evaluation. Central claim: ELM-caused stochastic transient event *timing* is the bottleneck, not spectral bias, not model capacity.
 
 ## READ FIRST: docs index
 `docs/README.md` = canonical index. Execution diagram, output-artifact table, config-knob table, repo tree, architectural history. Individual docs:

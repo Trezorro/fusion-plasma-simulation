@@ -28,9 +28,13 @@ A third, softer input is the **wandb run table** exported by hand to `output/X2.
 | `eval_notebooks/moments.py` | None. Wandb run renaming + cache-to-human-name mapping | wandb runs (tag `final_reeval`), CSV | Renames wandb runs in place (`.update()`); no files | Housekeeping; misnamed (see gotchas) |
 | `eval_notebooks/model_cache_overview.py` | None. Cache inventory + rsync from Snellius | `output/X2.csv` / `XR-overview.csv`, hardcoded cache list | Console tables; a guarded `rsync` command | Very fragile (stale list, buggy cell) |
 | `eval_notebooks/plot_shot_plotly.py` | Interactive single-shot overview: all scoped signals over the L/D/H background | `data/public_data_set/` parquet + `column_to_latex.json` (no caches, no wandb) | `eval_notebooks/shot_{SHOT}_overview.html` | Self-contained; reads the public dataset, not run artifacts |
-| `eval_notebooks/paper_rollout.py` | Paper rollout figures: all X + C + gen/real surrogate mode bars, one PDF per rollout | rollout cache `{name}_rollout.h5` (autofetched), data module for real traces | `output/pdfplots/paper_rollout/{WxH}/{shot}_{frac}_s{sample_idx}.pdf` | Robust; env-overridable (`ROLLOUT_CACHE_NAME`, `ROLLOUT_PDF_DIR`); `MAX_SAMPLES_PER_START` caps how many `sample_idx` per starting point get printed when `n_samples > 1` |
-| `eval_notebooks/rollout_analysis.py` | Horizon-resolved rollout metrics: absolute moment errors, label agreement, ELM peak rates vs autoregressive depth k (definitions: [evaluation-metrics.md](evaluation-metrics.md) section 7) | rollout cache (autofetched), data module | `output/tables/rollout_horizon_{cache}.{csv,tex}`, `output/pdfplots/rollout_analysis/*.pdf` | Robust; env-overridable |
-| `eval_notebooks/rollout_browser.py` | Interactive rollout browser HTML, rebuilt locally from a cache | rollout cache (autofetched), data module | `output/htmlplots/local/rollouts_{cache}.html` | Thin wrapper around `src/plotters/rollout_plots.py` |
+| `eval_notebooks/rollout_tables.py` | **The rollout result tables.** Per-window peak/mode metrics and the pooled depth table, as LaTeX + CSV, plus the depth-curve PDFs | every rollout cache in its `MODELS` map, data module for real traces | `output/paper_tables/*.tex`, `*.csv`, `depth/{WxH}/*.pdf` | Robust; see [Rollout analysis](#rollout-analysis) |
+| `eval_notebooks/paper_rollout.py` | Paper rollout figure: all X + C + gen/real surrogate mode bars, one PDF per rollout | rollout cache `{name}_rollout.h5` (autofetched), data module | `output/pdfplots/paper_rollout/{WxH}/{shot}_{frac}_s{sample_idx}.pdf` | Robust; env-overridable (`ROLLOUT_CACHE_NAME`, `ROLLOUT_PDF_DIR`); `MAX_SAMPLES_PER_START` caps samples printed per start point |
+| `eval_notebooks/paper_rollout_models.py` | Appendix figure: PD only, one row per main-table model, same shot and time axis | the caches in `rollout_tables.MODELS` (autofetched) | `output/pdfplots/paper_rollout_models/{WxH}/{shot}_s{sample_idx}.pdf` | Imports its styling from `paper_rollout.py`; `ROLLOUT_MODELS_PDF_DIR` |
+| `eval_notebooks/paper_rollout_compare.py` | Timing-vs-capacity panel: PD only, three models overlaid on one ground truth at `f=0.75` | three caches in `MODEL_CACHES` (autofetched) | `output/pdfplots/paper_rollout_compare/{WxH}/{shot}_0.75.pdf` | `ROLLOUT_COMPARE_PDF_DIR` |
+| `eval_notebooks/rollout_browser.py` | Interactive rollout browser HTML, rebuilt locally from a cache | rollout cache (autofetched), data module | `output/htmlplots/local/rollouts_{cache}.html` | Thin wrapper around `src/plotters/rollout_plots.py`; `ROLLOUT_CACHE_NAME`, `ROLLOUT_HTML_DIR` |
+| `eval_notebooks/rollout_evaluation_script.py` | Exploratory twin of `rollout_tables.py`: cache walkthrough, horizon figures, scratch space | one rollout cache, data module | whatever you make it write | Onboarding / scratch, not a paper artifact. `rollout_cache_explorer.ipynb` is the same thing as a notebook |
+| `eval_notebooks/elm_interval_stats.py` | Console stats: real ELM inter-peak intervals on PD, for sanity-checking the OT lambda | reference rollout cache, data module | console only | Tiny, self-contained |
 
 ## End-to-end workflow
 
@@ -49,7 +53,7 @@ From a finished run to thesis figures:
    | Peak/ELM boxplots | `peak_analysis.py` | Boxplot half runs before the `exit()`. |
    | Peak and window-metric tables (canonical) | `peaks_tables.py` | Run this last: it is the source of truth for `peak_props_*` and `peaks_overview_*`. |
    | Cache inventory / sync | `model_cache_overview.py` | Bookkeeping and rsync only. |
-   | Rollout paper figures / horizon metrics / browser | `paper_rollout.py`, `rollout_analysis.py`, `rollout_browser.py` | Need the `{name}_rollout.h5` cache from a run with a `rollout:` block; each autofetches it. |
+   | Anything rollout (tables, figures, browser) | see [Rollout analysis](#rollout-analysis) | All need a `{name}_rollout.h5` cache from a run with a `rollout:` block; each autofetches it. |
 
 ### Gotchas
 
@@ -99,6 +103,82 @@ Design decisions worth knowing:
 - **State background via contiguous runs.** `add_state_background()` scans the label array, coalesces equal-label runs into a single `add_vrect` span (`layer="below"`), instead of one rect per timestep, keeping the figure light. Colours match `plot_discharge` (L/D/H, plus QCE-H). Because vrects carry no legend, one dummy `Scatter` per present state is added purely for a legend swatch.
 - **Legends and hover.** Traces are grouped by category (`legendgroup` + `groupclick="togglegroup"`) so a whole category toggles at once; `hovermode="x unified"` with a per-trace `hovertemplate` shows raw column name, time, and value. `latex_to_name()` strips `$...$`/LaTeX escapes down to a readable legend label.
 - **Config at the top:** `SHOT`, `NORMALISE`, `LABEL_COLUMN` (`label_conf`, or `label_conf_qce` for the four QCE shots `[61056, 71344, 78069, 83049]`). Excludes `time`/`label_conf` (axis + background) and the 30 derived Halpha FFT-window columns, which are engineered features, not raw diagnostics.
+
+## Rollout analysis
+
+Everything that reads a `{name}_rollout.h5` cache. A rollout is the model running free on its own
+output: real history in, generated window out, generated window back in as the next history, to
+the end of the shot. Controls and the time axis always come from the real shot. See
+[evaluation-metrics.md](evaluation-metrics.md) and `src/rollout.py`.
+
+**Get the caches first.** They are written on the cluster under `/scratch-shared/mtresoor/final_cache/`
+and every script below autofetches the ones it needs with `rsync` into `output/test_cache/`, so the
+usual first run is just slow, not broken. Cache names are grid-cell names: see [run_grid.md](run_grid.md).
+
+| Script | Gives you |
+|---|---|
+| `rollout_tables.py` | The paper's rollout tables and depth plots |
+| `paper_rollout.py` | One rollout, everything on it (5 observables, controls, mode bars) |
+| `paper_rollout_models.py` | One shot, PD only, all five main-table models stacked |
+| `paper_rollout_compare.py` | The timing argument in one panel: flow vs U-Net vs leak-oracle |
+| `rollout_browser.py` | A clickable HTML browser over a whole cache |
+| `rollout_evaluation_script.py` | A place to poke at a cache yourself |
+
+All of them are Jupytext `# %%` files: step through the cells in VSCode, or run them as scripts with
+`PYTHONPATH=. python eval_notebooks/<name>.py` from the repo root.
+
+### rollout_tables.py
+
+The one that produces paper numbers. Reads every cache in its `MODELS` map, measures peaks and mode
+labels on each rollout, aggregates, and writes the tables.
+
+```bash
+PYTHONPATH=. python eval_notebooks/rollout_tables.py              # everything
+PYTHONPATH=. python eval_notebooks/rollout_tables.py --shots 3    # smoke run, ~one shot per model
+PYTHONPATH=. python eval_notebooks/rollout_tables.py --force      # ignore the cached parquet
+PYTHONPATH=. python eval_notebooks/rollout_tables.py --models main  # skip the appendix ablations
+```
+
+The file itself is configuration plus the paper's captions. The work lives in:
+
+| Module | Does |
+|---|---|
+| `src/rollout_cache.py` | Reads a cache's stamped config, rebuilds the data module from it, refuses mismatched caches |
+| `src/metrics/rollout_peaks.py` | Per-window and pooled peak statistics, Dice |
+| `src/metrics/rollout_aggregate.py` | The aggregation ladder (window to sample to shot) |
+| `src/metrics/ot_peak_error.py` | The unbalanced optimal-transport peak error |
+| `src/plotters/latex_tables.py` | Stacked-table assembly, ranking, formatting |
+| `src/plotters/rollout_depth.py` | The depth-curve figures |
+
+Outputs land in `output/paper_tables/`: `rollout_results_table.tex` (main),
+`rollout_depth_table.tex` (depth-stratified, the pooled OT table), `*_appendix_table.tex`, the CSVs
+behind them, and `depth/{WxH}/*.pdf`. Sensitivity variants are written beside the reported ones with
+a suffix (`_elmscale`, `_lam30`, `_long22`, `_large_scale`); the reported table keeps the bare name so
+the paper's `\input` path never moves.
+
+Two intermediates are cached: `rollout_slice_metrics.parquet` (per window) and
+`rollout_pool_metrics.parquet` (per depth stratum), with a `.meta.json` recording what they were
+computed for. Change a model, a start fraction or a threshold and they are recomputed automatically;
+`--force` does it by hand. Reading the caches is the slow part, rendering is free.
+
+Two measurement choices are deliberate and documented in `src/metrics/rollout_peaks.py`: peaks are
+detected once over the whole rollout (not inside each 256-sample window, which would truncate every
+prominence and width walk at the boundaries), and the Wasserstein columns are reported only where both
+peak sets are non-empty (the empty-side sentinel would reward a model that emits nothing).
+
+### The figure scripts
+
+`paper_rollout.py` is the reference one: pick a cache with `ROLLOUT_CACHE_NAME`, pick a shot and start
+fraction in the config block, get one PDF per rollout at several figure sizes.
+`paper_rollout_models.py` and `paper_rollout_compare.py` import their styling from it and only change
+the layout. Each takes a `ROLLOUT_*_PDF_DIR` env var, so test renders can go to `output/testplots/`
+instead of over the paper figures.
+
+### rollout_browser.py
+
+Rebuilds the interactive browser that a run writes to `output/htmlplots/{run_name}/rollouts.html`,
+locally, from the cache. Use it to find the shots worth putting in a figure. Set `ROLLOUT_CACHE_NAME`,
+open the HTML it prints.
 
 ## Reusable snippets worth extracting
 
