@@ -90,12 +90,13 @@ MODELS: "OrderedDict[str, str]" = OrderedDict([
     ("DLinear",      "D-dlinear-r2_rollout"),
 ])
 
-# Extra models that appear only in the appendix table: the prior and attention ablations of
-# the flow model. All no-leak, so they stay comparable to the main table's rows.
+# Extra models that appear only in the appendix table. All no-leak, so they stay comparable to
+# the main table's rows.
 APPENDIX_EXTRA_MODELS: "OrderedDict[str, str]" = OrderedDict([
-    ("PlasmaFlow (attn.)",            "R-CN-cfm-noleak-normal-s05-e2_rollout"),
-    ("PlasmaFlow (Brownian)",         "R-CNd-cfm-noleak-brownian-s07-noatt-e2_rollout"),
-    ("PlasmaFlow (Brownian, attn.)",  "R-CNc-cfm-noleak-brownian-s07-e2_rollout"),
+    ("U-Net (+timing oracle)",        "USb-unet-ipla-noatt_rollout"),
+    # ("PlasmaFlow (attn.)",            "R-CN-cfm-noleak-normal-s05-e2_rollout"),
+    # ("PlasmaFlow (Brownian)",         "R-CNd-cfm-noleak-brownian-s07-noatt-e2_rollout"),
+    # ("PlasmaFlow (Brownian, attn.)",  "R-CNc-cfm-noleak-brownian-s07-e2_rollout"),
 ])
 
 # The cache whose stamped config defines the data module and the columns. Every other cache is
@@ -227,20 +228,24 @@ TABLE_METRICS = ["abs_count_error", "prominence_w1", "width_w1_ms"]
 TABLE_GLOBAL_METRICS = ["dice"]
 
 # --- appendix table ------------------------------------------------------------------------
-# One stacked block per diagnostic, model rows inside it, at a single start fraction.
-# None = every observable channel in the cache.
+# The appendix table is the depth table widened: every diagnostic instead of the reported two,
+# every transport column instead of the two that survive into the main table, and the extra
+# model rows above. Six columns of one diagnostic already fill the text width, so the
+# diagnostic cannot be a second horizontal column group. It becomes a second vertical level
+# instead: the model rows repeat once per (diagnostic, depth stratum) block, and the header
+# carries a generic group name while the block title says which diagnostic it is.
+#
+# None = every observable channel in the cache, in the cache's column order.
 APPENDIX_CHANNELS = None
-APPENDIX_START_FRACTION = 0.05
 APPENDIX_METRICS = [
-    "rate_gen_per_ms", "rate_real_per_ms", "count_error", "abs_count_error",
-    "prominence_w1", "width_w1_ms",
+    "ot_error", "ot_error_rel", "ot_missed_frac", "ot_false_frac",
+    "pool_count_error", "pool_abs_count_error",
 ]
-APPENDIX_GLOBAL_METRICS = ["dice"]
 
 # --- depth plots ---------------------------------------------------------------------------
 DEPTH_PLOT_CHANNEL = "PD"
 DEPTH_PLOT_METRICS = ["abs_count_error", "prominence_w1", "width_w1_ms", "dice"]
-DEPTH_PLOT_START_FRACTIONS = [0.05, 0.75]
+DEPTH_PLOT_START_FRACTIONS = [0.05,]
 # Figure sizes in inches, exported once each so fonts scale relative to the figure, matching
 # the other paper exports (src/plotters/rollout_horizon.py).
 DEPTH_PLOT_SIZES = ((3.3, 2.1), (4.6, 2.8), (6.5, 3.6))
@@ -297,7 +302,7 @@ def slice_signature() -> dict:
     return {
         "models": list(all_models().items()),
         "start_fractions": [float(f) for f in sorted(
-            {*START_FRACTIONS, APPENDIX_START_FRACTION, STRAT_START_FRACTION})],
+            {*START_FRACTIONS, STRAT_START_FRACTION})],
         "label_spill": LABEL_SPILL,
         "max_samples": MAX_SAMPLES,
         "include_appendix_models": INCLUDE_APPENDIX_MODELS,
@@ -338,21 +343,26 @@ def _count_sentence(metrics):
     )
 
 
-def _threshold_sentence(metrics, default_threshold, overrides=None):
+def _threshold_sentence(metrics, default_threshold, overrides=None, location=None):
     """Caption clause explaining the `pi >= a/b` annotation over each column group.
+
+    `location` says where in the table that annotation actually sits, since the appendix
+    layout moves the diagnostic (and with it its thresholds) from the column header into the
+    block title.
 
     The two numbers are not two variants of one measurement: they are the detection thresholds
     of two different columns, and a reader who takes the header as a single setting will
     misread the table. Which is which follows the column order, so it is derived here rather
     than written out, and stays correct if STRAT_TABLE_METRICS is reordered.
     """
+    location = location or "under the column group"
     names = threshold_order(metrics, default_threshold, overrides)
     if names == ["all_peaks"]:
         # The reported table: one threshold for every column, so the header carries one number
         # and the only thing to explain is why it sits at noise scale.
         return (
-            r"Both columns of a group are computed on the same peaks: everything above the "
-            r"\texttt{find\_peaks} prominence given under the column group, on the "
+            r"Every column of a block is computed on the same peaks: everything above the "
+            rf"\texttt{{find\_peaks}} prominence given {location}, on the "
             r"$[0,1]$-normalised signal. That threshold sits at sensor-noise scale on purpose. "
             r"Detecting the noise peaks is what lets a model be charged for the spurious mass "
             r"it emits, instead of scoring well for emitting a great deal of it, and it means "
@@ -363,7 +373,7 @@ def _threshold_sentence(metrics, default_threshold, overrides=None):
         # one number per channel and the only thing to explain is what that number selects.
         return (
             r"Every column is computed on the same peaks: those above the per-channel "
-            r"\texttt{find\_peaks} prominence given under each column group, on the "
+            rf"\texttt{{find\_peaks}} prominence given {location}, on the "
             r"$[0,1]$-normalised signal, chosen to admit \acrshort{ELM}-scale events and reject "
             r"sensor noise. The two channels take different values because their normalised "
             r"amplitudes differ: \acrshort{ELM} bursts on \acrshort{PD} are far taller than the slower "
@@ -374,7 +384,7 @@ def _threshold_sentence(metrics, default_threshold, overrides=None):
         # false, and let the header stand on its own.
         return ""
     return (
-        r"Each column group is headed by the two \texttt{find\_peaks} prominence thresholds its "
+        rf"Each block is headed by the two \texttt{{find\_peaks}} prominence thresholds its "
         r"columns use, on the $[0,1]$-normalised signal, in column order as "
         r"$\pi{\geq}\pi_{\mathrm{OT}}/\pi_{N}$. The transport cost is computed over every peak "
         r"down to $\pi_{\mathrm{OT}}$, which sits at sensor-noise scale: including the noise "
@@ -414,8 +424,27 @@ def _subset_sentence(bin_set, n_shots, n_total):
 STRATUM_NOTE_EXTRA_THRESHOLD = {"PD": "elm_scale"}
 
 
+# Channel -> the LaTeX macro the paper uses for that diagnostic. Raw column names carry
+# underscores and would break in maths mode, and the paper wants the glossary form anyway, so
+# every channel that reaches a table goes through a macro the document defines. A channel
+# without an entry falls back to its escaped raw name, which is legible but not the paper's
+# spelling; add a macro rather than leaving it.
+CHANNEL_MACROS = {
+    "PD": r"\diagPD",
+    "DML": r"\diagDML",
+    "FIR_LIDs_core": r"\diagFIR",
+    "POHM": r"\diagPOHM",
+    "Z_axis": r"\diagZaxis",
+}
+
+
+def channel_label(channel):
+    """The diagnostic as it should appear in a table, via the paper's macro where there is one."""
+    return CHANNEL_MACROS.get(channel, r"\texttt{" + channel.replace("_", r"\_") + "}")
+
+
 def _stratum_title(label, lo, hi):
-    return rf"{label} half, rollout windows ${lo}$--${hi}$"
+    return rf"{label.capitalize()} half, rollout windows ${lo}$--${hi}$"
 
 
 def _threshold_value(slice_metrics, threshold_name, channel):
@@ -444,7 +473,8 @@ def _metric_threshold_annotations(slice_metrics, channels, metrics, default_thre
             value = _threshold_value(slice_metrics, name, channel)
             if value is not None:
                 parts.append(f"{value:g}")
-        out[channel] = rf"{channel}\,{{\tiny$\pi{{\geq}}{'/'.join(parts)}$}}" if parts else channel
+        shown = channel_label(channel)
+        out[channel] = (rf"{shown}\,{{\tiny$\pi{{\geq}}{'/'.join(parts)}$}}") if parts else shown
     return out
 
 
@@ -484,7 +514,11 @@ def _pool_stratum_notes(pool_stratum, slice_metrics, channels, overrides=None, b
                 continue
             mean, sd = stats
             pi = _threshold_value(slice_metrics, name, channel)
-            cell = rf"{channel} ${mean:.1f}_{{\pm{sd:.1f}}}$ {{\tiny$(\pi{{\geq}}{pi:g})$}}"
+            # A single-channel block is already headed by its diagnostic, so repeating the
+            # name inside the note would say it twice on the same line.
+            prefix = f"{channel_label(channel)} " if len(channels) > 1 else ""
+            cell = (rf"{prefix}${mean:.1f}_{{\pm{sd:.1f}}}$ "
+                    rf"{{\tiny$(\pi{{\geq}}{pi:g})$}}")
             extra_name = STRATUM_NOTE_EXTRA_THRESHOLD.get(channel)
             extra = (_pool_real_count(pool_stratum, label, channel, extra_name)
                      if extra_name and extra_name != name else None)
@@ -495,7 +529,7 @@ def _pool_stratum_notes(pool_stratum, slice_metrics, channels, overrides=None, b
                          rf"{{\tiny$(\pi{{\geq}}{e_pi:g})$}}")
             parts.append(cell)
         title = _stratum_title(label, lo, hi)
-        notes[title] = (r", real peaks/pool: " + "; ".join(parts)) if parts else ""
+        notes[title] = (r", real peaks: " + "; ".join(parts)) if parts else ""
     return notes
 
 
@@ -540,96 +574,125 @@ def render_stratified_latex(stratum_metrics: pd.DataFrame, slice_metrics: pd.Dat
                             label="tab:rollout_depth", threshold_name=None,
                             metrics=None, models=None, environment="table",
                             font=r"\scriptsize", tabcolsep=3, lam=None,
-                            metric_thresholds=None, subset_note="", bins=None) -> str:
-    """Main depth table: one stacked block per depth stratum at a fixed start fraction.
+                            metric_thresholds=None, subset_note="", bins=None,
+                            channels=None, stack_channels=False, main_label=None) -> str:
+    """Depth table: model rows repeated per depth stratum, at a fixed start fraction.
 
     `stratum_metrics` must already carry the pooled columns for `lam` (see `merge_pool_metrics`);
     `lam` only names the value in the caption, it does not select anything here.
+
+    Two layouts, from the same data:
+
+    * the reported table (`stack_channels=False`), one column group per diagnostic and one
+      block per depth stratum;
+    * the appendix table (`stack_channels=True`), which cannot fit its diagnostics side by side
+      and moves them to a second vertical level, one block per (diagnostic, stratum). It is
+      also where the detection thresholds and the real peak counts are stated, since the
+      reported table's caption stays short.
     """
     threshold_name = threshold_name or PEAK_THRESHOLD
     lam = OT_LAMBDA_MS if lam is None else float(lam)
     metrics = list(metrics or STRAT_TABLE_METRICS)
     models = list(models or MODELS)
-    channels = list(TABLE_CHANNELS)
+    channels = list(channels or TABLE_CHANNELS)
     bins = STRAT_BINS if bins is None else bins
     n_windows = bins[-1][2] + 1
     pool_windows = bins[0][2] - bins[0][1] + 1
-    caption = (
-        r"Autoregressive rollout results by rollout depth. All rollouts start from the same "
-        rf"point in the discharge ($f={STRAT_START_FRACTION:g}$) and are split into equal "
-        rf"halves of the first {n_windows} generated windows, so the two blocks differ only in "
-        r"how long the model has been feeding on its own output and not in where in the shot "
-        r"they sit, which is what varying the start point would confound them with. "
-        rf"Peaks are pooled over all {pool_windows} generated windows of a half rather than cut "
-        r"at the generation-window boundaries, and each peak enters as its prominence placed at "
-        r"its time within the pool. $E_{\mathrm{OT}}$ is the unbalanced optimal-transport cost "
-        r"between the generated and the real peaks: each peak enters with its prominence as "
-        r"mass; matching costs mass times time separation, and mass left unmatched on either "
-        rf"side costs $\lambda={lam:g}$\,ms per unit, so peaks pair only when they are within "
-        r"$2\lambda$, and a missed \acrshort{ELM} is charged $\lambda$ times its full prominence. "
-        + _count_sentence(metrics) +
-        _threshold_sentence(metrics, threshold_name, metric_thresholds) +
-        r" The mean real peak count per pool, with its standard deviation across shots, is "
-        r"given beside each block title with the prominence it was counted at, since the later "
-        r"stratum carries denser \acrshort{ELM}s and the shots differ widely in how ELMy they "
-        r"are. For \acrshort{PD} a second count follows at the \acrshort{ELM}-scale prominence, "
-        r"which is the part of the noise-scale count that is plausibly \acrshort{ELM}s. Lower is "
-        r"better except for $\mathcal{D}$. Best in bold, second best underlined, within each "
-        r"block."
-        + subset_note
-    )
-    blocks = [(lab, _stratum_title(lab, lo, hi), lab, list(channels)) for lab, lo, hi in bins]
+    start_pct = f"{STRAT_START_FRACTION * 100:g}"
+
+    if not stack_channels:
+        # The reported table. Everything a reader needs to rank the models and nothing else;
+        # the definitions the caption skips are given once in the appendix table below it.
+        caption = (
+            r"Autoregressive rollout quality by rollout depth. These simulations are started "
+            rf"at {start_pct}\% of the shot, skipping the largely \acrshort{{ELM}}-free start "
+            rf"up regions, and we sample the models autoregressively for {n_windows} windows. "
+            r"We report on the first and second half of the simulation separately. "
+            r"$E_{\mathrm{OT}}$ is the unbalanced optimal transport error, $|\Delta N|$ is the "
+            r"absolute error in number of peaks, $\mathcal{D}$ is the micro-averaged Dice "
+            r"score between ground truth and simulated surrogate mode labels. Best results are "
+            r"displayed in bold, second best are underlined."
+            + subset_note
+        )
+        blocks = [(lab, _stratum_title(lab, lo, hi), lab, list(channels))
+                  for lab, lo, hi in bins]
+        group_titles = {c: channel_label(c) for c in channels}
+        block_notes = None
+    else:
+        caption = _appendix_caption(metrics, models, channels, threshold_name, lam,
+                                    pool_windows, metric_thresholds, main_label) + subset_note
+        # Diagnostic-major: each diagnostic's depth halves stay adjacent, so the table reads as
+        # one depth comparison per diagnostic rather than as one diagnostic list per depth.
+        blocks, block_notes = [], {}
+        annotations = _metric_threshold_annotations(slice_metrics, channels, metrics,
+                                                    threshold_name, metric_thresholds)
+        for channel in channels:
+            notes = _pool_stratum_notes(stratum_metrics, slice_metrics, [channel],
+                                        metric_thresholds, bins)
+            for lab, lo, hi in bins:
+                stratum_title = _stratum_title(lab, lo, hi)
+                title = f"{annotations[channel]}, {stratum_title}"
+                blocks.append((f"{channel}/{lab}", title, lab, [channel]))
+                block_notes[title] = notes.get(stratum_title, "")
+        # Every block holds a different diagnostic, so the header cannot name one of them.
+        group_titles = {channels[0]: "Pooled peaks"}
+
     return stacked_table(
         stratum_metrics, models, blocks, metrics, TABLE_GLOBAL_METRICS,
         label=label, caption=caption, environment=environment,
         group_label="Modes", font=font, tabcolsep=tabcolsep, threshold_name=threshold_name,
         block_key="stratum",
         metric_thresholds=metric_thresholds,
-        group_titles=_metric_threshold_annotations(slice_metrics, channels, metrics,
-                                                   threshold_name, metric_thresholds),
-        block_notes=_pool_stratum_notes(stratum_metrics, slice_metrics, channels,
-                                        metric_thresholds, bins),
+        group_titles=group_titles,
+        block_notes=block_notes,
     )
 
 
-def render_appendix_latex(start_metrics: pd.DataFrame, channel_names,
-                          label="tab:rollout_results_appendix", threshold_name=None) -> str:
-    """Appendix table: one stacked block per diagnostic, every model, one start fraction.
+def _appendix_caption(metrics, models, channels, threshold_name, lam, pool_windows,
+                      metric_thresholds, main_label) -> str:
+    """Caption of the appendix table: what it adds over the reported depth table, and only that.
 
-    Wider than the main table (signed as well as absolute count error, and the generated and
-    real peak rates in physical units) and over every observable channel, so the diagnostic
-    becomes the outer row level. Wrapped in a sideways environment because it does not fit the
-    text width; the document needs the rotating package.
+    The reported table's caption names three columns and stops. Everything it leaves undefined
+    (how the pool is formed, what the transport cost charges, where the detection thresholds
+    sit, how many real peaks a pool holds) is defined here, once, plus the columns, diagnostics
+    and models that exist only in this table.
     """
-    threshold_name = threshold_name or PEAK_THRESHOLD
-    models = list(all_models())
-    channels = list(APPENDIX_CHANNELS or channel_names)
-    check_available(start_metrics, models, [APPENDIX_START_FRACTION], channels, threshold_name)
-    caption = (
-        r"Per-diagnostic autoregressive rollout results at start fraction "
-        rf"$f={APPENDIX_START_FRACTION:g}$, including the prior and attention ablations. "
-        r"$\hat r$ and $r$ are the generated and real peak rates per millisecond, $\Delta N$ "
-        r"and $|\Delta N|$ the signed and absolute peak-count error per window, and "
-        r"$W_1^{\pi}$, $W_1^{w}$ the Wasserstein-1 distances between the generated and real "
-        r"peak prominence and width distributions, widths in ms. $\mathcal{D}$ is the "
-        r"micro-averaged Dice score between the generated and real surrogate mode sequences "
-        r"and does not depend on the diagnostic, so it repeats down the blocks. Entries are "
-        r"means over test shots with the subscript giving the standard deviation across "
-        r"shots; $\hat r$ and $r$ are descriptive and are not ranked, $\Delta N$ is ranked on "
-        r"its magnitude. " + DETECTION_SENTENCE
+    reference = (rf"\autoref{{{main_label}}}" if main_label else "the reported depth table")
+    extra_models = [m for m in models if m not in MODELS]
+    extra_sentence = (
+        rf" It also carries {' and '.join(extra_models)}, which "
+        + ("is" if len(extra_models) == 1 else "are")
+        + rf" left out of {reference} for space."
+    ) if extra_models else ""
+    return (
+        r"Per-diagnostic autoregressive rollout quality by rollout depth: the same rollouts, "
+        rf"depth halves and models as {reference}, with the columns that table leaves out and "
+        r"every observable diagnostic rather than two. Six columns of one diagnostic already "
+        r"fill the text width, so the diagnostic is a second vertical level here instead of a "
+        r"second column group, and the model rows repeat once per diagnostic and depth half. "
+        rf"Peaks are pooled over all {pool_windows} generated windows of a half rather than cut "
+        r"at the generation-window boundaries, and each peak enters as its prominence placed "
+        r"at its time within the pool. $E_{\mathrm{OT}}$ is the unbalanced optimal-transport "
+        r"cost between the generated and the real peaks: matching costs mass times time "
+        rf"separation, and mass left unmatched on either side costs $\lambda={lam:g}$\,ms per "
+        r"unit, so peaks pair only when they are within $2\lambda$, and a missed "
+        r"\acrshort{ELM} is charged $\lambda$ times its full prominence. $E_{\mathrm{OT}}/E_{0}$ "
+        r"divides that by the cost of generating no peaks at all, so $1.0$ means no better than "
+        r"an empty trace; $m_{\mathrm{miss}}$ and $m_{\mathrm{false}}$ are the fractions of the "
+        r"real and of the generated mass that stayed unmatched, and they are what the single "
+        r"$E_{\mathrm{OT}}$ column sums up. "
+        + _count_sentence(metrics)
+        + _threshold_sentence(metrics, threshold_name, metric_thresholds,
+                              location="in the block title")
+        + r" The mean real peak count per pool, with its standard deviation across shots, is "
+        r"given beside each block title with the prominence it was counted at, since the later "
+        r"stratum carries denser \acrshort{ELM}s and the shots differ widely in how ELMy they "
+        r"are. For \acrshort{PD} a second count follows at the \acrshort{ELM}-scale prominence, "
+        r"which is the part of the noise-scale count that is plausibly \acrshort{ELM}s."
+        + extra_sentence +
+        r" Best in bold, second best underlined, within each block."
     )
-    # One column group per block, so the group header carries the diagnostic name and the
-    # block header repeats it for readers scanning the row labels.
-    blocks = [
-        (channel, rf"{channel}", APPENDIX_START_FRACTION, [channel])
-        for channel in channels
-    ]
-    return stacked_table(
-        start_metrics, models, blocks, APPENDIX_METRICS, APPENDIX_GLOBAL_METRICS,
-        label=label, caption=caption, environment="sidewaystable",
-        group_label="Modes", font=r"\footnotesize", tabcolsep=4,
-        threshold_name=threshold_name,
-    )
+
 
 
 # %% ---------------------------------------------------------------------------------
@@ -754,6 +817,21 @@ def load_or_compute(args) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame | No
     return slice_metrics, pool_metrics, audit
 
 
+def appendix_channels(frame) -> list:
+    """Diagnostics of the appendix table, in the cache's column order.
+
+    CHANNEL_ORDER is empty when the parquets were reused without opening a cache, in which case
+    the frame's own order of appearance is the best available.
+    """
+    present = list(frame["channel"].unique())
+    ordered = [c for c in CHANNEL_ORDER if c in present] or present
+    wanted = APPENDIX_CHANNELS or ordered
+    missing = [c for c in wanted if c not in present]
+    if missing:
+        raise ValueError(f"APPENDIX_CHANNELS asks for {missing}, which the metrics do not cover")
+    return [c for c in ordered if c in set(wanted)]
+
+
 def write_depth_tables(slice_metrics, pool_metrics, suffix, label, threshold_name):
     """Every depth-table variant: shot subset x lambda x threshold override. Returns the paths.
 
@@ -809,9 +887,9 @@ def write_depth_tables(slice_metrics, pool_metrics, suffix, label, threshold_nam
                 lab = f"{label}_depth{var_tag}{lam_tag}{shot_tag}"
                 for kind, extra in (("", {}),
                                     ("_appendix", dict(
-                                        metrics=["ot_error", "ot_error_rel", "ot_missed_frac",
-                                                 "ot_false_frac", "pool_count_error",
-                                                 "pool_abs_count_error"],
+                                        metrics=list(APPENDIX_METRICS),
+                                        channels=appendix_channels(slices),
+                                        stack_channels=True, main_label=lab,
                                         models=list(all_models()), font=r"\footnotesize",
                                         tabcolsep=4))):
                     tex = render_stratified_latex(
@@ -857,9 +935,9 @@ def main():
                              "the report and the depth plots; non-default values write to "
                              "suffixed filenames instead of overwriting the main outputs")
     parser.add_argument("--models", choices=["all", "main"], default="all",
-                        help="'main' drops the appendix-only ablation caches, which are the "
-                             "slowest to read and are only needed by the appendix tables; the "
-                             "main and depth tables are unaffected")
+                        help="'main' drops the appendix-only caches, which are the slowest to "
+                             "read and are only needed by the appendix table; the main and "
+                             "depth tables are unaffected")
     args = parser.parse_args()
 
     global INCLUDE_APPENDIX_MODELS
@@ -886,15 +964,6 @@ def main():
     tex_path = OUTPUT_DIR / f"rollout_results_table{suffix}.tex"
     tex_path.write_text(render_latex(start, label=label, threshold_name=threshold_name))
 
-    present = list(start["channel"].unique())
-    # Keep the cache's column order rather than pandas' order of appearance. CHANNEL_ORDER is
-    # empty when the parquet was reused without opening a cache, in which case fall back to
-    # the frame's own order.
-    channel_names = [c for c in CHANNEL_ORDER if c in present] or present
-    appendix_path = OUTPUT_DIR / f"rollout_results_appendix_table{suffix}.tex"
-    appendix_path.write_text(render_appendix_latex(
-        start, channel_names, label=f"{label}_appendix", threshold_name=threshold_name))
-
     depth_paths, pool_stratum = write_depth_tables(slice_metrics, pool_metrics, suffix, label,
                                                    threshold_name)
 
@@ -911,7 +980,7 @@ def main():
     print(f"wrote {len(plots)} depth plots under {(OUTPUT_DIR / f'depth{suffix}').resolve()}")
 
     print_report(start, pool_stratum, threshold_name)
-    print(f"\nwrote {tex_path}\nwrote {appendix_path}")
+    print(f"\nwrote {tex_path}")
     for path in depth_paths:
         print(f"wrote {path}")
     print((OUTPUT_DIR / f"rollout_depth_table{suffix}.tex").read_text())

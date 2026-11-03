@@ -17,25 +17,25 @@ import numpy as np
 
 METRIC_SPECS = {
     # key: (LaTeX column header, decimals, lower_is_better, scale)
-    "count_error":     (r"$\Delta N$",           2, None, 1.0),   # signed; ranked on |value|
-    "abs_count_error": (r"$|\Delta N|$",         2, True,  1.0),
-    "rel_count_error": (r"$|\Delta N|/N$",       2, True,  1.0),
-    "rate_gen_per_ms": (r"$\hat r$",             2, None, 1.0),   # descriptive, never ranked
-    "rate_real_per_ms": (r"$r$",                 2, None, 1.0),
-    "prominence_w1":   (r"$W_1^{\pi}$",          4, True,  1.0),
-    "width_w1_ms":     (r"$W_1^{w}$ [ms]",       2, True,  1.0),
+    "count_error":     (r"$\Delta N$",                   2, None, 1.0),   # signed; ranked on |value|
+    "abs_count_error": (r"$|\Delta N|\downarrow$",       2, True,  1.0),
+    "rel_count_error": (r"$|\Delta N|/N\downarrow$",     2, True,  1.0),
+    "rate_gen_per_ms": (r"$\hat r$",                     2, None, 1.0),   # descriptive, never ranked
+    "rate_real_per_ms": (r"$r$",                         2, None, 1.0),
+    "prominence_w1":   (r"$W_1^{\pi}\downarrow$",        4, True,  1.0),
+    "width_w1_ms":     (r"$W_1^{w}\downarrow$ [ms]",      2, True,  1.0),
     "width_w1_ms_base": (r"$W_1^{w,\mathrm{base}}$ [ms]", 2, True, 1.0),  # audit only
-    "miss_rate":       (r"miss \%",              1, True,  100.0),
+    "miss_rate":       (r"miss \%$\downarrow$",          1, True,  100.0),
     # Pooled optimal-transport columns. E_OT is absolute, in (prominence x ms); E_OT/E_0 is
     # the same number divided by the cost of predicting no peaks at all, so 1.0 means "no
     # better than an empty trace" and it is comparable across shots and diagnostics.
-    "ot_error":        (r"$E_{\mathrm{OT}}$",      2, True,  1.0),
-    "ot_error_rel":    (r"$E_{\mathrm{OT}}/E_{0}$", 3, True, 1.0),
-    "ot_missed_frac":  (r"$m_{\mathrm{miss}}$",    3, True,  1.0),
-    "ot_false_frac":   (r"$m_{\mathrm{false}}$",   3, True,  1.0),
-    "pool_count_error":     (r"$\Delta N$",        2, None,  1.0),
-    "pool_abs_count_error": (r"$|\Delta N|$",      2, True,  1.0),
-    "pool_n_peaks_real":    (r"$N$",                2, None,  1.0),
+    "ot_error":        (r"$E_{\mathrm{OT}}\downarrow$",      2, True,  1.0),
+    "ot_error_rel":    (r"$E_{\mathrm{OT}}/E_{0}\downarrow$", 3, True, 1.0),
+    "ot_missed_frac":  (r"$m_{\mathrm{miss}}\downarrow$",    3, True,  1.0),
+    "ot_false_frac":   (r"$m_{\mathrm{false}}\downarrow$",   3, True,  1.0),
+    "pool_count_error":     (r"$\Delta N$",                    2, None,  1.0),
+    "pool_abs_count_error": (r"$|\Delta N|\downarrow$",       2, True,  1.0),
+    "pool_n_peaks_real":    (r"$N$",                            2, None,  1.0),
     "dice":            (r"$\mathcal{D}\uparrow$", 3, False, 1.0),
 }
 
@@ -169,6 +169,12 @@ def stacked_table(metrics_frame, models, blocks, metrics, global_metrics,
     `blocks` is a list of (block value, block title, block value again, channels): each becomes
     one vertically repeated set of rows under the shared header. `group_label` names what the
     trailing column group is (the global metrics, e.g. the mode score).
+
+    The column groups are taken from the first block, so every block must have the same number
+    of channels. Blocks may still name *different* channels: that is how the appendix table
+    moves the diagnostic from a horizontal to a vertical level, one channel per block, with
+    `group_titles` replacing the header's channel name by a generic one and the block title
+    saying which diagnostic the rows belong to.
     """
     n_metrics = len(metrics)
     columns_channels = blocks[0][3]
